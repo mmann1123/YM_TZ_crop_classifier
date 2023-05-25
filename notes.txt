@@ -1,0 +1,18 @@
+Task
+- Planet imagery access
+- Is there a pattern by crop type
+- global land cover database - EU space agency var dataset = ee.ImageCollection('ESA/WorldCover/v100').first();
+- Model
+- Writeup
+
+
+Planet Labs
+- Cost imagery  $5-15k
+- 1.5 weeks mike modeling + 2 week for jordan
+- 1 week writeup
+
+Sentinel  
+- All of tanzania? Out of scope
+- Train one place transfer to another
+- 1 weeks mike modeling + 1 week for jordan
+- 1 week writeup

@@ -31,48 +31,48 @@ from pathlib import Path
 files = "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data"
 band_name = "evi"
 file_glob = f"{files}/*.tif"
-strp_glob = f"{files}/S2_SR_EVI_M_%Y_%M.tif"
-
-
-complete_f = {
-    "linear_time_trend": [{"param": "all"}],
-    "minimum": [{}],
-    "abs_energy": [{}],
-    "mean_abs_change": [{}],
-    "variance_larger_than_standard_deviation": [{}],
-    "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
-    "symmetry_looking": [{}],
-    "sum_values": [{}],
-    "autocorr": [{"lag": 1}, {"lag": 2}, {"lag": 4}, {"lag": 8}],  # mostly nan for ndvi
-    "ts_complexity_cid_ce": [{}],
-    "mean_change": [{}],  #  FIX  DONT HAVE
-    "mean_second_derivative_central": [{}],
-    "median": [{}],
-    "mean": [{}],
-    "standard_deviation": [{}],
-    "variance": [{}],
-    "skewness": [{}],
-    "kurtosis": [{}],
-    "absolute_sum_of_changes": [{}],
-    "longest_strike_below_mean": [{}],
-    "longest_strike_above_mean": [{}],
-    "count_above_mean": [{}],
-    "count_below_mean": [{}],
-    "doy_of_maximum_first": [
-        {"band": band_name}
-    ],  # figure out how to remove arg for band
-    "doy_of_maximum_last": [{"band": band_name}],
-    "doy_of_minimum_last": [{"band": band_name}],
-    "doy_of_minimum_first": [{"band": band_name}],
-    "ratio_value_number_to_time_series_length": [{}],
-    "quantile": [{"q": 0.05}, {"q": 0.95}],
-    "maximum": [{}],
-}
-
+strp_glob = f"{files}/S2_SR_EVI_M_%Y_%m.tif"
+# S2_SR_EVI_M_2022_01.tif
 
 f_list = sorted(glob(file_glob))
 
 dates = sorted(datetime.strptime(string, strp_glob) for string in f_list)
+dates
+
+complete_f = {
+    # "linear_time_trend": [{"param": "all"}],
+    "minimum": [{}],
+    # "abs_energy": [{}],
+    # "mean_abs_change": [{}],
+    # "variance_larger_than_standard_deviation": [{}],
+    # "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
+    # "symmetry_looking": [{}],
+    # "sum_values": [{}],
+    # "autocorr": [{"lag": 1}, {"lag": 2}, {"lag": 4}, {"lag": 8}],  # mostly nan for ndvi
+    # "ts_complexity_cid_ce": [{}],
+    # "mean_change": [{}],  #  FIX  DONT HAVE
+    # "mean_second_derivative_central": [{}],
+    # "median": [{}],
+    # "mean": [{}],
+    # "standard_deviation": [{}],
+    # "variance": [{}],
+    # "skewness": [{}],
+    # "kurtosis": [{}],
+    # "absolute_sum_of_changes": [{}],
+    # "longest_strike_below_mean": [{}],
+    # "longest_strike_above_mean": [{}],
+    # "count_above_mean": [{}],
+    # "count_below_mean": [{}],
+    # "doy_of_maximum_first": [
+    #     {"band": band_name}
+    # ],  # figure out how to remove arg for band
+    # "doy_of_maximum_last": [{"band": band_name}],
+    # "doy_of_minimum_last": [{"band": band_name}],
+    # "doy_of_minimum_first": [{"band": band_name}],
+    # "ratio_value_number_to_time_series_length": [{}],
+    # "quantile": [{"q": 0.05}, {"q": 0.95}],
+    "maximum": [{}],
+}
 
 
 # add data notes
@@ -82,9 +82,8 @@ with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
         "Gererated by /mnt/space/Dropbox/GWU_MD_Fields/generate_timeseries_properties.py \t"
     )
     the_file.write(str(datetime.now()))
+
 # %%
-
-
 # update band name
 complete_f["doy_of_maximum_first"] = [{"band": band_name}]
 complete_f["doy_of_maximum_last"] = [{"band": band_name}]
@@ -105,16 +104,22 @@ with gw.open(
     ds.attrs["nodatavals"] = (0,)
     print(ds)
 
-    # # generate features
-    for year in sorted(list(set([x.year for x in dates]))):
+    # # generate features Sep - March ( Masika growing season)
+
+    for year in [2023, 2024]:
+        previous_year = str(year - 1)
         year = str(year)
         print(year)
-        ds_year = ds.sel(time=slice(year + "-05-01", year + "-10-29"))
+        ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
         print("interpolating")
         ds_year = ds_year.interpolate_na(dim="time", limit=5)
         ds_year = ds_year.chunk(
             {"time": -1, "band": 1, "y": 350, "x": 350}
         )  # rechunk to time
+
+        # make output folder
+        outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
+        os.makedirs(outpath, exist_ok=True)
 
         # extract growing season year month day
         features = extract_features(
@@ -123,9 +128,9 @@ with gw.open(
             band=band_name,
             na_rm=True,
             persist=True,
-            filepath=os.path.join(files, "annual_features/May_Oct_MODIS"),
-            postfix="_may_oct_" + year,
-        )  #'_may_sep_'+year, '_'+year
+            filepath=outpath,
+            postfix="_sep_mar_" + year,
+        )
     cluster.restart()
 
 cluster.close()

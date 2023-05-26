@@ -59,7 +59,7 @@ sns.scatterplot(
 )
 # %%
 g = sns.FacetGrid(
-    df2.groupby(["Primary land cover", "yearmonth"], as_index=False).mean(),
+    df2.groupby(["Primary land cover", "yearmonth"], as_index=False).median(),
     col="Primary land cover",
     col_wrap=1,
     hue="Primary land cover",

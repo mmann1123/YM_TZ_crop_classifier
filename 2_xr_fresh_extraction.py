@@ -40,7 +40,6 @@ dates = sorted(datetime.strptime(string, strp_glob) for string in f_list)
 dates
 
 complete_f = {
-    "linear_time_trend": [{"param": "all"}],
     "minimum": [{}],
     "abs_energy": [{}],
     "mean_abs_change": [{}],
@@ -72,6 +71,7 @@ complete_f = {
     "ratio_value_number_to_time_series_length": [{}],
     "quantile": [{"q": 0.05}, {"q": 0.95}],
     "maximum": [{}],
+    "linear_time_trend": [{"param": "all"}],
 }
 
 
@@ -105,7 +105,7 @@ with gw.open(
     # ds.attrs["nodatavals"] = (0,)
     print(ds)
 
-    # # generate features previous Sep - current March ( Masika growing season)
+    # generate features previous Sep - current March ( Masika growing season)
 
     for year in [2023, 2024]:
         previous_year = str(year - 1)
@@ -134,7 +134,7 @@ with gw.open(
         )
         cluster.restart()
 
-    # # generate features current March - Aug ( Msimu growing season)
+    # generate features current March - Aug ( Msimu growing season)
 
     for year in [2023, 2024]:
         previous_year = str(year - 1)

@@ -47,7 +47,10 @@ complete_f = {
     "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
     "symmetry_looking": [{}],
     "sum_values": [{}],
-    "autocorr": [{"lag": 1}, {"lag": 2}, {"lag": 4}],
+    "autocorr": [
+        {"lag": 1},
+        {"lag": 2},
+    ],  # {"lag": 4}],
     "ts_complexity_cid_ce": [{}],
     "mean_change": [{}],  #  FIX  DONT HAVE
     "mean_second_derivative_central": [{}],
@@ -107,32 +110,32 @@ with gw.open(
 
     # generate features previous Sep - current March ( Masika growing season)
 
-    for year in [2023, 2024]:
-        previous_year = str(year - 1)
-        year = str(year)
-        print(year)
-        ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
-        print("interpolating")
-        ds_year = ds_year.interpolate_na(dim="time", limit=5)
-        # ds_year = ds_year.chunk(
-        #     {"time": -1, "band": 1, "y": 350, "x": 350}
-        # )  # rechunk to time
+    # for year in [2023, 2024]:
+    #     previous_year = str(year - 1)
+    #     year = str(year)
+    #     print(year)
+    #     ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
+    #     print("interpolating")
+    #     ds_year = ds_year.interpolate_na(dim="time", limit=5)
+    #     # ds_year = ds_year.chunk(
+    #     #     {"time": -1, "band": 1, "y": 350, "x": 350}
+    #     # )  # rechunk to time
 
-        # make output folder
-        outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
-        os.makedirs(outpath, exist_ok=True)
+    #     # make output folder
+    #     outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
+    #     os.makedirs(outpath, exist_ok=True)
 
-        # extract growing season year month day
-        features = extract_features(
-            xr_data=ds_year,
-            feature_dict=complete_f,
-            band=band_name,
-            na_rm=True,
-            persist=True,
-            filepath=outpath,
-            postfix="_sep_mar_" + year,
-        )
-        cluster.restart()
+    #     # extract growing season year month day
+    #     features = extract_features(
+    #         xr_data=ds_year,
+    #         feature_dict=complete_f,
+    #         band=band_name,
+    #         na_rm=True,
+    #         persist=True,
+    #         filepath=outpath,
+    #         postfix="_sep_mar_" + year,
+    #     )
+    #     cluster.restart()
 
     # generate features current March - Aug ( Msimu growing season)
 

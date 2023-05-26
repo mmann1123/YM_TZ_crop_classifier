@@ -40,37 +40,37 @@ dates = sorted(datetime.strptime(string, strp_glob) for string in f_list)
 dates
 
 complete_f = {
-    # "linear_time_trend": [{"param": "all"}],
+    "linear_time_trend": [{"param": "all"}],
     "minimum": [{}],
-    # "abs_energy": [{}],
-    # "mean_abs_change": [{}],
-    # "variance_larger_than_standard_deviation": [{}],
-    # "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
-    # "symmetry_looking": [{}],
-    # "sum_values": [{}],
-    # "autocorr": [{"lag": 1}, {"lag": 2}, {"lag": 4}, {"lag": 8}],  # mostly nan for ndvi
-    # "ts_complexity_cid_ce": [{}],
-    # "mean_change": [{}],  #  FIX  DONT HAVE
-    # "mean_second_derivative_central": [{}],
-    # "median": [{}],
-    # "mean": [{}],
-    # "standard_deviation": [{}],
-    # "variance": [{}],
-    # "skewness": [{}],
-    # "kurtosis": [{}],
-    # "absolute_sum_of_changes": [{}],
-    # "longest_strike_below_mean": [{}],
-    # "longest_strike_above_mean": [{}],
-    # "count_above_mean": [{}],
-    # "count_below_mean": [{}],
-    # "doy_of_maximum_first": [
-    #     {"band": band_name}
-    # ],  # figure out how to remove arg for band
-    # "doy_of_maximum_last": [{"band": band_name}],
-    # "doy_of_minimum_last": [{"band": band_name}],
-    # "doy_of_minimum_first": [{"band": band_name}],
-    # "ratio_value_number_to_time_series_length": [{}],
-    # "quantile": [{"q": 0.05}, {"q": 0.95}],
+    "abs_energy": [{}],
+    "mean_abs_change": [{}],
+    "variance_larger_than_standard_deviation": [{}],
+    "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
+    "symmetry_looking": [{}],
+    "sum_values": [{}],
+    "autocorr": [{"lag": 1}, {"lag": 2}, {"lag": 4}],
+    "ts_complexity_cid_ce": [{}],
+    "mean_change": [{}],  #  FIX  DONT HAVE
+    "mean_second_derivative_central": [{}],
+    "median": [{}],
+    "mean": [{}],
+    "standard_deviation": [{}],
+    "variance": [{}],
+    "skewness": [{}],
+    "kurtosis": [{}],
+    "absolute_sum_of_changes": [{}],
+    "longest_strike_below_mean": [{}],
+    "longest_strike_above_mean": [{}],
+    "count_above_mean": [{}],
+    "count_below_mean": [{}],
+    "doy_of_maximum_first": [
+        {"band": band_name}
+    ],  # figure out how to remove arg for band
+    "doy_of_maximum_last": [{"band": band_name}],
+    "doy_of_minimum_last": [{"band": band_name}],
+    "doy_of_minimum_first": [{"band": band_name}],
+    "ratio_value_number_to_time_series_length": [{}],
+    "quantile": [{"q": 0.05}, {"q": 0.95}],
     "maximum": [{}],
 }
 
@@ -79,7 +79,7 @@ complete_f = {
 Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
 with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
     the_file.write(
-        "Gererated by /mnt/space/Dropbox/GWU_MD_Fields/generate_timeseries_properties.py \t"
+        "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
     )
     the_file.write(str(datetime.now()))
 
@@ -95,16 +95,17 @@ complete_f["doy_of_minimum_first"] = [{"band": band_name}]
 cluster = Cluster()
 cluster.start_large_object()
 
+# %%
 # open xarray lazy
 with gw.open(
     sorted(glob(file_glob)), band_names=[band_name], time_names=dates, nodata=0
 ) as ds:
     ds = ds.chunk({"time": -1, "band": 1, "y": 350, "x": 350})  # rechunk to time
     ds = ds.gw.mask_nodata()
-    ds.attrs["nodatavals"] = (0,)
+    # ds.attrs["nodatavals"] = (0,)
     print(ds)
 
-    # # generate features Sep - March ( Masika growing season)
+    # # generate features previous Sep - current March ( Masika growing season)
 
     for year in [2023, 2024]:
         previous_year = str(year - 1)
@@ -113,9 +114,9 @@ with gw.open(
         ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
         print("interpolating")
         ds_year = ds_year.interpolate_na(dim="time", limit=5)
-        ds_year = ds_year.chunk(
-            {"time": -1, "band": 1, "y": 350, "x": 350}
-        )  # rechunk to time
+        # ds_year = ds_year.chunk(
+        #     {"time": -1, "band": 1, "y": 350, "x": 350}
+        # )  # rechunk to time
 
         # make output folder
         outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
@@ -131,60 +132,24 @@ with gw.open(
             filepath=outpath,
             postfix="_sep_mar_" + year,
         )
-    cluster.restart()
+        cluster.restart()
 
-cluster.close()
+    # # generate features current March - Aug ( Msimu growing season)
 
-
-# %%
-
-
-files = "/mnt/space/Dropbox/USA_Data/MD_Crops/sentinel_images/"
-band_name = "evi"
-file_glob = f"{files}/*.tif"
-strp_glob = f"{files}S2_SR_%Y_%m.tif"
-
-
-f_list = sorted(glob(file_glob))
-
-dates = sorted(datetime.strptime(string, strp_glob) for string in f_list)
-
-
-# update band name to evi and limit lag
-complete_f["doy_of_maximum_first"] = [{"band": band_name}]
-complete_f["doy_of_maximum_last"] = [{"band": band_name}]
-complete_f["doy_of_minimum_last"] = [{"band": band_name}]
-complete_f["doy_of_minimum_first"] = [{"band": band_name}]
-complete_f["autocorr"] = [{"lag": 1}, {"lag": 2}, {"lag": 4}]
-
-
-# %%
-
-# start cluster
-cluster = Cluster()
-cluster.start_large_object()
-
-# open xarray lazy
-with gw.open(sorted(glob(file_glob)), time_names=dates, stack_dim="time") as ds:
-    ds.attrs["nodatavals"] = (
-        0,
-        0,
-        0,
-        0,
-    )
-    # print(ds)
-    evi = ds.gw.evi(sensor="bgrn", scale_factor=1)
-    evi = evi.chunk({"time": -1, "band": 1, "y": 350, "x": 350})  # rechunk to time
-
-    # # generate features
-    for year in sorted(list(set([x.year for x in dates]))):
+    for year in [2023, 2024]:
+        previous_year = str(year - 1)
         year = str(year)
-        ds_year = evi.sel(time=slice(year + "-03-01", year + "-07-29"))
+        print(year)
+        ds_year = ds.sel(time=slice(year + "-03-01", year + "-08-01"))
         print("interpolating")
         ds_year = ds_year.interpolate_na(dim="time", limit=5)
-        ds_year = ds_year.chunk(
-            {"time": -1, "band": 1, "y": 350, "x": 350}
-        )  # rechunk to time
+        # ds_year = ds_year.chunk(
+        #     {"time": -1, "band": 1, "y": 350, "x": 350}
+        # )  # rechunk to time
+
+        # make output folder
+        outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
+        os.makedirs(outpath, exist_ok=True)
 
         # extract growing season year month day
         features = extract_features(
@@ -193,11 +158,13 @@ with gw.open(sorted(glob(file_glob)), time_names=dates, stack_dim="time") as ds:
             band=band_name,
             na_rm=True,
             persist=True,
-            filepath=os.path.join(files, "annual_features/May_Sep_S2"),
-            postfix="_may_sep_" + year,
+            filepath=outpath,
+            postfix="_mar_aug_" + year,
         )
     cluster.restart()
 
+
 cluster.close()
+
 
 # %%

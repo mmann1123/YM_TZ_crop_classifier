@@ -6,6 +6,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import numpy as np
+from datetime import datetime
 
 files = "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data"
 band_name = "evi"
@@ -49,7 +50,7 @@ df2
 # %%
 import seaborn as sns
 
-sns.scatterplot(
+g = sns.scatterplot(
     data=df2.groupby(["Primary land cover", "yearmonth"], as_index=False).mean(),
     x="yearmonth",
     y="evi",
@@ -57,6 +58,7 @@ sns.scatterplot(
     # row="Primary land cover",
     legend=False,
 )
+g.set_xticklabels(labels=df2.yearmonth.unique(), rotation=90)
 # %%
 g = sns.FacetGrid(
     df2.groupby(["Primary land cover", "yearmonth"], as_index=False).median(),

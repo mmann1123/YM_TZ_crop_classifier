@@ -1,4 +1,4 @@
-# %%
+# %% generate hexagonal grid for testing training sample purposes
 import math
 import geopandas as gpd
 import math
@@ -102,5 +102,11 @@ hexgrid.to_file(
 )
 
 # %%
-sample = gpd.read_file('/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth.gpkg')
-gpd.overlay(sample, hexgrid, how='intersection').to_file('/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/.gpkg', driver='GPKG'
+sample = gpd.read_file(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth.gpkg"
+).to_crs(hexgrid.crs)
+gpd.overlay(sample, hexgrid, how="intersection").to_file(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_data.gpkg",
+    driver="GPKG",
+)
+# %%

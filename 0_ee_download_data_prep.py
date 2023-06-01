@@ -100,56 +100,108 @@ for year in list(range(2022, 2024)):
         task = ee.batch.Export.image(s2_sr, img_name, export_config)
         task.start()
 
+############################################################################################################
+# %% SWIR and Red Edge
 
-# %% QUARTERLY COMPOSITES
+# Set parameters
+bands = ["B5", "B6", "B11", "B12"]
+scale = 20
+# date_pattern = "mm_dd_yyyy"  # dd: day, MMM: month (JAN), y: year
+folder = "Tanzania_Fields"
 
-q_finished = []
-for year in list(range(2021, 2024)):
-    for month in list(range(1, 13)):
+
+# extra = dict(sat="Sen_TOA")
+CLOUD_FILTER = 75
+
+
+# %% MONTHLY COMPOSITES
+
+for year in list(range(2022, 2024)):
+    for month in list(range(1, 13, 1)):
+        print("year ", str(year), " month ", str(month))
         dt = pendulum.datetime(year, month, 1)
-        # avoid repeating same quarter
-        yq = f"{year}_{dt.quarter}"
-        if yq in q_finished:
-            # print('skipping')
-            continue
-        else:
-            # print(f"appending {year}_{dt.quarter}")
-            q_finished.append(f"{year}_{dt.quarter}")
-
-        print(f"Year: {year} Quarter: {dt.quarter}")
 
         collection = get_s2A_SR_sr_cld_col(
             site,
-            dt.first_of("quarter").strftime(r"%Y-%m-%d"),
-            dt.last_of("quarter").strftime(r"%Y-%m-%d"),
+            dt.start_of("month").strftime(r"%Y-%m-%d"),
+            dt.end_of("month").strftime(r"%Y-%m-%d"),
             CLOUD_FILTER=CLOUD_FILTER,
         )
 
-        s2_sr = (
-            collection.map(add_cld_shdw_mask)
-            .map(apply_cld_shdw_mask)
-            .select(bands)
-            .map(addEVI)
-            .select(["EVI"])
-            .median()
-            .multiply(10000)
-        )
+        for band in bands:
+            s2_sr = (
+                collection.map(add_cld_shdw_mask)
+                .map(apply_cld_shdw_mask)
+                .select(band)
+                .median()
+                .multiply(10000)
+                .clip(site)
+            )
+            s2_sr = geetools.batch.utils.convertDataType("uint32")(s2_sr)
 
-        s2_sr = geetools.batch.utils.convertDataType("uint32")(s2_sr)
-        # eprint(s2_sr)
-        doy = str(dt.last_of("quarter").day_of_year)
-        img_name = f"TZ_EVI_Q_{year}_{doy}"
-        export_config = {
-            "scale": scale,
-            "maxPixels": 50000000000,
-            "driveFolder": folder,
-            "region": site,
-            "crs": crs,
-        }
-        task = ee.batch.Export.image(s2_sr, img_name, export_config)
-        task.start()
+            # # export clipped result in Tiff
 
-# %%
+            img_name = "S2_SR_" + band + "_M_" + str(year) + "_" + str(month).zfill(2)
+            export_config = {
+                "scale": scale,
+                "maxPixels": 5000000000,
+                "driveFolder": folder,
+                "region": site,
+                "crs": crs,
+            }
+            task = ee.batch.Export.image(s2_sr, img_name, export_config)
+            task.start()
+
+
+# %% QUARTERLY COMPOSITES not used
+
+# q_finished = []
+# for year in list(range(2021, 2024)):
+#     for month in list(range(1, 13)):
+#         dt = pendulum.datetime(year, month, 1)
+#         # avoid repeating same quarter
+#         yq = f"{year}_{dt.quarter}"
+#         if yq in q_finished:
+#             # print('skipping')
+#             continue
+#         else:
+#             # print(f"appending {year}_{dt.quarter}")
+#             q_finished.append(f"{year}_{dt.quarter}")
+
+#         print(f"Year: {year} Quarter: {dt.quarter}")
+
+#         collection = get_s2A_SR_sr_cld_col(
+#             site,
+#             dt.first_of("quarter").strftime(r"%Y-%m-%d"),
+#             dt.last_of("quarter").strftime(r"%Y-%m-%d"),
+#             CLOUD_FILTER=CLOUD_FILTER,
+#         )
+
+#         s2_sr = (
+#             collection.map(add_cld_shdw_mask)
+#             .map(apply_cld_shdw_mask)
+#             .select(bands)
+#             .map(addEVI)
+#             .select(["EVI"])
+#             .median()
+#             .multiply(10000)
+#         )
+
+#         s2_sr = geetools.batch.utils.convertDataType("uint32")(s2_sr)
+#         # eprint(s2_sr)
+#         doy = str(dt.last_of("quarter").day_of_year)
+#         img_name = f"TZ_EVI_Q_{year}_{doy}"
+#         export_config = {
+#             "scale": scale,
+#             "maxPixels": 50000000000,
+#             "driveFolder": folder,
+#             "region": site,
+#             "crs": crs,
+#         }
+#         task = ee.batch.Export.image(s2_sr, img_name, export_config)
+#         task.start()
+
+# %% restrict training data to bounds
 import geopandas as gpd
 
 bbox = gpd.read_file(
@@ -160,7 +212,7 @@ points = gpd.read_file(
 )
 print(points.shape)
 points.head()
-# %%
+# %%  Create land use codes
 from sklearn import preprocessing
 
 points_clip = points.clip(bbox)

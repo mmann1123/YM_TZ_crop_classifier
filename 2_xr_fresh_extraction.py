@@ -28,7 +28,7 @@ from pathlib import Path
 
 # %%
 
-files = "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data"
+files = "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/EVI"
 band_name = "evi"
 file_glob = f"{files}/*.tif"
 strp_glob = f"{files}/S2_SR_EVI_M_%Y_%m.tif"
@@ -50,7 +50,7 @@ complete_f = {
     "autocorr": [
         {"lag": 1},
         {"lag": 2},
-    ],  # {"lag": 4}],
+    ],  #  not possible in 2023{"lag": 4}],
     "ts_complexity_cid_ce": [{}],
     "mean_change": [{}],  #  FIX  DONT HAVE
     "mean_second_derivative_central": [{}],
@@ -94,11 +94,11 @@ complete_f["doy_of_minimum_last"] = [{"band": band_name}]
 complete_f["doy_of_minimum_first"] = [{"band": band_name}]
 
 
+# %%
 # start cluster
 cluster = Cluster()
 cluster.start_large_object()
 
-# %%
 # open xarray lazy
 with gw.open(
     sorted(glob(file_glob)), band_names=[band_name], time_names=dates, nodata=0
@@ -143,7 +143,7 @@ with gw.open(
         previous_year = str(year - 1)
         year = str(year)
         print(year)
-        ds_year = ds.sel(time=slice(year + "-03-01", year + "-08-01"))
+        ds_year = ds.sel(time=slice(year + "-03-01", year + "-06-01"))
         print("interpolating")
         ds_year = ds_year.interpolate_na(dim="time", limit=5)
         # ds_year = ds_year.chunk(

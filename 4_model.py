@@ -62,7 +62,7 @@ lu_complete["lc"] = le.fit_transform(lu_complete["lc_name"])
 print(lu_complete["lc"].unique())
 
 images = glob(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/annual_features/*/**.tif"
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/EVI/annual_features/*/**.tif"
 )
 
 # %%
@@ -71,11 +71,11 @@ from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
 
 pl = Pipeline(
     [
-        ("impute", SimpleImputer(strategy="constant", fill_value=0)),
+        ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),
         ("variance_threshold", VarianceThreshold()),  # Remove low variance features
         (
             "feature_selection",
-            SelectKBest(k=15, score_func=f_classif),
+            SelectKBest(k=10, score_func=f_classif),
         ),  # Select top k features based on ANOVA F-value
         ("clf", RandomForestClassifier()),
     ]
@@ -91,6 +91,7 @@ gridsearch = GridSearchCV(
 
 
 with gw.open(images, nodata=0, stack_dim="band") as src:
+    src = src.gw.mask_nodata()
     # fit a model to get Xy used to train model
     X, Xy, pipe = fit(data=src, clf=pl, labels=lu_complete, col="lc")
 
@@ -110,21 +111,49 @@ with gw.open(images, nodata=0, stack_dim="band") as src:
     # get set tuned parameters and make the prediction
     # Note: predict(gridsearch.best_model_) not currently supported
     pipe.set_params(**gridsearch.best_params_)
-    print("predcting:")
-    y = predict(src, X, pipe)
-    print(y.values)
-    print(np.nanmax(y.values))
+    # print("predcting:")
+    # y = predict(src, X, pipe)
+    # print(y.values)
+    # print(np.nanmax(y.values))
+    # y.plot(robust=True, ax=ax)
+# plt.tight_layout(pad=1)
+
+# %% plot kmean andn the selected features
+
+from sklearn.cluster import KMeans
+
+select_images = [
+    images[i]
+    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
+        indices=True
+    )
+]
+image_names = [
+    os.path.basename(images[i])
+    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
+        indices=True
+    )
+]
+
+pl = Pipeline(
+    [
+        ("impute", SimpleImputer(strategy="mean")),
+        ("clf", KMeans(12)),
+    ]
+)
+
+
+fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
+
+with gw.open(select_images, nodata=0, stack_dim="band", band_names=image_names) as src:
+    src = src.gw.mask_nodata()
+    # fit a model to get Xy used to train model
+    y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
     y.plot(robust=True, ax=ax)
 plt.tight_layout(pad=1)
-# %%
-
-
-mat = confusion_matrix(y_iris_num, ypred)
-sns.heatmap(mat.T, square=True, annot=True, fmt="d", cbar=False)
-plt.xlabel("true label")
-plt.ylabel("predicted label")
-
-
+y.gw.save(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction_kmean_12.tif"
+)
 # %% plot prediction andn the selected features
 
 select_images = [
@@ -146,23 +175,66 @@ pl = Pipeline(
         ("clf", RandomForestClassifier(n_estimators=1000)),
     ]
 )
-
+select_images.append(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction_kmean_12.tif"
+)
+image_names.append("ym_prediction_kmean_12")
 
 fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
 
-with gw.open(
-    select_images, nodata=-9999, stack_dim="band", band_names=image_names
-) as src:
+with gw.open(select_images, nodata=0, stack_dim="band", band_names=image_names) as src:
+    src = src.gw.mask_nodata()
     # fit a model to get Xy used to train model
     y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
     y.plot(robust=True, ax=ax)
 plt.tight_layout(pad=1)
+y.gw.save(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction.tif"
+)
 
+
+# GroupKFold
+cv = CrossValidatorWrapper(KFold(n_splits=3))
+gridsearch = GridSearchCV(
+    pl,
+    cv=cv,
+    scoring="balanced_accuracy",
+    param_grid={"clf__n_estimators": [1000]},
+)
+
+
+with gw.open(images, nodata=0, stack_dim="band") as src:
+    src = src.gw.mask_nodata()
+    # fit a model to get Xy used to train model
+    X, Xy, outpipe = fit(data=src, clf=pl, labels=lu_complete, col="lc")
+
+    # fit cross valiation and parameter tuning
+    gridsearch.fit(*Xy)
+    print(gridsearch.cv_results_)
+    print(gridsearch.best_score_)
+
+    outpipe.set_params(**gridsearch.best_params_)
+    # print("predcting:")
+    y = predict(src, X, outpipe)
+    # print(y.values)
+    # print(np.nanmax(y.values))
+    y.plot(robust=True, ax=ax)
+
+# plt.tight_layout(pad=1)
 # print("plotting")
 # for i in range(src.shape[0]):
 #     fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
 #     src[i].plot(robust=True, ax=ax)
 #     plt.tight_layout(pad=1)
+
+
+# %%
+
+
+mat = confusion_matrix(y_iris_num, ypred)
+sns.heatmap(mat.T, square=True, annot=True, fmt="d", cbar=False)
+plt.xlabel("true label")
+plt.ylabel("predicted label")
 
 
 # %%

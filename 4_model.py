@@ -27,27 +27,34 @@ import os
 import numpy as np
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
+import pandas as pd
 
+
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
+)
 
 # %%
 # read YM training data and clean
-lu = gpd.read_file(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_data.gpkg"
-)
-# restrict land cover classes
+lu = gpd.read_file("./data/training_data.gpkg")
+np.unique(lu["Primary land cover"])
+
+# %%  restrict land cover classes
 lu["lc_name"] = lu["Primary land cover"]
 keep = [
+    "Cassava",
     "Maize (Mahindi)*",
     "Rice (Mpunga)*",
     "Cotton (Pamba)*",
     "Sorghum (Mtama)*",
+    "Millet (Ulezi)*",
+    "Soybeans*",
+    "Sunflower (Alizeti)*",
 ]
 lu.loc[lu["lc_name"].isin(keep) == False, "lc_name"] = "Other"
 
 # add additional training data
-other_training = gpd.read_file(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/other_training.gpkg"
-).to_crs(lu.crs)
+other_training = gpd.read_file("./data/other_training.gpkg").to_crs(lu.crs)
 
 lu_complete = lu[["lc_name", "geometry"]].overlay(
     other_training[["lc_name", "geometry"]], how="union"
@@ -62,62 +69,68 @@ le = LabelEncoder()
 lu_complete["lc"] = le.fit_transform(lu_complete["lc_name"])
 print(lu_complete["lc"].unique())
 
-images = glob(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/EVI/annual_features/*/**.tif"
-)
+# images = glob("./data/EVI/annual_features/*/**.tif")
 
-# %%
+
+# Get all the feature files
+images = sorted(glob("./data/**/annual_features/**/**.tif"))
+
+
+# %% Find 20 most important features
 
 from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
 
 pl = Pipeline(
     [
-        ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),
         ("variance_threshold", VarianceThreshold()),  # Remove low variance features
+        ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),
         (
             "feature_selection",
-            SelectKBest(k=10, score_func=f_classif),
+            SelectKBest(k=20, score_func=f_classif),
         ),  # Select top k features based on ANOVA F-value
         ("clf", RandomForestClassifier()),
     ]
 )
-# GroupKFold
-cv = CrossValidatorWrapper(KFold(n_splits=3))
+
 gridsearch = GridSearchCV(
     pl,
-    cv=cv,
+    cv=KFold(n_splits=3),
     scoring="balanced_accuracy",
     param_grid={"clf__n_estimators": [1000]},
 )
 
+with gw.config.update(ref_image=images[-1]):
+    with gw.open(images, nodata=-9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        X = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = X[range(1, len(images) + 1)]
+        del src
 
-with gw.open(images, nodata=0, stack_dim="band") as src:
-    src = src.gw.mask_nodata()
-    # fit a model to get Xy used to train model
-    X, Xy, pipe = fit(data=src, clf=pl, labels=lu_complete, col="lc")
+# %%
+# fit cross valiation and parameter tuning
+gridsearch.fit(X=X.values, y=y.values)
+print(gridsearch.cv_results_)
+print(gridsearch.best_score_)
+print(gridsearch.best_params_)
+print(
+    [
+        os.path.basename(images[i])
+        for i in gridsearch.best_estimator_.named_steps[
+            "feature_selection"
+        ].get_support(indices=True)
+    ]
+)
 
-    # fit cross valiation and parameter tuning
-    gridsearch.fit(*Xy)
-    print(gridsearch.cv_results_)
-    print(gridsearch.best_score_)
-    print(gridsearch.best_params_)
-    print(
-        [
-            os.path.basename(images[i])
-            for i in gridsearch.best_estimator_.named_steps[
-                "feature_selection"
-            ].get_support(indices=True)
-        ]
+
+select_images = [
+    images[i]
+    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
+        indices=True
     )
-    # get set tuned parameters and make the prediction
-    # Note: predict(gridsearch.best_model_) not currently supported
-    pipe.set_params(**gridsearch.best_params_)
-    # print("predcting:")
-    # y = predict(src, X, pipe)
-    # print(y.values)
-    # print(np.nanmax(y.values))
-    # y.plot(robust=True, ax=ax)
-# plt.tight_layout(pad=1)
+]
+
+pd.DataFrame({"top20": select_images}).to_csv("./outputs/selected_images.csv   ")
 
 
 ######################################
@@ -142,8 +155,8 @@ image_names = [
 pl = Pipeline(
     [
         ("impute", SimpleImputer(strategy="mean")),
-        ("rescaler", StandardScaler(with_mean=True, with_std=False)),
-        ("clf", KMeans(12)),
+        ("rescaler", StandardScaler(with_mean=True, with_std=True)),
+        ("clf", KMeans(15)),
     ]
 )
 
@@ -161,7 +174,7 @@ with gw.open(select_images, nodata=0, stack_dim="band", band_names=image_names) 
 
 # plt.tight_layout(pad=1)
 y.gw.to_raster(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction_kmean_12.tif",
+    "./outputs/ym_prediction_kmean_12.tif",
     overwrite=True,
 )
 

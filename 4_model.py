@@ -34,14 +34,15 @@ from sklearn.metrics import confusion_matrix
 lu = gpd.read_file(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_data.gpkg"
 )
+# restrict land cover classes
 lu["lc_name"] = lu["Primary land cover"]
-values = [
+keep = [
     "Maize (Mahindi)*",
     "Rice (Mpunga)*",
     "Cotton (Pamba)*",
     "Sorghum (Mtama)*",
 ]
-lu.loc[lu["lc_name"].isin(values) == False, "lc_name"] = "Other"
+lu.loc[lu["lc_name"].isin(keep) == False, "lc_name"] = "Other"
 
 # add additional training data
 other_training = gpd.read_file(
@@ -118,9 +119,12 @@ with gw.open(images, nodata=0, stack_dim="band") as src:
     # y.plot(robust=True, ax=ax)
 # plt.tight_layout(pad=1)
 
+
+######################################
 # %% plot kmean andn the selected features
 
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 select_images = [
     images[i]
@@ -138,22 +142,30 @@ image_names = [
 pl = Pipeline(
     [
         ("impute", SimpleImputer(strategy="mean")),
+        ("rescaler", StandardScaler(with_mean=True, with_std=False)),
         ("clf", KMeans(12)),
     ]
 )
 
 
-fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
+# fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
 
 with gw.open(select_images, nodata=0, stack_dim="band", band_names=image_names) as src:
     src = src.gw.mask_nodata()
     # fit a model to get Xy used to train model
     y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
-    y.plot(robust=True, ax=ax)
-plt.tight_layout(pad=1)
-y.gw.save(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction_kmean_12.tif"
+    y = y + 1
+    y.attrs = src.attrs
+
+    # y.plot(robust=True, ax=ax)
+
+# plt.tight_layout(pad=1)
+y.gw.to_raster(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction_kmean_12.tif",
+    overwrite=True,
 )
+
+
 # %% plot prediction andn the selected features
 
 select_images = [
@@ -180,46 +192,38 @@ select_images.append(
 )
 image_names.append("ym_prediction_kmean_12")
 
-fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
-
-with gw.open(select_images, nodata=0, stack_dim="band", band_names=image_names) as src:
-    src = src.gw.mask_nodata()
-    # fit a model to get Xy used to train model
-    y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
-    y.plot(robust=True, ax=ax)
-plt.tight_layout(pad=1)
-y.gw.save(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction.tif"
-)
+# fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
 
 
 # GroupKFold
 cv = CrossValidatorWrapper(KFold(n_splits=3))
-gridsearch = GridSearchCV(
+gridsearch2 = GridSearchCV(
     pl,
     cv=cv,
     scoring="balanced_accuracy",
     param_grid={"clf__n_estimators": [1000]},
 )
 
-
-with gw.open(images, nodata=0, stack_dim="band") as src:
+with gw.open(images, nodata=9999, stack_dim="band") as src:
     src = src.gw.mask_nodata()
     # fit a model to get Xy used to train model
     X, Xy, outpipe = fit(data=src, clf=pl, labels=lu_complete, col="lc")
 
     # fit cross valiation and parameter tuning
-    gridsearch.fit(*Xy)
-    print(gridsearch.cv_results_)
-    print(gridsearch.best_score_)
+    gridsearch2.fit(*Xy)
+    print(gridsearch2.cv_results_)
+    print(gridsearch2.best_score_)
 
-    outpipe.set_params(**gridsearch.best_params_)
+    outpipe.set_params(**gridsearch2.best_params_)
     # print("predcting:")
     y = predict(src, X, outpipe)
     # print(y.values)
     # print(np.nanmax(y.values))
-    y.plot(robust=True, ax=ax)
-
+    # y.plot(robust=True, ax=ax)
+y.gw.save(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction.tif",
+    nodata=9999,
+)
 # plt.tight_layout(pad=1)
 # print("plotting")
 # for i in range(src.shape[0]):

@@ -1,4 +1,4 @@
-# %%
+# %% env xarray
 
 import xarray as xr
 import geowombat as gw
@@ -13,7 +13,6 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from xr_fresh.utils import *
 import logging
-import warnings
 import xarray as xr
 from numpy import where
 from xr_fresh import feature_calculators
@@ -22,152 +21,137 @@ from geowombat.backends import concat as gw_concat
 
 _logger = logging.getLogger(__name__)
 from numpy import where
-from xr_fresh.utils import xarray_to_rasterio
-import pandas as pd
 from pathlib import Path
-
-# %%
-
-files = "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/EVI"
-band_name = "evi"
-file_glob = f"{files}/*.tif"
-strp_glob = f"{files}/S2_SR_EVI_M_%Y_%m.tif"
-# S2_SR_EVI_M_2022_01.tif
-
-f_list = sorted(glob(file_glob))
-
-dates = sorted(datetime.strptime(string, strp_glob) for string in f_list)
-dates
-
-complete_f = {
-    "minimum": [{}],
-    "abs_energy": [{}],
-    "mean_abs_change": [{}],
-    "variance_larger_than_standard_deviation": [{}],
-    "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
-    "symmetry_looking": [{}],
-    "sum_values": [{}],
-    "autocorr": [
-        {"lag": 1},
-        {"lag": 2},
-    ],  #  not possible in 2023{"lag": 4}],
-    "ts_complexity_cid_ce": [{}],
-    "mean_change": [{}],  #  FIX  DONT HAVE
-    "mean_second_derivative_central": [{}],
-    "median": [{}],
-    "mean": [{}],
-    "standard_deviation": [{}],
-    "variance": [{}],
-    "skewness": [{}],
-    "kurtosis": [{}],
-    "absolute_sum_of_changes": [{}],
-    "longest_strike_below_mean": [{}],
-    "longest_strike_above_mean": [{}],
-    "count_above_mean": [{}],
-    "count_below_mean": [{}],
-    "doy_of_maximum_first": [
-        {"band": band_name}
-    ],  # figure out how to remove arg for band
-    "doy_of_maximum_last": [{"band": band_name}],
-    "doy_of_minimum_last": [{"band": band_name}],
-    "doy_of_minimum_first": [{"band": band_name}],
-    "ratio_value_number_to_time_series_length": [{}],
-    "quantile": [{"q": 0.05}, {"q": 0.95}],
-    "maximum": [{}],
-    "linear_time_trend": [{"param": "all"}],
-}
+import time
 
 
-# add data notes
-Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
-with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
-    the_file.write(
-        "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
-    )
-    the_file.write(str(datetime.now()))
-
-# %%
-# update band name
-complete_f["doy_of_maximum_first"] = [{"band": band_name}]
-complete_f["doy_of_maximum_last"] = [{"band": band_name}]
-complete_f["doy_of_minimum_last"] = [{"band": band_name}]
-complete_f["doy_of_minimum_first"] = [{"band": band_name}]
-
-
-# %%
 # start cluster
 cluster = Cluster()
 cluster.start_large_object()
 
-# open xarray lazy
-with gw.open(
-    sorted(glob(file_glob)), band_names=[band_name], time_names=dates, nodata=0
-) as ds:
-    ds = ds.chunk({"time": -1, "band": 1, "y": 350, "x": 350})  # rechunk to time
-    ds = ds.gw.mask_nodata()
-    # ds.attrs["nodatavals"] = (0,)
-    print(ds)
 
-    # generate features previous Sep - current March ( Masika growing season)
+# %%
 
-    # for year in [2023, 2024]:
-    #     previous_year = str(year - 1)
-    #     year = str(year)
-    #     print(year)
-    #     ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
-    #     print("interpolating")
-    #     ds_year = ds_year.interpolate_na(dim="time", limit=5)
-    #     # ds_year = ds_year.chunk(
-    #     #     {"time": -1, "band": 1, "y": 350, "x": 350}
-    #     # )  # rechunk to time
+for band_name in ["B5", "B6", "EVI", "B11", "B12"]:  #
+    files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/{band_name}"
+    file_glob = f"{files}/*.tif"
+    strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m.tif"
 
-    #     # make output folder
-    #     outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
-    #     os.makedirs(outpath, exist_ok=True)
+    f_list = sorted(glob(file_glob))
+    print(f_list)
 
-    #     # extract growing season year month day
-    #     features = extract_features(
-    #         xr_data=ds_year,
-    #         feature_dict=complete_f,
-    #         band=band_name,
-    #         na_rm=True,
-    #         persist=True,
-    #         filepath=outpath,
-    #         postfix="_sep_mar_" + year,
-    #     )
-    #     cluster.restart()
+    dates = sorted(datetime.strptime(string, strp_glob) for string in f_list)
+    print(dates)
 
-    # generate features current March - Aug ( Msimu growing season)
+    complete_f = {
+        "minimum": [{}],
+        "abs_energy": [{}],
+        "mean_abs_change": [{}],
+        "variance_larger_than_standard_deviation": [{}],
+        "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
+        "symmetry_looking": [{}],
+        "sum_values": [{}],
+        "autocorr": [
+            {"lag": 1},
+            {"lag": 2},
+        ],  #  not possible in 2023{"lag": 4}],
+        "ts_complexity_cid_ce": [{}],
+        "mean_change": [{}],  #  FIX  DONT HAVE
+        "mean_second_derivative_central": [{}],
+        "median": [{}],
+        "mean": [{}],
+        "standard_deviation": [{}],
+        "variance": [{}],
+        "skewness": [{}],
+        "kurtosis": [{}],
+        "absolute_sum_of_changes": [{}],
+        "longest_strike_below_mean": [{}],
+        "longest_strike_above_mean": [{}],
+        "count_above_mean": [{}],
+        "count_below_mean": [{}],
+        "doy_of_maximum_first": [
+            {"band": band_name}
+        ],  # figure out how to remove arg for band
+        "doy_of_maximum_last": [{"band": band_name}],
+        "doy_of_minimum_last": [{"band": band_name}],
+        "doy_of_minimum_first": [{"band": band_name}],
+        "ratio_value_number_to_time_series_length": [{}],
+        "quantile": [{"q": 0.05}, {"q": 0.95}],
+        "maximum": [{}],
+        "linear_time_trend": [{"param": "all"}],
+    }
 
-    for year in [2023, 2024]:
-        previous_year = str(year - 1)
-        year = str(year)
-        print(year)
-        ds_year = ds.sel(time=slice(year + "-03-01", year + "-06-01"))
-        print("interpolating")
-        ds_year = ds_year.interpolate_na(dim="time", limit=5)
-        # ds_year = ds_year.chunk(
-        #     {"time": -1, "band": 1, "y": 350, "x": 350}
-        # )  # rechunk to time
-
-        # make output folder
-        outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
-        os.makedirs(outpath, exist_ok=True)
-
-        # extract growing season year month day
-        features = extract_features(
-            xr_data=ds_year,
-            feature_dict=complete_f,
-            band=band_name,
-            na_rm=True,
-            persist=True,
-            filepath=outpath,
-            postfix="_mar_aug_" + year,
+    # add data notes
+    Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
+    with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
+        the_file.write(
+            "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
         )
-    cluster.restart()
+        the_file.write(str(datetime.now()))
 
+    # open xarray lazy
+    with gw.open(
+        sorted(glob(file_glob)), band_names=[band_name], time_names=dates, nodata=0
+    ) as ds:
+        ds = ds.chunk({"time": -1, "band": 1, "y": 350, "x": 350})  # rechunk to time
+        ds = ds.gw.mask_nodata()
+        # ds.attrs["nodatavals"] = (0,)
+        print(ds)
 
-cluster.close()
+        # generate features previous Sep - current March ( Masika growing season)
+
+        for year in [2023]:
+            previous_year = str(year - 1)
+            year = str(year)
+            print(year)
+            ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
+            print("interpolating")
+            ds_year = ds_year.interpolate_na(dim="time", limit=5)
+            # ds_year = ds_year.chunk(
+            #     {"time": -1, "band": 1, "y": 350, "x": 350}
+            # )  # rechunk to time
+
+            # make output folder
+            outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
+            os.makedirs(outpath, exist_ok=True)
+
+            # extract growing season year month day
+            features = extract_features(
+                xr_data=ds_year,
+                feature_dict=complete_f,
+                band=band_name,
+                na_rm=True,
+                persist=True,
+                filepath=outpath,
+                postfix="_sep_mar_" + year,
+            )
+
+        # generate features current March - Aug ( Msimu growing season)
+
+        for year in [2023]:
+            year = str(year)
+            print(year)
+            ds_year = ds.sel(time=slice(year + "-03-01", year + "-06-01"))
+            print("interpolating")
+            ds_year = ds_year.interpolate_na(dim="time", limit=3)
+            # ds_year = ds_year.chunk(
+            #     {"time": -1, "band": 1, "y": 350, "x": 350}
+            # )  # rechunk to time
+
+            # make output folder
+            outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
+            os.makedirs(outpath, exist_ok=True)
+
+            # extract growing season year month day
+            features = extract_features(
+                xr_data=ds_year,
+                feature_dict=complete_f,
+                band=band_name,
+                na_rm=True,
+                persist=True,
+                filepath=outpath,
+                postfix="_mar_aug_" + year,
+            )
 
 
 # %%

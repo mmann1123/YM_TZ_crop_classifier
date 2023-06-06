@@ -109,4 +109,147 @@ gpd.overlay(sample, hexgrid, how="intersection").to_file(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_data.gpkg",
     driver="GPKG",
 )
+
+###############################################################
+# %%  Figure out how to reassign similar classes
+import geopandas as gpd
+from sklearn.decomposition import IncrementalPCA, PCA
+import geowombat as gw
+from glob import glob
+import os
+from dask.distributed import Client, LocalCluster
+
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
+)
+
+
+# Get all the feature files
+files = sorted(glob("./data/**/annual_features/**/**.tif"))
+# Get the names of the bands
+band_names = [os.path.basename(f).split(".")[0] for f in files]
+# Read the training data
+data = gpd.read_file("./data/training_data.gpkg")
+# Only keep the land cover and geometry columns
+data = data[["Primary land cover", "geometry"]]
+
+# restrict land cover classes
+keep = [
+    "Cassava",
+    "Maize (Mahindi)*",
+    "Rice (Mpunga)*",
+    "Cotton (Pamba)*",
+    "Sorghum (Mtama)*",
+    "Millet (Ulezi)*",
+    "Soybeans*",
+    "Sunflower (Alizeti)*",
+    "Other grains (examples: wheat, barley, oats, rye…)",
+]
+data.loc[data["Primary land cover"].isin(keep) == False, "Primary land cover"] = "Other"
+
+
+# %%
+
+
+with gw.config.update(ref_image=files[-1]):
+    # open the data using geowombat.open()
+    with gw.open(files, stack_dim="band", band_names=band_names, nodata=0) as src:
+        # use geowombat.extract() to extract data
+        X = gw.extract(
+            src,
+            data,
+            all_touched=True,
+        )
+        display(X)
+
+# %% Calc cluster assignments
+from sklearn.cluster import KMeans
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Create a dictionary to store key names for each target_value
+result_dict = {}
+
+
+for state in range(0, 50):
+    # Initialize a LabelEncoder
+    le = LabelEncoder()
+
+    # Initialize a pipeline with a variance thresholding, data imputation, standard scaling, and K-means steps
+    pipeline = Pipeline(
+        [
+            ("variance_threshold", VarianceThreshold()),
+            ("imputer", SimpleImputer(strategy="mean")),
+            ("scaler", StandardScaler()),
+            ("kmeans", KMeans(n_clusters=10, random_state=state)),
+        ]
+    )
+
+    # Fit the pipeline on your training data
+    Xtrans = pipeline.fit_transform(X.values[:, 3:])
+    Xtrans.shape
+
+    # recode y values to integers
+    y = le.fit_transform(data["Primary land cover"])
+
+    cluster_labels = pipeline["kmeans"].labels_
+    class_labels = np.unique(y)
+    class_names = le.inverse_transform(class_labels)
+
+    # Create a dictionary to store the mapping of original class labels to cluster labels
+    class_to_cluster = {}
+
+    # Iterate through each original class and find the corresponding cluster label
+    for class_label in class_labels:
+        cluster_label = np.argmax(np.bincount(cluster_labels[y == class_label]))
+        class_to_cluster[le.inverse_transform([class_label])[0]] = cluster_label
+    class_to_cluster
+
+    # Iterate through unique target_values
+    for key, target_value in class_to_cluster.items():
+        # Collect key names with the same target_value
+        if state > 0:
+            temp_dict = {}
+            temp_dict[key] = [
+                key for key, value in class_to_cluster.items() if value == target_value
+            ]
+            result_dict[key] = result_dict[key] + temp_dict[key]
+        else:
+            result_dict[key] = [
+                key for key, value in class_to_cluster.items() if value == target_value
+            ]
+print(result_dict)
+
+# %%
+# Visualize
+
+# Convert the dictionary to a pandas DataFrame
+data2 = []
+for key, values in result_dict.items():
+    data2.extend([(key, value) for value in values])
+df = pd.DataFrame(data2, columns=["Key", "Value"])
+
+# Create a FacetGrid with histograms
+g = sns.FacetGrid(df, col="Key")
+g.map(sns.histplot, "Value", bins=len(set(df["Value"])), kde=False)
+
+# Set labels and title
+g.set_axis_labels("Value", "Count")
+g.fig.suptitle("Value Counts by Key")
+g.set_xticklabels(rotation=90)
+
+# Adjust the spacing between subplots
+g.tight_layout()
+
+# Display the plot
+plt.show()
+
+# save
+g.savefig("./outputs/cluster_reassignment.png")
 # %%

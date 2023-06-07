@@ -81,17 +81,7 @@ import shap
 
 # from lightgbm import LGBMClassifier
 import lightgbm as lgb
-
 from sklearn.feature_selection import VarianceThreshold
-
-
-# pl = Pipeline(
-#     [
-#         ("variance_threshold", VarianceThreshold()),  # Remove low variance features
-#         ("impute", SimpleImputer(strategy="median")),
-#         ("clf", lgb(params)),
-#     ]
-# )
 
 with gw.config.update(ref_image=images[-1]):
     with gw.open(images, nodata=9999, stack_dim="band") as src:
@@ -114,7 +104,7 @@ params = {
     "learning_rate": 0.05,
     "boosting_type": "gbdt",
     "objective": "multiclass",
-    "metric": "multi_error",  #  multi_error multi_auc  multi_logloss
+    "metric": "softmax",  #  softmax multi_error multi_auc  multi_logloss
     "num_leaves": 20,
     "verbose": -1,
     "min_data": 100,
@@ -159,54 +149,54 @@ feature_importance.sort_values(
 )
 feature_importance.head(20)
 
+# #%%
+# # %% ##############
+# # %% Find 20 most important features
+# select_how_many = 25
+# # %%
+# from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
 
-# %% ##############
-# %% Find 20 most important features
-select_how_many = 25
-# %%
-from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
+# pl = Pipeline(
+#     [
+#         ("variance_threshold", VarianceThreshold()),  # Remove low variance features
+#         ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),
+#         (
+#             "feature_selection",
+#             SelectKBest(k=select_how_many, score_func=f_classif),
+#         ),  # Select top k features based on ANOVA F-value
+#         ("clf", RandomForestClassifier()),
+#     ]
+# )
 
-pl = Pipeline(
-    [
-        ("variance_threshold", VarianceThreshold()),  # Remove low variance features
-        ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),
-        (
-            "feature_selection",
-            SelectKBest(k=select_how_many, score_func=f_classif),
-        ),  # Select top k features based on ANOVA F-value
-        ("clf", RandomForestClassifier()),
-    ]
-)
+# gridsearch = GridSearchCV(
+#     pl,
+#     cv=KFold(n_splits=3),
+#     scoring="balanced_accuracy",
+#     param_grid={"clf__n_estimators": [1000]},
+# )
 
-gridsearch = GridSearchCV(
-    pl,
-    cv=KFold(n_splits=3),
-    scoring="balanced_accuracy",
-    param_grid={"clf__n_estimators": [1000]},
-)
-
-with gw.config.update(ref_image=images[-1]):
-    with gw.open(images, nodata=9999, stack_dim="band") as src:
-        # fit a model to get Xy used to train model
-        X = gw.extract(src, lu_complete)
-        y = lu_complete["lc"]
-        X = X[range(1, len(images) + 1)]
-        del src
+# with gw.config.update(ref_image=images[-1]):
+#     with gw.open(images, nodata=9999, stack_dim="band") as src:
+#         # fit a model to get Xy used to train model
+#         X = gw.extract(src, lu_complete)
+#         y = lu_complete["lc"]
+#         X = X[range(1, len(images) + 1)]
+#         del src
 
 
-# fit cross valiation and parameter tuning
-gridsearch.fit(X=X.values, y=y.values)
-print(gridsearch.cv_results_)
-print(gridsearch.best_score_)
-print(gridsearch.best_params_)
-print(
-    [
-        os.path.basename(images[i])
-        for i in gridsearch.best_estimator_.named_steps[
-            "feature_selection"
-        ].get_support(indices=True)
-    ]
-)
+# # fit cross valiation and parameter tuning
+# gridsearch.fit(X=X.values, y=y.values)
+# print(gridsearch.cv_results_)
+# print(gridsearch.best_score_)
+# print(gridsearch.best_params_)
+# print(
+#     [
+#         os.path.basename(images[i])
+#         for i in gridsearch.best_estimator_.named_steps[
+#             "feature_selection"
+#         ].get_support(indices=True)
+#     ]
+# )
 
 
 select_images = [

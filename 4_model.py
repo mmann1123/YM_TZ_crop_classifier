@@ -1,4 +1,7 @@
-# %% env:os_prog
+# %% env:crop_class
+
+from sklearn_helpers import OutlierRemover
+
 from sklearn.model_selection import (
     GroupShuffleSplit,
     GroupKFold,
@@ -99,114 +102,83 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 d_train = lgb.Dataset(X_train, label=y_train)
 d_test = lgb.Dataset(X_test, label=y_test)
 
-params = {
-    "max_bin": 512,
-    "learning_rate": 0.05,
-    "boosting_type": "gbdt",
-    "objective": "multiclass",
-    "metric": "softmax",  #  softmax multi_error multi_auc  multi_logloss
-    "num_leaves": 20,
-    "verbose": -1,
-    "min_data": 100,
-    "boost_from_average": True,
-    "num_classes": len(
-        np.unique(lu_complete["lc_name"])
-    ),  # Specify the number of classes
-}
+feature_importance_list = []
 
-model = lgb.train(
-    params,
-    d_train,
-    10000,
-    valid_sets=[d_test],
-    early_stopping_rounds=100,
-    verbose_eval=1000,
-)
-# model = pl.fit(X=X.values, y=y.values)
-explainer = shap.TreeExplainer(model)
-shap_values = explainer.shap_values(X.values)
+for metric in ["multi_error", "multi_logloss"]:
+    params = {
+        "max_bin": 512,
+        "learning_rate": 0.05,
+        "boosting_type": "gbdt",
+        "objective": "multiclass",
+        "metric": metric,  #  multi_error multi_logloss
+        "num_leaves": 20,
+        "verbose": -1,
+        "min_data": 100,
+        "boost_from_average": True,
+        "num_classes": len(
+            np.unique(lu_complete["lc_name"])
+        ),  # Specify the number of classes
+    }
 
-# %% feature importance
-
-shap.summary_plot(
-    shap_values,
-    X.values,
-    feature_names=[x.replace("_", ".") for x in X.columns],
-    class_names=le.classes_,
-    plot_type="bar",
-    max_display=20,
-)
-
-# %% print top features
-vals = np.abs(shap_values).mean(0)
-
-feature_importance = pd.DataFrame(
-    list(zip(X_train.columns, sum(vals))),
-    columns=["col_name", "feature_importance_vals"],
-)
-feature_importance.sort_values(
-    by=["feature_importance_vals"], ascending=False, inplace=True
-)
-feature_importance.head(20)
-
-# #%%
-# # %% ##############
-# # %% Find 20 most important features
-# select_how_many = 25
-# # %%
-# from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
-
-# pl = Pipeline(
-#     [
-#         ("variance_threshold", VarianceThreshold()),  # Remove low variance features
-#         ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),
-#         (
-#             "feature_selection",
-#             SelectKBest(k=select_how_many, score_func=f_classif),
-#         ),  # Select top k features based on ANOVA F-value
-#         ("clf", RandomForestClassifier()),
-#     ]
-# )
-
-# gridsearch = GridSearchCV(
-#     pl,
-#     cv=KFold(n_splits=3),
-#     scoring="balanced_accuracy",
-#     param_grid={"clf__n_estimators": [1000]},
-# )
-
-# with gw.config.update(ref_image=images[-1]):
-#     with gw.open(images, nodata=9999, stack_dim="band") as src:
-#         # fit a model to get Xy used to train model
-#         X = gw.extract(src, lu_complete)
-#         y = lu_complete["lc"]
-#         X = X[range(1, len(images) + 1)]
-#         del src
-
-
-# # fit cross valiation and parameter tuning
-# gridsearch.fit(X=X.values, y=y.values)
-# print(gridsearch.cv_results_)
-# print(gridsearch.best_score_)
-# print(gridsearch.best_params_)
-# print(
-#     [
-#         os.path.basename(images[i])
-#         for i in gridsearch.best_estimator_.named_steps[
-#             "feature_selection"
-#         ].get_support(indices=True)
-#     ]
-# )
-
-
-select_images = [
-    images[i]
-    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
-        indices=True
+    model = lgb.train(
+        params,
+        d_train,
+        10000,
+        valid_sets=[d_test],
+        early_stopping_rounds=100,
+        verbose_eval=1000,
     )
-]
+    # model = pl.fit(X=X.values, y=y.values)
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X.values)
 
-pd.DataFrame({f"top{select_how_many}": select_images}).to_csv(
+    # feature importance
+
+    shap.summary_plot(
+        shap_values,
+        X.values,
+        feature_names=[x.replace("_", ".") for x in X.columns],
+        class_names=le.classes_,
+        plot_type="bar",
+        max_display=20,
+    )
+
+    # print top features
+    vals = np.abs(shap_values).mean(0)
+
+    feature_importance = pd.DataFrame(
+        list(zip(X_train.columns, sum(vals))),
+        columns=["col_name", "feature_importance_vals"],
+    )
+    feature_importance.sort_values(
+        by=["feature_importance_vals"], ascending=False, inplace=True
+    )
+    feature_importance.head(20)
+    # Store the feature importance dataframe in the list
+    feature_importance_list.append(
+        pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
+    )
+
+# %%
+top_col_names = []
+
+# Iterate until we have 25 unique col_names or until there are no more feature importance dataframes
+while len(top_col_names) < 25:
+    # Get the top feature importance dataframe from the list
+    for row in range(len(feature_importance_list[0])):
+        feature_1 = images[feature_importance_list[0].iloc[row]["index"]]
+        feature_2 = images[feature_importance_list[1].iloc[row]["index"]]
+        # Get the top unique col_names from the current dataframe
+        unique_col_names = [feature_1, feature_2]
+
+        # Add the unique col_names to the final list
+        for col_name in unique_col_names:
+            if col_name not in top_col_names:
+                top_col_names.append(col_name)
+# Print the final list of top col_names
+print(top_col_names)
+
+pd.DataFrame({f"top{select_how_many}": top_col_names}).to_csv(
     f"./outputs/selected_images_{select_how_many}.csv",
 )
 
@@ -225,6 +197,7 @@ select_images = list(
 )
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
 
+# %%
 # takes at least 24 hours
 # pl = Pipeline(
 #     [
@@ -241,7 +214,7 @@ image_names = [os.path.basename(f).split(".")[0] for f in select_images]
 #         nodata=9999,
 #         stack_dim="band",
 #         band_names=image_names,
-#         resampling="bilinear",
+#         resampling="nearest",
 #     ) as src:
 #         src = src.gw.mask_nodata()
 #         # fit a model to get Xy used to train model
@@ -261,15 +234,17 @@ pl = Pipeline(
         ("clf", MiniBatchKMeans(15, random_state=0)),
     ]
 )
+# get an EVI example
+target_string = next((string for string in image_names if "EVI" in string), None)
 
 for i in range(6, 20, 2):
-    with gw.config.update(ref_image=images[-1]):
+    with gw.config.update(ref_image=target_string):
         with gw.open(
             select_images,
             nodata=9999,
             stack_dim="band",
             band_names=image_names,
-            resampling="bilinear",
+            resampling="nearest",
         ) as src:
             src = src.gw.mask_nodata()
             # fit a model to get Xy used to train model
@@ -283,7 +258,41 @@ for i in range(6, 20, 2):
 
 # %% plot prediction andn the selected features
 
+# order of importance to USDA
+# Corn  (technically Masika Corn, as there are 3 crops over the year)
+# Cotton
+# Rice
+# Sorghum
+# Millet
+# Other grains (wheat, barley, oats, rye…)
+# Sunflower
+# Cassava
+# Soybeans
 
+# %%
+import umap
+from sklearn.feature_selection import VarianceThreshold
+
+reducer = umap.UMAP(n_components=4, random_state=42, n_neighbors=3)
+X_high_variance = VarianceThreshold(threshold=0.5).fit_transform(X)
+X_impute = SimpleImputer(strategy="median").fit_transform(X_high_variance)
+scaled_X = StandardScaler().fit_transform(X_impute)
+embedding = reducer.fit_transform(scaled_X)
+
+for i in range(0, 3):
+    plt.figure(figsize=(5, 5))
+    plt.scatter(
+        embedding[:, 2],
+        embedding[:, i + 1],
+        c=y.values,
+    )
+    plt.gca().set_aspect("equal", "datalim")
+
+
+# %%
+
+
+# %%
 pl = Pipeline(
     [
         ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),

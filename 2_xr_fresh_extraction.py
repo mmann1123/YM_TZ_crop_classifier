@@ -33,7 +33,7 @@ missing_data = 9999
 
 # %%
 
-for band_name in ["B5", "B6", "EVI", "B11", "B12"]:  #
+for band_name in ["B2", "B5", "B6", "EVI", "B11", "B12"]:  #
     files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/{band_name}"
     file_glob = f"{files}/*.tif"
     strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m.tif"
@@ -73,8 +73,6 @@ for band_name in ["B5", "B6", "EVI", "B11", "B12"]:  #
         "doy_of_maximum_first": [
             {"band": band_name}
         ],  # figure out how to remove arg for band
-        "doy_of_maximum_last": [{"band": band_name}],
-        "doy_of_minimum_last": [{"band": band_name}],
         "doy_of_minimum_first": [{"band": band_name}],
         "ratio_value_number_to_time_series_length": [{}],
         "quantile": [{"q": 0.05}, {"q": 0.95}],

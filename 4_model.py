@@ -75,7 +75,92 @@ print(lu_complete["lc"].unique())
 # Get all the feature files
 images = sorted(glob("./data/**/annual_features/**/**.tif"))
 
-##################################################
+# %% Find 20 most important features
+select_how_many = 25
+import shap
+
+# from lightgbm import LGBMClassifier
+import lightgbm as lgb
+
+from sklearn.feature_selection import VarianceThreshold
+
+
+# pl = Pipeline(
+#     [
+#         ("variance_threshold", VarianceThreshold()),  # Remove low variance features
+#         ("impute", SimpleImputer(strategy="median")),
+#         ("clf", lgb(params)),
+#     ]
+# )
+
+with gw.config.update(ref_image=images[-1]):
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        X = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = X[range(1, len(images) + 1)]
+        X.columns = [os.path.basename(f).split(".")[0] for f in images]
+
+# %%
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
+
+d_train = lgb.Dataset(X_train, label=y_train)
+d_test = lgb.Dataset(X_test, label=y_test)
+
+params = {
+    "max_bin": 512,
+    "learning_rate": 0.05,
+    "boosting_type": "gbdt",
+    "objective": "multiclass",
+    "metric": "multi_error",  #  multi_error multi_auc  multi_logloss
+    "num_leaves": 20,
+    "verbose": -1,
+    "min_data": 100,
+    "boost_from_average": True,
+    "num_classes": len(
+        np.unique(lu_complete["lc_name"])
+    ),  # Specify the number of classes
+}
+
+model = lgb.train(
+    params,
+    d_train,
+    10000,
+    valid_sets=[d_test],
+    early_stopping_rounds=100,
+    verbose_eval=1000,
+)
+# model = pl.fit(X=X.values, y=y.values)
+explainer = shap.TreeExplainer(model)
+shap_values = explainer.shap_values(X.values)
+
+# %% feature importance
+
+shap.summary_plot(
+    shap_values,
+    X.values,
+    feature_names=[x.replace("_", ".") for x in X.columns],
+    class_names=le.classes_,
+    plot_type="bar",
+    max_display=20,
+)
+
+# %% print top features
+vals = np.abs(shap_values).mean(0)
+
+feature_importance = pd.DataFrame(
+    list(zip(X_train.columns, sum(vals))),
+    columns=["col_name", "feature_importance_vals"],
+)
+feature_importance.sort_values(
+    by=["feature_importance_vals"], ascending=False, inplace=True
+)
+feature_importance.head(20)
+
+
+# %% ##############
 # %% Find 20 most important features
 select_how_many = 25
 # %%
@@ -150,33 +235,33 @@ select_images = list(
 )
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
 
+# takes at least 24 hours
+# pl = Pipeline(
+#     [
+#         ("impute", SimpleImputer(strategy="median")),
+#         ("rescaler", StandardScaler(with_mean=True, with_std=True)),
+#         ("clf", OPTICS()),
+#     ]
+# )
 
-pl = Pipeline(
-    [
-        ("impute", SimpleImputer(strategy="median")),
-        ("rescaler", StandardScaler(with_mean=True, with_std=True)),
-        ("clf", OPTICS()),
-    ]
-)
 
-
-with gw.config.update(ref_image=images[-1]):
-    with gw.open(
-        select_images,
-        nodata=9999,
-        stack_dim="band",
-        band_names=image_names,
-        resampling="bilinear",
-    ) as src:
-        src = src.gw.mask_nodata()
-        # fit a model to get Xy used to train model
-        y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
-        y = y + 1
-        y.attrs = src.attrs
-y.gw.to_raster(
-    "./outputs/ym_prediction_optics.tif",
-    overwrite=True,
-)
+# with gw.config.update(ref_image=images[-1]):
+#     with gw.open(
+#         select_images,
+#         nodata=9999,
+#         stack_dim="band",
+#         band_names=image_names,
+#         resampling="bilinear",
+#     ) as src:
+#         src = src.gw.mask_nodata()
+#         # fit a model to get Xy used to train model
+#         y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
+#         y = y + 1
+#         y.attrs = src.attrs
+# y.gw.to_raster(
+#     "./outputs/ym_prediction_optics.tif",
+#     overwrite=True,
+# )
 
 
 pl = Pipeline(
@@ -202,7 +287,7 @@ for i in range(6, 20, 2):
             y = y + 1
             y.attrs = src.attrs
     y.gw.to_raster(
-        "./outputs/ym_prediction_kmean_i.tif",
+        f"./outputs/ym_prediction_kmean_{i}.tif",
         overwrite=True,
     )
 

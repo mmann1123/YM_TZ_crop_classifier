@@ -75,9 +75,10 @@ print(lu_complete["lc"].unique())
 # Get all the feature files
 images = sorted(glob("./data/**/annual_features/**/**.tif"))
 
-
+##################################################
 # %% Find 20 most important features
-
+select_how_many = 25
+# %%
 from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
 
 pl = Pipeline(
@@ -86,7 +87,7 @@ pl = Pipeline(
         ("impute", SimpleImputer(strategy="constant", fill_value=-9999)),
         (
             "feature_selection",
-            SelectKBest(k=20, score_func=f_classif),
+            SelectKBest(k=select_how_many, score_func=f_classif),
         ),  # Select top k features based on ANOVA F-value
         ("clf", RandomForestClassifier()),
     ]
@@ -100,14 +101,14 @@ gridsearch = GridSearchCV(
 )
 
 with gw.config.update(ref_image=images[-1]):
-    with gw.open(images, nodata=-9999, stack_dim="band") as src:
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
         # fit a model to get Xy used to train model
         X = gw.extract(src, lu_complete)
         y = lu_complete["lc"]
         X = X[range(1, len(images) + 1)]
         del src
 
-# %%
+
 # fit cross valiation and parameter tuning
 gridsearch.fit(X=X.values, y=y.values)
 print(gridsearch.cv_results_)
@@ -130,69 +131,83 @@ select_images = [
     )
 ]
 
-pd.DataFrame({"top20": select_images}).to_csv("./outputs/selected_images.csv   ")
+pd.DataFrame({f"top{select_how_many}": select_images}).to_csv(
+    f"./outputs/selected_images_{select_how_many}.csv",
+)
 
 
 ######################################
 # %% plot kmean andn the selected features
 
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans, OPTICS
 from sklearn.preprocessing import StandardScaler
 
-select_images = [
-    images[i]
-    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
-        indices=True
-    )
-]
-image_names = [
-    os.path.basename(images[i])
-    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
-        indices=True
-    )
-]
+
+select_images = list(
+    pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
+        f"top{select_how_many}"
+    ].values
+)
+image_names = [os.path.basename(f).split(".")[0] for f in select_images]
+
 
 pl = Pipeline(
     [
-        ("impute", SimpleImputer(strategy="mean")),
+        ("impute", SimpleImputer(strategy="median")),
         ("rescaler", StandardScaler(with_mean=True, with_std=True)),
-        ("clf", KMeans(15)),
+        ("clf", OPTICS()),
     ]
 )
 
 
-# fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
-
-with gw.open(select_images, nodata=0, stack_dim="band", band_names=image_names) as src:
-    src = src.gw.mask_nodata()
-    # fit a model to get Xy used to train model
-    y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
-    y = y + 1
-    y.attrs = src.attrs
-
-    # y.plot(robust=True, ax=ax)
-
-# plt.tight_layout(pad=1)
+with gw.config.update(ref_image=images[-1]):
+    with gw.open(
+        select_images,
+        nodata=9999,
+        stack_dim="band",
+        band_names=image_names,
+        resampling="bilinear",
+    ) as src:
+        src = src.gw.mask_nodata()
+        # fit a model to get Xy used to train model
+        y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
+        y = y + 1
+        y.attrs = src.attrs
 y.gw.to_raster(
-    "./outputs/ym_prediction_kmean_12.tif",
+    "./outputs/ym_prediction_optics.tif",
     overwrite=True,
 )
 
 
+pl = Pipeline(
+    [
+        ("impute", SimpleImputer(strategy="median")),
+        ("rescaler", StandardScaler(with_mean=True, with_std=True)),
+        ("clf", MiniBatchKMeans(15, random_state=0)),
+    ]
+)
+
+for i in range(6, 20, 2):
+    with gw.config.update(ref_image=images[-1]):
+        with gw.open(
+            select_images,
+            nodata=9999,
+            stack_dim="band",
+            band_names=image_names,
+            resampling="bilinear",
+        ) as src:
+            src = src.gw.mask_nodata()
+            # fit a model to get Xy used to train model
+            y = fit_predict(data=src, clf=pl, labels=lu_complete, col="lc")
+            y = y + 1
+            y.attrs = src.attrs
+    y.gw.to_raster(
+        "./outputs/ym_prediction_kmean_i.tif",
+        overwrite=True,
+    )
+
 # %% plot prediction andn the selected features
 
-select_images = [
-    images[i]
-    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
-        indices=True
-    )
-]
-image_names = [
-    os.path.basename(images[i])
-    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
-        indices=True
-    )
-]
 
 pl = Pipeline(
     [
@@ -200,10 +215,16 @@ pl = Pipeline(
         ("clf", RandomForestClassifier(n_estimators=1000)),
     ]
 )
-select_images.append(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/outputs/ym_prediction_kmean_12.tif"
-)
-image_names.append("ym_prediction_kmean_12")
+
+kmeans = glob("./outputs/ym_prediction_kmean_*.tif")
+kmeans_names = [os.path.basename(f).split(".")[0] for f in kmeans]
+optics = glob("./outputs/ym_prediction_optics*.tif")
+optics_names = [os.path.basename(f).split(".")[0] for f in optics]
+
+select_images = select_images + kmeans + optics
+image_names = image_names + kmeans_names + optics_names
+select_images.append("./outputs/ym_prediction_kmean_15.tif")
+image_names.append("ym_prediction_kmean_15")
 
 # fig, ax = plt.subplots(dpi=200, figsize=(5, 5))
 

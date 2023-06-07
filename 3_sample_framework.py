@@ -123,6 +123,7 @@ os.chdir(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
 )
 
+missing_data = 9999
 
 # Get all the feature files
 files = sorted(glob("./data/**/annual_features/**/**.tif"))
@@ -153,7 +154,9 @@ data.loc[data["Primary land cover"].isin(keep) == False, "Primary land cover"] =
 
 with gw.config.update(ref_image=files[-1]):
     # open the data using geowombat.open()
-    with gw.open(files, stack_dim="band", band_names=band_names, nodata=0) as src:
+    with gw.open(
+        files, stack_dim="band", band_names=band_names, nodata=missing_data
+    ) as src:
         # use geowombat.extract() to extract data
         X = gw.extract(
             src,

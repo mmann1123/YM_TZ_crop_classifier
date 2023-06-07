@@ -29,6 +29,7 @@ import time
 cluster = Cluster()
 cluster.start_large_object()
 
+missing_data = 9999
 
 # %%
 
@@ -91,7 +92,10 @@ for band_name in ["B5", "B6", "EVI", "B11", "B12"]:  #
 
     # open xarray lazy
     with gw.open(
-        sorted(glob(file_glob)), band_names=[band_name], time_names=dates, nodata=0
+        sorted(glob(file_glob)),
+        band_names=[band_name],
+        time_names=dates,
+        nodata=missing_data,
     ) as ds:
         ds = ds.chunk({"time": -1, "band": 1, "y": 350, "x": 350})  # rechunk to time
         ds = ds.gw.mask_nodata()
@@ -107,9 +111,6 @@ for band_name in ["B5", "B6", "EVI", "B11", "B12"]:  #
             ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
             print("interpolating")
             ds_year = ds_year.interpolate_na(dim="time", limit=5)
-            # ds_year = ds_year.chunk(
-            #     {"time": -1, "band": 1, "y": 350, "x": 350}
-            # )  # rechunk to time
 
             # make output folder
             outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
@@ -134,9 +135,6 @@ for band_name in ["B5", "B6", "EVI", "B11", "B12"]:  #
             ds_year = ds.sel(time=slice(year + "-03-01", year + "-06-01"))
             print("interpolating")
             ds_year = ds_year.interpolate_na(dim="time", limit=3)
-            # ds_year = ds_year.chunk(
-            #     {"time": -1, "band": 1, "y": 350, "x": 350}
-            # )  # rechunk to time
 
             # make output folder
             outpath = os.path.join(files, "annual_features/Mar_Aug_S2")

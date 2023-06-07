@@ -33,7 +33,7 @@ missing_data = 9999
 
 # %%
 
-for band_name in ["B2", "B5", "B6", "EVI", "B11", "B12"]:  #
+for band_name in ["B11", "B12"]:  # "B2", "B5", "B6", "EVI",
     files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/{band_name}"
     file_glob = f"{files}/*.tif"
     strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m.tif"
@@ -150,4 +150,18 @@ for band_name in ["B2", "B5", "B6", "EVI", "B11", "B12"]:  #
             )
 
 
+# %% change name for quantiles to remove . from name
+from glob import glob
+import os
+
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
+)
+files = glob("./data/**/annual_features/**/*_quantile_*.tif")
+
+# for files update name to remove 0.05 and 0.95 with 0_05  from file name
+for file in files:
+    new_file = file.replace("0.95", "0_95")
+    new_file = new_file.replace("0.05", "0_05")
+    os.rename(file, new_file)
 # %%

@@ -109,7 +109,8 @@ gpd.overlay(sample, hexgrid, how="intersection").to_file(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_data.gpkg",
     driver="GPKG",
 )
-
+##############################################################
+# CLASS DIFFERENTIATION CHECK
 ###############################################################
 # %%  Figure out how to reassign similar classes
 import geopandas as gpd
@@ -147,12 +148,25 @@ keep = [
     "Other grains (examples: wheat, barley, oats, rye…)",
 ]
 data.loc[data["Primary land cover"].isin(keep) == False, "Primary land cover"] = "Other"
+data["lc_name"] = data["Primary land cover"]
+
+# add additional training data
+other_training = gpd.read_file("./data/other_training.gpkg").to_crs(data.crs)
+
+lu_complete = data[["lc_name", "geometry"]].overlay(
+    other_training[["lc_name", "geometry"]], how="union"
+)
+lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"])
+
+lu_complete["lc_name"]
 
 
 # %%
 
+# get an EVI example
+target_string = next((string for string in files if "EVI" in string), None)
 
-with gw.config.update(ref_image=files[-1]):
+with gw.config.update(ref_image=target_string):
     # open the data using geowombat.open()
     with gw.open(
         files, stack_dim="band", band_names=band_names, nodata=missing_data
@@ -160,7 +174,7 @@ with gw.config.update(ref_image=files[-1]):
         # use geowombat.extract() to extract data
         X = gw.extract(
             src,
-            data,
+            lu_complete,
             all_touched=True,
         )
         display(X)
@@ -175,12 +189,13 @@ from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # Create a dictionary to store key names for each target_value
 result_dict = {}
 
 
-for state in range(0, 50):
+for state in range(0, 30):
     # Initialize a LabelEncoder
     le = LabelEncoder()
 
@@ -190,7 +205,13 @@ for state in range(0, 50):
             ("variance_threshold", VarianceThreshold()),
             ("imputer", SimpleImputer(strategy="mean")),
             ("scaler", StandardScaler()),
-            ("kmeans", KMeans(n_clusters=10, random_state=state)),
+            (
+                "kmeans",
+                KMeans(
+                    n_clusters=int(len(lu_complete["lc_name"].unique()) // 1.1),
+                    random_state=state,
+                ),
+            ),
         ]
     )
 

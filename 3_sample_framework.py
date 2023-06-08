@@ -169,7 +169,11 @@ target_string = next((string for string in files if "EVI" in string), None)
 with gw.config.update(ref_image=target_string):
     # open the data using geowombat.open()
     with gw.open(
-        files, stack_dim="band", band_names=band_names, nodata=missing_data
+        files,
+        stack_dim="band",
+        band_names=band_names,
+        nodata=missing_data,
+        resampling="nearest",
     ) as src:
         # use geowombat.extract() to extract data
         X = gw.extract(
@@ -177,7 +181,7 @@ with gw.config.update(ref_image=target_string):
             lu_complete,
             all_touched=True,
         )
-        display(X)
+        print(X)
 
 # %% Calc cluster assignments
 from sklearn.cluster import KMeans
@@ -202,13 +206,13 @@ for state in range(0, 30):
     # Initialize a pipeline with a variance thresholding, data imputation, standard scaling, and K-means steps
     pipeline = Pipeline(
         [
-            ("variance_threshold", VarianceThreshold()),
+            # ("variance_threshold", VarianceThreshold()),
             ("imputer", SimpleImputer(strategy="mean")),
             ("scaler", StandardScaler()),
             (
                 "kmeans",
                 KMeans(
-                    n_clusters=int(len(lu_complete["lc_name"].unique()) // 1.1),
+                    n_clusters=int(len(lu_complete["lc_name"].unique())),
                     random_state=state,
                 ),
             ),
@@ -216,11 +220,11 @@ for state in range(0, 30):
     )
 
     # Fit the pipeline on your training data
-    Xtrans = pipeline.fit_transform(X.values[:, 3:])
+    Xtrans = pipeline.fit_transform(X.values[:, 4:])
     Xtrans.shape
 
     # recode y values to integers
-    y = le.fit_transform(data["Primary land cover"])
+    y = le.fit_transform(X["lc_name"])
 
     cluster_labels = pipeline["kmeans"].labels_
     class_labels = np.unique(y)
@@ -249,6 +253,7 @@ for state in range(0, 30):
                 key for key, value in class_to_cluster.items() if value == target_value
             ]
 print(result_dict)
+
 
 # %%
 # Visualize

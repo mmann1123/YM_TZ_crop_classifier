@@ -140,7 +140,7 @@ images = [item for item in images if "(Case Conflict)" not in item]
 # MODEL SELECTION
 ########################################################
 # uses select_how_many from top of script
-# %% Find most important features using shaps scores
+
 target_string = next((string for string in images if "EVI" in string), None)
 
 with gw.config.update(ref_image=target_string):
@@ -275,45 +275,26 @@ print(params_lgbm_dict)
 ########################################################
 # FEATURE SELECTION
 ########################################################
+target_string = next((string for string in images if "EVI" in string), None)
+
+with gw.config.update(ref_image=target_string):
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        X = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = X[range(1, len(images) + 1)]
+        X.columns = [os.path.basename(f).split(".")[0] for f in images]
 
 
-# Reshape obj1 to have shape (744, 1)
-y_reshaped = y.values.reshape(-1, 1)
-
-# Concatenate the columns
-df = pd.DataFrame(np.concatenate((y_reshaped, X), axis=1))
-# df.columns[0] = ["lc"] + list(X.columns)
-df
 # %%
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
 
-from sklearn.model_selection import KFold
+d_train = lgb.Dataset(X_train, label=y_train)
+d_test = lgb.Dataset(X_test, label=y_test)
 
-X1, y1 = df.drop(0, axis=1), df[0]
+feature_importance_list = []
 
-# Establish CV scheme
-CV = KFold(n_splits=5, shuffle=True, random_state=10)
-CV = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-ix_training, ix_test = [], []
-# Loop through each fold and append the training & test indices to the empty lists above
-for fold in CV.split(df):
-    ix_training.append(fold[0]), ix_test.append(fold[1])
-SHAP_values_per_fold = []  # -#-#
-## Loop through each outer fold and extract SHAP values
-for i, (train_outer_ix, test_outer_ix) in enumerate(zip(ix_training, ix_test)):  # -#-#
-    # Verbose
-    print("\n------ Fold Number:", i)
-    X_train, X_test = X1.iloc[train_outer_ix, :], X1.iloc[test_outer_ix, :]
-    y_train, y_test = y1.iloc[train_outer_ix], y1.iloc[test_outer_ix]
-
-    # model = RandomForestClassifier(
-    #     random_state=10
-    # )  # Random state for reproducibility (same results every time)
-    # fit = model.fit(X_train, y_train)
-    # yhat = fit.predict(X_test)
-    # result = balanced_accuracy_score(y_test, yhat)
-    # print("balanced_accuracy_score:", round(np.sqrt(result), 4))
-
+for metric in ["multi_error", "multi_logloss"]:
     # Train the LightGBM model
     params = params_lgbm_dict.copy()
     params["objective"] = "multiclass"
@@ -330,96 +311,41 @@ for i, (train_outer_ix, test_outer_ix) in enumerate(zip(ix_training, ix_test)): 
         verbose_eval=1000,
     )
 
-    # Use SHAP to explain predictions
+    # SHAP exaplainer
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_test)  #
-    for SHAPs in shap_values:
-        SHAP_values_per_fold.append(SHAPs)  # -#-#
+    shap_values = explainer.shap_values(X.values)
 
-new_index = [ix for ix_test_fold in ix_test for ix in ix_test_fold]
-shap.summary_plot(np.array(SHAP_values_per_fold), X.reindex(new_index))
+    # feature importance
+    import matplotlib.pyplot as plt
 
-# %%
+    shap.summary_plot(
+        shap_values,
+        X.values,
+        feature_names=[x.replace("_", ".") for x in X.columns],
+        class_names=le.classes_,
+        plot_type="bar",
+        max_display=20,
+    )
+    plt.savefig(f"outputs/significance_plot{metric}.png")  # Save the plot to a file
 
+    # print top features
+    vals = np.abs(shap_values).mean(0)
 
-# %%
-for metric in ["multi_error", "multi_logloss"]:
-    # Define the number of train-test splits and initialize an empty list to store SHAP values
-    n_splits = 5
-    shap_values_list = []
-    SHAP_values_per_fold = []
-    fold_indices = []  # Add a list to store fold indices
-    ix_training, ix_test = [], []
-
-    # Create a loop for train-test splits using cross-validation
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-    for train_index, test_index in skf.split(X, y):
-        ix_training.append(train_index), ix_test.append(test_index)
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-
-        # Train the LightGBM model
-        params = params_lgbm_dict.copy()
-        params["objective"] = "multiclass"
-        params["metric"] = metric
-        params["num_classes"] = len(lu_complete["lc_name"].unique())
-        d_train = lgb.Dataset(X_train, label=y_train)
-        d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
-        model = lgb.train(
-            params,
-            d_train,
-            10000,
-            valid_sets=[d_test],
-            early_stopping_rounds=100,
-            verbose_eval=1000,
-        )
-
-        # Generate SHAP values for the current split
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_test.values)
-        for SHAPs in shap_values:
-            SHAP_values_per_fold.append(SHAPs)  # -#-#
-        shap_values_list.append(shap_values)
-
-    # Aggregate the SHAP values across all splits
-    aggregated_shap_values = np.mean(SHAP_values_per_fold, axis=0)
-
-# ca
-new_index = [ix for ix_test_fold in ix_test for ix in ix_test_fold]
-
-# Plot the aggregated feature importance
-shap.summary_plot(
-    np.array(aggregated_shap_values),
-    X.reindex(new_index),
-    feature_names=[x.replace("_", ".") for x in X.columns],
-    class_names=le.classes_,
-    plot_type="bar",
-    max_display=20,
-)
-plt.savefig(f"outputs/significance_plot{metric}.png")  # Save the plot to a file
-
-
-# %%
-# print top features
-feature_importance_list = []
-
-vals = np.abs(shap_values).mean(0)
-
-feature_importance = pd.DataFrame(
-    list(zip(X_train.columns, sum(vals))),
-    columns=["col_name", "feature_importance_vals"],
-)
-feature_importance.sort_values(
-    by=["feature_importance_vals"], ascending=False, inplace=True
-)
-feature_importance.head(20)
-# Store the feature importance dataframe in the list
-feature_importance_list.append(
-    pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
-)
+    feature_importance = pd.DataFrame(
+        list(zip(X_train.columns, sum(vals))),
+        columns=["col_name", "feature_importance_vals"],
+    )
+    feature_importance.sort_values(
+        by=["feature_importance_vals"], ascending=False, inplace=True
+    )
+    feature_importance.head(20)
+    # Store the feature importance dataframe in the list
+    feature_importance_list.append(
+        pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
+    )
 
 # Iterate until we have 25 unique col_names or until there are no more feature importance dataframes
-
+# %%
 top_col_names = []
 
 while len(top_col_names) < 25:
@@ -437,9 +363,174 @@ while len(top_col_names) < 25:
 # Print the final list of top col_names
 print(top_col_names)
 out = pd.DataFrame({f"top{select_how_many}": top_col_names})
-out.columns = ["rank", f"top{select_how_many}"]
 out.reset_index(inplace=True)
+out.columns = ["rank", f"top{select_how_many}"]
 out.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
+
+
+# # Reshape obj1 to have shape (744, 1)
+# y_reshaped = y.values.reshape(-1, 1)
+
+# # Concatenate the columns
+# df = pd.DataFrame(np.concatenate((y_reshaped, X), axis=1))
+# # df.columns[0] = ["lc"] + list(X.columns)
+# df
+# # %%
+
+# from sklearn.model_selection import KFold
+
+# X1, y1 = df.drop(0, axis=1), df[0]
+
+# # Establish CV scheme
+# CV = KFold(n_splits=5, shuffle=True, random_state=10)
+# CV = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+# ix_training, ix_test = [], []
+# # Loop through each fold and append the training & test indices to the empty lists above
+# for fold in CV.split(X=X1, y = y1):
+#     ix_training.append(fold[0]), ix_test.append(fold[1])
+# SHAP_values_per_fold = []  # -#-#
+# ## Loop through each outer fold and extract SHAP values
+# for i, (train_outer_ix, test_outer_ix) in enumerate(zip(ix_training, ix_test)):  # -#-#
+#     # Verbose
+#     print("\n------ Fold Number:", i)
+#     X_train, X_test = X1.iloc[train_outer_ix, :], X1.iloc[test_outer_ix, :]
+#     y_train, y_test = y1.iloc[train_outer_ix], y1.iloc[test_outer_ix]
+
+#     # model = RandomForestClassifier(
+#     #     random_state=10
+#     # )  # Random state for reproducibility (same results every time)
+#     # fit = model.fit(X_train, y_train)
+#     # yhat = fit.predict(X_test)
+#     # result = balanced_accuracy_score(y_test, yhat)
+#     # print("balanced_accuracy_score:", round(np.sqrt(result), 4))
+
+#     # Train the LightGBM model
+#     params = params_lgbm_dict.copy()
+#     params["objective"] = "multiclass"
+#     params["metric"] = metric
+#     params["num_classes"] = len(lu_complete["lc_name"].unique())
+#     d_train = lgb.Dataset(X_train, label=y_train)
+#     d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
+#     model = lgb.train(
+#         params,
+#         d_train,
+#         10000,
+#         valid_sets=[d_test],
+#         early_stopping_rounds=100,
+#         verbose_eval=1000,
+#     )
+# #%%
+#     # Use SHAP to explain predictions
+#     explainer = shap.TreeExplainer(model)
+#     shap_values = explainer.shap_values(X_test)  #
+#     for SHAPs in shap_values:
+#         SHAP_values_per_fold.append(SHAPs)  # -#-#
+# #%%
+# new_index = [ix for ix_test_fold in ix_test[0:10] for ix in ix_test_fold]
+# shap.summary_plot(np.mean(np.array(SHAP_values_per_fold[0:10]), axis=0), X1.reindex(new_index))
+
+# # %%
+
+
+# # %%
+# for metric in ["multi_error", "multi_logloss"]:
+#     # Define the number of train-test splits and initialize an empty list to store SHAP values
+#     n_splits = 5
+#     shap_values_list = []
+#     SHAP_values_per_fold = []
+#     fold_indices = []  # Add a list to store fold indices
+#     ix_training, ix_test = [], []
+
+#     # Create a loop for train-test splits using cross-validation
+#     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+#     for train_index, test_index in skf.split(X, y):
+#         ix_training.append(train_index), ix_test.append(test_index)
+#         X_train, X_test = X[train_index], X[test_index]
+#         y_train, y_test = y[train_index], y[test_index]
+
+#         # Train the LightGBM model
+#         params = params_lgbm_dict.copy()
+#         params["objective"] = "multiclass"
+#         params["metric"] = metric
+#         params["num_classes"] = len(lu_complete["lc_name"].unique())
+#         d_train = lgb.Dataset(X_train, label=y_train)
+#         d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
+#         model = lgb.train(
+#             params,
+#             d_train,
+#             10000,
+#             valid_sets=[d_test],
+#             early_stopping_rounds=100,
+#             verbose_eval=1000,
+#         )
+
+#         # Generate SHAP values for the current split
+#         explainer = shap.TreeExplainer(model)
+#         shap_values = explainer.shap_values(X_test.values)
+#         for SHAPs in shap_values:
+#             SHAP_values_per_fold.append(SHAPs)  # -#-#
+#         shap_values_list.append(shap_values)
+
+#     # Aggregate the SHAP values across all splits
+#     aggregated_shap_values = np.mean(SHAP_values_per_fold, axis=0)
+
+# # ca
+# new_index = [ix for ix_test_fold in ix_test for ix in ix_test_fold]
+
+# # Plot the aggregated feature importance
+# shap.summary_plot(
+#     np.array(aggregated_shap_values),
+#     X.reindex(new_index),
+#     feature_names=[x.replace("_", ".") for x in X.columns],
+#     class_names=le.classes_,
+#     plot_type="bar",
+#     max_display=20,
+# # )
+# plt.savefig(f"outputs/significance_plot{metric}.png")  # Save the plot to a file
+
+
+# # %%
+# # print top features
+# feature_importance_list = []
+
+# vals = np.abs(shap_values).mean(0)
+
+# feature_importance = pd.DataFrame(
+#     list(zip(X_train.columns, sum(vals))),
+#     columns=["col_name", "feature_importance_vals"],
+# )
+# feature_importance.sort_values(
+#     by=["feature_importance_vals"], ascending=False, inplace=True
+# )
+# feature_importance.head(20)
+# # Store the feature importance dataframe in the list
+# feature_importance_list.append(
+#     pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
+# )
+
+# # Iterate until we have 25 unique col_names or until there are no more feature importance dataframes
+
+# top_col_names = []
+
+# while len(top_col_names) < 25:
+#     # Get the top feature importance dataframe from the list
+#     for row in range(len(feature_importance_list[0])):
+#         feature_1 = images[feature_importance_list[0].iloc[row]["index"]]
+#         feature_2 = images[feature_importance_list[1].iloc[row]["index"]]
+#         # Get the top unique col_names from the current dataframe
+#         unique_col_names = [feature_1, feature_2]
+
+#         # Add the unique col_names to the final list
+#         for col_name in unique_col_names:
+#             if col_name not in top_col_names:
+#                 top_col_names.append(col_name)
+# # Print the final list of top col_names
+# print(top_col_names)
+# out = pd.DataFrame({f"top{select_how_many}": top_col_names})
+# out.columns = ["rank", f"top{select_how_many}"]
+# out.reset_index(inplace=True)
+# out.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
 
 
 # %%

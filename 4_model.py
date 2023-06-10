@@ -1,34 +1,45 @@
 # %% env:crop_class
 
-import lightgbm as lgb
-import shap
 
 # %%
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.decomposition import MiniBatchSparsePCA
-
-# from lightgbm import LGBMRegressor
-from sklearn.ensemble import RandomForestClassifier
-
-# from boruta import BorutaPy
-import geopandas as gpd
-import geowombat as gw
-from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV
-
-from geowombat.ml import fit, predict, fit_predict
-import matplotlib.pyplot as plt
-from glob import glob
-from sklearn_xarray.model_selection import CrossValidatorWrapper
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import LabelEncoder
-import os
+import pandas as pd
 import numpy as np
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
-import pandas as pd
-from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+from sklearn.model_selection import (
+    train_test_split,
+    GridSearchCV,
+    KFold,
+    cross_val_score,
+    RandomizedSearchCV,
+)
+from sklearn.metrics import (
+    confusion_matrix,
+    precision_recall_fscore_support,
+    accuracy_score,
+)
+from sklearn.preprocessing import (
+    StandardScaler,
+    MinMaxScaler,
+    LabelEncoder,
+    OneHotEncoder,
+)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+import lightgbm as lgb
+import optuna
+import shap
+import sqlite3
+from sklearn.metrics import log_loss, balanced_accuracy_score
+import os
+import geowombat as gw
+from geowombat.ml import fit_predict, predict, fit
+from lightgbm import LGBMClassifier
+from sklearn.svm import SVC
+from sklearn.feature_selection import VarianceThreshold
 
 # %%
 # how many images will be selected for importances
@@ -121,45 +132,195 @@ print(lu_complete["lc"].unique())
 
 # Get all the feature files
 images = sorted(glob("./data/**/annual_features/**/**.tif"))
+# remove dropbox case conflict images
+images = [item for item in images if "(Case Conflict)" not in item]
 
+# %%
+########################################################
+# MODEL SELECTION
+########################################################
+# uses select_how_many from top of script
+# %% Find most important features using shaps scores
+target_string = next((string for string in images if "EVI" in string), None)
+
+with gw.config.update(ref_image=target_string):
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        df = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = df[range(1, len(images) + 1)]
+        X.columns = [os.path.basename(f).split(".")[0] for f in images]
+
+# remove nan and bad columns
+pipeline_scale_clean = Pipeline(
+    [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
+        ("variance_threshold", VarianceThreshold(threshold=0.5)),
+    ]
+)
+
+X = pipeline_scale_clean.fit_transform(X)
+
+
+# %%
+def objective(trial):
+    # Define the algorithm for optimization.
+
+    # Select classifier.
+    classifier_name = trial.suggest_categorical(
+        "classifier", ["SVC", "RandomForest", "LGBM"]
+    )
+
+    if classifier_name == "SVC":
+        svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
+        svc_kernel = trial.suggest_categorical("svc_kernel", ["linear", "rbf", "poly"])
+        svc_degree = trial.suggest_int("svc_degree", 1, 5)
+        classifier_obj = SVC(C=svc_c, kernel=svc_kernel, degree=svc_degree)
+    elif classifier_name == "RandomForest":
+        rf_max_depth = trial.suggest_int("rf_max_depth", 2, 32)
+        rf_n_estimators = trial.suggest_int("rf_n_estimators", 100, 1000, step=100)
+        rf_min_samples_split = trial.suggest_int("rf_min_samples_split", 2, 10)
+        classifier_obj = RandomForestClassifier(
+            max_depth=rf_max_depth,
+            n_estimators=rf_n_estimators,
+            min_samples_split=rf_min_samples_split,
+        )
+    else:
+        lgbm_max_depth = trial.suggest_int("lgbm_max_depth", 2, 32)
+        lgbm_learning_rate = trial.suggest_float("lgbm_learning_rate", 0.01, 0.1)
+        lgbm_num_leaves = trial.suggest_int("lgbm_num_leaves", 10, 100)
+        classifier_obj = LGBMClassifier(
+            max_depth=lgbm_max_depth,
+            learning_rate=lgbm_learning_rate,
+            num_leaves=lgbm_num_leaves,
+        )
+
+    # Fetch & split data.
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=0, stratify=y)
+
+    # Fit classifier.
+    classifier_obj.fit(X_train, y_train)
+    y_pred = classifier_obj.predict(X_val)
+
+    # Calculate error metric.
+    accuracy = balanced_accuracy_score(
+        y_val, y_pred
+    )  # Use accuracy as the error metric
+
+    return accuracy  # An objective value linked with the Trial object.
+
+
+# Create an SQLite connection
+conn = sqlite3.connect("models/study.db")
+
+# Create a study with SQLite storage
+storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
+study = optuna.create_study(
+    storage=storage, study_name="model_selection", direction="maximize"
+)
+
+# Optimize the objective function
+study.optimize(objective)
+
+# Close the SQLite connection
+conn.close()
+
+print("Number of finished trials: {}".format(len(study.trials)))
+
+print("Best trial:")
+trial = study.best_trial
+
+print("  Value: {}".format(trial.value))
+
+print("  Params: ")
+for key, value in trial.params.items():
+    print("    {}: {}".format(key, value))
+# %%
+study = optuna.load_study(storage="sqlite:///study.db", study_name="model_selection")
+
+
+# Access the top trials
+top_trials = study.best_trials
+
+# Iterate over the top trials and print their scores and parameters
+for i, trial in enumerate(top_trials):
+    print(f"Rank {i+1}: Score = {trial.value}")
+    print(f"Parameters: {trial.params}")
+
+# Get the DataFrame of all trials
+trials_df = study.trials_dataframe()
+
+# Sort the trials by the objective value in ascending order
+sorted_trials = trials_df.sort_values("value", ascending=False)
+
+# Print the ranked listing of trials
+print(sorted_trials[["number", "value", "params_classifier"]])
+
+# %% Extract best parameters for LGBM
+display(sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"])
+LGBM_params = sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"]
+
+# Extract columns that contain the string "params_lgbm"
+params_lgbm_columns = [col for col in LGBM_params.columns if "params_lgbm" in col]
+
+# Create a dictionary to store the column name and value from the first row
+params_lgbm_dict = {col: LGBM_params.loc[0, col] for col in params_lgbm_columns}
+
+# Print the dictionary
+
+
+print(params_lgbm_dict)
 # %%
 ########################################################
 # FEATURE SELECTION
 ########################################################
-# uses select_how_many from top of script
-# %% Find most important features using shaps scores
 
-with gw.config.update(ref_image=images[-1]):
-    with gw.open(images, nodata=9999, stack_dim="band") as src:
-        # fit a model to get Xy used to train model
-        X = gw.extract(src, lu_complete)
-        y = lu_complete["lc"]
-        X = X[range(1, len(images) + 1)]
-        X.columns = [os.path.basename(f).split(".")[0] for f in images]
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
+# Reshape obj1 to have shape (744, 1)
+y_reshaped = y.values.reshape(-1, 1)
 
-d_train = lgb.Dataset(X_train, label=y_train)
-d_test = lgb.Dataset(X_test, label=y_test)
+# Concatenate the columns
+df = pd.DataFrame(np.concatenate((y_reshaped, X), axis=1))
+# df.columns[0] = ["lc"] + list(X.columns)
+df
+# %%
 
-feature_importance_list = []
+from sklearn.model_selection import KFold
 
-for metric in ["multi_error", "multi_logloss"]:
-    params = {
-        "max_bin": 512,
-        "learning_rate": 0.05,
-        "boosting_type": "gbdt",
-        "objective": "multiclass",
-        "metric": metric,  #  multi_error multi_logloss
-        "num_leaves": 20,
-        "verbose": -1,
-        "min_data": 100,
-        "boost_from_average": True,
-        "num_classes": len(
-            np.unique(lu_complete["lc_name"])
-        ),  # Specify the number of classes
-    }
+X1, y1 = df.drop(0, axis=1), df[0]
 
+# Establish CV scheme
+CV = KFold(n_splits=5, shuffle=True, random_state=10)
+CV = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+ix_training, ix_test = [], []
+# Loop through each fold and append the training & test indices to the empty lists above
+for fold in CV.split(df):
+    ix_training.append(fold[0]), ix_test.append(fold[1])
+SHAP_values_per_fold = []  # -#-#
+## Loop through each outer fold and extract SHAP values
+for i, (train_outer_ix, test_outer_ix) in enumerate(zip(ix_training, ix_test)):  # -#-#
+    # Verbose
+    print("\n------ Fold Number:", i)
+    X_train, X_test = X1.iloc[train_outer_ix, :], X1.iloc[test_outer_ix, :]
+    y_train, y_test = y1.iloc[train_outer_ix], y1.iloc[test_outer_ix]
+
+    # model = RandomForestClassifier(
+    #     random_state=10
+    # )  # Random state for reproducibility (same results every time)
+    # fit = model.fit(X_train, y_train)
+    # yhat = fit.predict(X_test)
+    # result = balanced_accuracy_score(y_test, yhat)
+    # print("balanced_accuracy_score:", round(np.sqrt(result), 4))
+
+    # Train the LightGBM model
+    params = params_lgbm_dict.copy()
+    params["objective"] = "multiclass"
+    params["metric"] = metric
+    params["num_classes"] = len(lu_complete["lc_name"].unique())
+    d_train = lgb.Dataset(X_train, label=y_train)
+    d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
     model = lgb.train(
         params,
         d_train,
@@ -168,38 +329,94 @@ for metric in ["multi_error", "multi_logloss"]:
         early_stopping_rounds=100,
         verbose_eval=1000,
     )
-    # model = pl.fit(X=X.values, y=y.values)
+
+    # Use SHAP to explain predictions
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X.values)
+    shap_values = explainer.shap_values(X_test)  #
+    for SHAPs in shap_values:
+        SHAP_values_per_fold.append(SHAPs)  # -#-#
 
-    # feature importance
-    import matplotlib.pyplot as plt
+new_index = [ix for ix_test_fold in ix_test for ix in ix_test_fold]
+shap.summary_plot(np.array(SHAP_values_per_fold), X.reindex(new_index))
 
-    shap.summary_plot(
-        shap_values,
-        X.values,
-        feature_names=[x.replace("_", ".") for x in X.columns],
-        class_names=le.classes_,
-        plot_type="bar",
-        max_display=20,
-    )
-    plt.savefig(f"outputs/significance_plot{metric}.png")  # Save the plot to a file
+# %%
 
-    # print top features
-    vals = np.abs(shap_values).mean(0)
 
-    feature_importance = pd.DataFrame(
-        list(zip(X_train.columns, sum(vals))),
-        columns=["col_name", "feature_importance_vals"],
-    )
-    feature_importance.sort_values(
-        by=["feature_importance_vals"], ascending=False, inplace=True
-    )
-    feature_importance.head(20)
-    # Store the feature importance dataframe in the list
-    feature_importance_list.append(
-        pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
-    )
+# %%
+for metric in ["multi_error", "multi_logloss"]:
+    # Define the number of train-test splits and initialize an empty list to store SHAP values
+    n_splits = 5
+    shap_values_list = []
+    SHAP_values_per_fold = []
+    fold_indices = []  # Add a list to store fold indices
+    ix_training, ix_test = [], []
+
+    # Create a loop for train-test splits using cross-validation
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    for train_index, test_index in skf.split(X, y):
+        ix_training.append(train_index), ix_test.append(test_index)
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        # Train the LightGBM model
+        params = params_lgbm_dict.copy()
+        params["objective"] = "multiclass"
+        params["metric"] = metric
+        params["num_classes"] = len(lu_complete["lc_name"].unique())
+        d_train = lgb.Dataset(X_train, label=y_train)
+        d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
+        model = lgb.train(
+            params,
+            d_train,
+            10000,
+            valid_sets=[d_test],
+            early_stopping_rounds=100,
+            verbose_eval=1000,
+        )
+
+        # Generate SHAP values for the current split
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_test.values)
+        for SHAPs in shap_values:
+            SHAP_values_per_fold.append(SHAPs)  # -#-#
+        shap_values_list.append(shap_values)
+
+    # Aggregate the SHAP values across all splits
+    aggregated_shap_values = np.mean(SHAP_values_per_fold, axis=0)
+
+# ca
+new_index = [ix for ix_test_fold in ix_test for ix in ix_test_fold]
+
+# Plot the aggregated feature importance
+shap.summary_plot(
+    np.array(aggregated_shap_values),
+    X.reindex(new_index),
+    feature_names=[x.replace("_", ".") for x in X.columns],
+    class_names=le.classes_,
+    plot_type="bar",
+    max_display=20,
+)
+plt.savefig(f"outputs/significance_plot{metric}.png")  # Save the plot to a file
+
+
+# %%
+# print top features
+feature_importance_list = []
+
+vals = np.abs(shap_values).mean(0)
+
+feature_importance = pd.DataFrame(
+    list(zip(X_train.columns, sum(vals))),
+    columns=["col_name", "feature_importance_vals"],
+)
+feature_importance.sort_values(
+    by=["feature_importance_vals"], ascending=False, inplace=True
+)
+feature_importance.head(20)
+# Store the feature importance dataframe in the list
+feature_importance_list.append(
+    pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
+)
 
 # Iterate until we have 25 unique col_names or until there are no more feature importance dataframes
 
@@ -236,28 +453,9 @@ select_images = list(
         f"top{select_how_many}"
     ].values
 )
-import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-
-#
-#
-
-# # Example arrays with different value ranges
-# array1 = np.array([-0.5, 0.2, 0.8, -0.3])
-# array2 = np.array([1.324e15, 2.5e14, 3.7e15, 4.9e14])
-
-# # Step 1: Normalize the arrays
-# scaler = MinMaxScaler(feature_range=(-1, 1))  # Choose the desired range for scaling
-# array1_scaled = scaler.fit_transform(array1.reshape(-1, 1)).flatten()
-# array2_scaled = scaler.fit_transform(array2.reshape(-1, 1)).flatten()
-
-# # Step 2: Convert the normalized arrays to integers
-# array1_int = (array1_scaled * np.iinfo(np.int32).max).astype(np.int32)
-# array2_int = (array2_scaled * np.iinfo(np.int64).max).astype(np.int64)
-import geowombat as gw
 
 
-# %%
+# %% Reduce image size and create 10m resolution images
 # get an EVI example
 target_string = next((string for string in select_images if "EVI" in string), None)
 
@@ -393,6 +591,7 @@ for i in range(10, 20, 5):
 #     overwrite=True,
 # )
 # # %%
+
 
 # %%
 ########################################################
@@ -554,7 +753,6 @@ for i in range(1, components - 1):
 # Classification performance with UMAP and Random Forest
 ########################################################
 from sklearn.model_selection import cross_val_score
-import umap
 
 # get important image paths
 select_images = get_selected_ranked_images()
@@ -672,18 +870,6 @@ per_class_accuracies
 # MODEL PREDICTION   Use environment crop_pred
 ###########################################################
 
-import umap
-import geowombat as gw
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-import pandas as pd
-from geowombat.ml import fit_predict
-from sklearn.decomposition import PCA
-from sklearn.model_selection import StratifiedKFold, RandomizedSearchCV
-from scipy.stats import randint as sp_randint
-
 
 components = 7
 neighbors = 5
@@ -692,7 +878,7 @@ neighbors = 5
 select_images = get_selected_ranked_images()
 # add unsupervised classification images
 select_images = select_images[
-    0:15
+    0:10
 ]  # + glob("./outputs/*kmean*.tif") # kmeans might not help
 print(select_images)
 
@@ -706,7 +892,7 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     y = lu_complete["lc"]
     X = X[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-
+# %%
 # Define the pipeline steps
 pipeline = Pipeline(
     [
@@ -753,18 +939,27 @@ search.fit(X, y)
 # Access the best parameters and best score
 best_params = search.best_params_
 best_score = search.best_score_
-
+# %%
 # Save the trained model
 import pickle
 
-with open("models/final_model_rf.pkl", "wb") as file:
+with open(f"models/final_model_rf_{len(select_images)}.pkl", "wb") as file:
     pickle.dump(search, file)
 # save best params
-pd.DataFrame(best_params, index=pd.Index([0])).to_csv("models/best_params_rf.csv")
+pd.DataFrame(best_params, index=pd.Index([0])).to_csv(
+    f"models/best_params_rf_{len(select_images)}.csv"
+)
+# save class names
+
+pd.DataFrame(
+    {"class": search.classes_, "Names": le.inverse_transform(search.classes_)}
+).to_csv(f"models/class_names_rf_{len(select_images)}.csv")
 
 
 # %% Load the saved model
-with open("models/final_model_rf.pkl", "rb") as file:
+import pickle
+
+with open(f"models/final_model_rf_{len(select_images)}.pkl", "rb") as file:
     search = pickle.load(file)
 
 
@@ -776,6 +971,7 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
         compress="lzw",
         overwrite=True,  # bigtiff=True
     )
+
 
 # %% Predict to the stack
 
@@ -791,13 +987,30 @@ def user_func(w, block, model):
 
 gw.apply(
     "outputs/pred_stack.tif",
-    "outputs/final_model_rf.tif",
+    f"outputs/final_model_rf{len(select_images)}.tif",
     user_func,
     args=(search.best_estimator_,),
-    n_jobs=8,
+    n_jobs=16,
     count=1,
 )
 
+
+# %
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
 
 # %%
 # GroupKFold

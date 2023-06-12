@@ -1,4 +1,49 @@
-# from sklearn_helpers import *
+# %%
+from sklearn.datasets import make_classification
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import IsolationForest, RandomForestClassifier
+from sklearn.base import BaseEstimator, TransformerMixin
+
+X1, y1 = make_classification(n_samples=100, n_features=10, n_informative=5, n_classes=3)
+
+
+class IsolationForestOutlierRemover(BaseEstimator, TransformerMixin):
+    def __init__(self, contamination=0.05):
+        self.contamination = contamination
+        self.isolation_forest = IsolationForest(contamination=self.contamination)
+
+    def fit(self, X, y=None):
+        self.isolation_forest.fit(X)
+        self.outliers_mask_ = self.isolation_forest.predict(X) == -1
+        return self
+
+    def transform(self, X, y=None):
+        if y is not None:
+            return (X[~self.outliers_mask_], y[~self.outliers_mask_])
+        else:
+            return X[~self.outliers_mask_]
+
+    def fit_transform(self, X, y=None):
+        self.fit(X)
+        return self.transform(X, y)
+
+
+# working = IsolationForestOutlierRemover().fit_transform(X1, y1)
+# print(working.shape)
+# print(working)
+
+pipelinet = Pipeline(
+    [
+        ("outlier_removal", IsolationForestOutlierRemover(contamination=0.05)),
+        ("random_forest", RandomForestClassifier()),
+    ]
+)
+
+notworking = pipelinet.fit(X1, y1)
+print(notworking)
+
+
+# %%# from sklearn_helpers import *
 from sklearn.ensemble import IsolationForest
 from sklearn.base import BaseEstimator, TransformerMixin
 

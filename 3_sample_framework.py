@@ -7,6 +7,7 @@ from shapely.geometry import Polygon, box
 import numpy as np
 
 
+# %%
 def create_grid(feature, shape="hexagon", side_length=10000):
     """Create a grid consisting of either rectangles or hexagons with a specified side length that covers the extent of input feature."""
 

@@ -1,36 +1,61 @@
 # %% env:crop_class
 
-import lightgbm as lgb
-import shap
 
 # %%
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.decomposition import MiniBatchSparsePCA
+# change directory first
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
+)
+from sklearn_helpers import (
+    best_classifier_pipe,
+    get_selected_ranked_images,
+    classifier_objective,
+)
 
-# from lightgbm import LGBMRegressor
-from sklearn.ensemble import RandomForestClassifier
-
-# from boruta import BorutaPy
-import geopandas as gpd
-import geowombat as gw
-from sklearn.model_selection import GridSearchCV, KFold, RandomizedSearchCV
-
-from geowombat.ml import fit, predict, fit_predict
-import matplotlib.pyplot as plt
-from glob import glob
-from sklearn_xarray.model_selection import CrossValidatorWrapper
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import LabelEncoder
-import os
+import pandas as pd
 import numpy as np
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
-import pandas as pd
-from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+from sklearn.model_selection import (
+    train_test_split,
+    GridSearchCV,
+    KFold,
+    cross_val_score,
+    RandomizedSearchCV,
+    StratifiedKFold,
+)
 
-# %%
+from sklearn.metrics import (
+    confusion_matrix,
+    precision_recall_fscore_support,
+    accuracy_score,
+)
+from sklearn.preprocessing import (
+    StandardScaler,
+    MinMaxScaler,
+    LabelEncoder,
+    OneHotEncoder,
+)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+from sklearn.cluster import MiniBatchKMeans, OPTICS
+import lightgbm as lgb
+import optuna
+import shap
+import sqlite3
+from sklearn.metrics import log_loss, balanced_accuracy_score
+import os
+import geowombat as gw
+from geowombat.ml import fit_predict, predict, fit
+from lightgbm import LGBMClassifier
+from sklearn.svm import SVC
+from sklearn.feature_selection import VarianceThreshold
+import umap
+from glob import glob
+
 # how many images will be selected for importances
 select_how_many = 25
 
@@ -41,28 +66,13 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 import pandas as pd
 
 
-def get_selected_ranked_images(
-    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-):
-    original = pd.read_csv(original_rank_images_df)
-    subset_image = pd.DataFrame({f"top{select_how_many}": subset_image_list})
-    original["basename"] = original[f"top{select_how_many}"].apply(
-        lambda x: os.path.basename(x)
-    )
-    subset_image["basename"] = subset_image[f"top{select_how_many}"].apply(
-        lambda x: os.path.basename(x)
-    )
-    ordered = subset_image.merge(
-        original, on=f"basename", how="left", suffixes=("", "_subset")
-    ).sort_values(ascending=True, by="rank")[
-        ["rank", f"top{select_how_many}", "basename"]
+# remove nan and bad columns
+pipeline_scale_clean = Pipeline(
+    [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
+        ("variance_threshold", VarianceThreshold(threshold=0.5)),
     ]
-    return list(ordered[f"top{select_how_many}"])
-
-
-os.chdir(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
 )
 
 # %%
@@ -85,19 +95,36 @@ np.unique(lu["Primary land cover"])
 # Cassava
 # Soybeans
 
+# print # of obs per class
+print(lu["Primary land cover"].value_counts())
+
 
 lu["lc_name"] = lu["Primary land cover"]
 keep = [
-    "Maize (Mahindi)*",
-    "Cotton (Pamba)*",
     "Rice (Mpunga)*",
-    "Sorghum (Mtama)*",
-    # "Millet (Ulezi)*",  #Only one example
-    "Other grains (examples: wheat, barley, oats, rye…)",
+    "Maize (Mahindi)*",
+    "Cassava",
+    # "Vegetables and pulses (examples: eggplant, potatoes, tomatoes, okra, onion, yam, beans, cowpea, chickpeas, lentils, peas…)",
     "Sunflower (Alizeti)*",
-    # "Cassava",
+    "Sorghum (Mtama)*",
+    # "Other (later, specify in optional notes)",
+    "Cotton (Pamba)*",
+    # "Specialty crops (cocoa, coffee, tea, sugar, and spices)",
+    # "Okra ",
+    # "Eggplant",
+    # "Other grains (examples: wheat, barley, oats, rye…)",
     # "Soybeans*",
+    # "Tree crops (examples: banana, coconut, guava, fig, jackfruit, palm oil, lemon, mango, tropical almond, neem tree...)",
+    # "Don't know",
+    # "Millet (Ulezi)*",
 ]
+drop = [
+    "Don't know",
+    "Other (later, specify in optional notes)",
+]
+
+# apply keep/drop
+lu.drop(lu[lu["lc_name"].isin(drop)].index, inplace=True)
 lu.loc[lu["lc_name"].isin(keep) == False, "lc_name"] = "Other"
 
 # add additional training data
@@ -110,6 +137,9 @@ lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"
 
 lu_complete["lc_name"]
 
+# drop two missing values
+lu_complete.dropna(subset=["lc_name"], inplace=True)
+
 
 # The labels are string names, so here we convert them to integers
 le = LabelEncoder()
@@ -121,75 +151,170 @@ print(lu_complete["lc"].unique())
 
 # Get all the feature files
 images = sorted(glob("./data/**/annual_features/**/**.tif"))
+# remove dropbox case conflict images
+images = [item for item in images if "(Case Conflict)" not in item]
+
+# %%
+########################################################
+# MODEL SELECTION
+########################################################
+# uses select_how_many from top of script
+
+target_string = next((string for string in images if "EVI" in string), None)
+
+with gw.config.update(ref_image=target_string):
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        df = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = df[range(1, len(images) + 1)]
+        X.columns = [os.path.basename(f).split(".")[0] for f in images]
+
+
+X = pipeline_scale_clean.fit_transform(X)
+
+
+# %% Create optuna classifier study
+
+# Create an SQLite connection
+conn = sqlite3.connect("models/study.db")
+
+# Create a study with SQLite storage
+storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
+
+# delete any existing study
+try:
+    study = optuna.load_study(study_name="model_selection", storage=storage)
+    optuna.delete_study(study_name="model_selection", storage=storage)
+except:
+    pass
+
+# create new study
+study = optuna.create_study(
+    storage=storage, study_name="model_selection", direction="maximize"
+)
+
+
+# Optimize the objective function
+study.optimize(
+    lambda trial: classifier_objective(trial, X, y),
+    n_trials=150,
+)
+
+# Close the SQLite connection
+conn.close()
+
+print("Number of finished trials: {}".format(len(study.trials)))
+
+print("Best trial:")
+trial = study.best_trial
+
+print("  Value: {}".format(trial.value))
+
+print("  Params: ")
+for key, value in trial.params.items():
+    print("    {}: {}".format(key, value))
+
+# write params to csv
+pd.DataFrame(study.trials_dataframe()).to_csv("models/optuna_study_model_selection.csv")
+
+
+# %% Save results
+
+conn = sqlite3.connect("models/study.db")
+
+study = optuna.load_study(
+    storage="sqlite:///models/study.db",
+    study_name="model_selection",
+)
+
+
+# Access the top trials
+top_trials = study.best_trials
+
+# Iterate over the top trials and print their scores and parameters
+for i, trial in enumerate(top_trials):
+    print(f"Rank {i+1}: Score = {trial.value}")
+    print(f"Parameters: {trial.params}")
+
+# Get the DataFrame of all trials
+trials_df = study.trials_dataframe()
+
+# Sort the trials by the objective value in ascending order
+sorted_trials = trials_df.sort_values("value", ascending=False)
+
+# Print the ranked listing of trials
+print(sorted_trials[["number", "value", "params_classifier"]])
+
 
 # %%
 ########################################################
 # FEATURE SELECTION
 ########################################################
-# uses select_how_many from top of script
-# %% Find most important features using shaps scores
+# %% Extract best parameters for LGBM
+lgbm_pipe = best_classifier_pipe("models/study.db", "model_selection", "LGBM")
+params_lgbm_dict = lgbm_pipe["classifier"].get_params()
 
-with gw.config.update(ref_image=images[-1]):
+
+# extract data
+target_string = next((string for string in images if "EVI" in string), None)
+
+with gw.config.update(ref_image=target_string):
     with gw.open(images, nodata=9999, stack_dim="band") as src:
         # fit a model to get Xy used to train model
         X = gw.extract(src, lu_complete)
         y = lu_complete["lc"]
         X = X[range(1, len(images) + 1)]
-        X.columns = [os.path.basename(f).split(".")[0] for f in images]
+        X_columns = [os.path.basename(f).split(".")[0] for f in images]
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
+X = pipeline_scale_clean.fit_transform(X)
 
-d_train = lgb.Dataset(X_train, label=y_train)
-d_test = lgb.Dataset(X_test, label=y_test)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=7, stratify=y
+)
+
 
 feature_importance_list = []
 
 for metric in ["multi_error", "multi_logloss"]:
-    params = {
-        "max_bin": 512,
-        "learning_rate": 0.05,
-        "boosting_type": "gbdt",
-        "objective": "multiclass",
-        "metric": metric,  #  multi_error multi_logloss
-        "num_leaves": 20,
-        "verbose": -1,
-        "min_data": 100,
-        "boost_from_average": True,
-        "num_classes": len(
-            np.unique(lu_complete["lc_name"])
-        ),  # Specify the number of classes
-    }
-
+    # Train the LightGBM model
+    params = params_lgbm_dict.copy()
+    params["objective"] = "multiclass"
+    params["metric"] = metric
+    params["num_classes"] = len(lu_complete["lc"].unique())
+    d_train = lgb.Dataset(X_train, label=y_train)
+    d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
     model = lgb.train(
         params,
         d_train,
         10000,
         valid_sets=[d_test],
-        early_stopping_rounds=100,
+        early_stopping_rounds=200,
         verbose_eval=1000,
     )
-    # model = pl.fit(X=X.values, y=y.values)
+
+    # SHAP exaplainer
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X.values)
+    shap_values = explainer.shap_values(X)
 
     # feature importance
-    import matplotlib.pyplot as plt
-
     shap.summary_plot(
         shap_values,
-        X.values,
-        feature_names=[x.replace("_", ".") for x in X.columns],
+        X,
+        feature_names=[x.replace("_", ".") for x in X_columns],
         class_names=le.classes_,
         plot_type="bar",
         max_display=20,
+        plot_size=(10, 10),
     )
-    plt.savefig(f"outputs/significance_plot{metric}.png")  # Save the plot to a file
+    plt.legend(loc="lower center", bbox_to_anchor=(0.5, -0.2), ncol=2)
 
     # print top features
     vals = np.abs(shap_values).mean(0)
 
     feature_importance = pd.DataFrame(
-        list(zip(X_train.columns, sum(vals))),
+        list(zip(X_columns, sum(vals))),
         columns=["col_name", "feature_importance_vals"],
     )
     feature_importance.sort_values(
@@ -202,16 +327,16 @@ for metric in ["multi_error", "multi_logloss"]:
     )
 
 # Iterate until we have 25 unique col_names or until there are no more feature importance dataframes
-
+# %%
 top_col_names = []
 
-while len(top_col_names) < 25:
-    # Get the top feature importance dataframe from the list
-    for row in range(len(feature_importance_list[0])):
+# Get the top feature importance dataframe from the list
+for row in range(len(feature_importance_list[0])):
+    if len(top_col_names) <= 25:
         feature_1 = images[feature_importance_list[0].iloc[row]["index"]]
         feature_2 = images[feature_importance_list[1].iloc[row]["index"]]
         # Get the top unique col_names from the current dataframe
-        unique_col_names = [feature_1, feature_2]
+        unique_col_names = set([feature_1, feature_2])
 
         # Add the unique col_names to the final list
         for col_name in unique_col_names:
@@ -220,8 +345,13 @@ while len(top_col_names) < 25:
 # Print the final list of top col_names
 print(top_col_names)
 out = pd.DataFrame({f"top{select_how_many}": top_col_names})
-out.columns = ["rank", f"top{select_how_many}"]
 out.reset_index(inplace=True)
+out.columns = ["rank", f"top{select_how_many}"]
+
+# NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
+out = out[~out["top25"].str.contains("kurtosis")]
+out = out[~out["top25"].str.contains("mean_change")]
+
 out.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
 
 
@@ -229,39 +359,33 @@ out.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
 # resample all selected features to 10m and set smallest dtype possible
 # Read in the list of selected images
 
-import rasterio
 
 select_images = list(
     pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
         f"top{select_how_many}"
     ].values
 )
-import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-
-#
-#
-
-# # Example arrays with different value ranges
-# array1 = np.array([-0.5, 0.2, 0.8, -0.3])
-# array2 = np.array([1.324e15, 2.5e14, 3.7e15, 4.9e14])
-
-# # Step 1: Normalize the arrays
-# scaler = MinMaxScaler(feature_range=(-1, 1))  # Choose the desired range for scaling
-# array1_scaled = scaler.fit_transform(array1.reshape(-1, 1)).flatten()
-# array2_scaled = scaler.fit_transform(array2.reshape(-1, 1)).flatten()
-
-# # Step 2: Convert the normalized arrays to integers
-# array1_int = (array1_scaled * np.iinfo(np.int32).max).astype(np.int32)
-# array2_int = (array2_scaled * np.iinfo(np.int64).max).astype(np.int64)
-import geowombat as gw
 
 
-# %%
-# get an EVI example
-target_string = next((string for string in select_images if "EVI" in string), None)
+# %% Reduce image size and create 10m resolution images
 
 os.makedirs("./outputs/selected_images_10m", exist_ok=True)
+
+# delete old selected images
+folder_path = "./outputs/selected_images_10m"
+
+# Get a list of all files in the folder
+file_list = os.listdir(folder_path)
+
+# Loop through the file list and delete each file
+for file_name in file_list:
+    file_path = os.path.join(folder_path, file_name)
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+
+
+# get an EVI example
+target_string = next((string for string in select_images if "EVI" in string), None)
 
 for select_image in select_images:
     with gw.config.update(ref_image=target_string):
@@ -276,73 +400,25 @@ for select_image in select_images:
                 overwrite=True,
             )
 
-# NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
-
-# %%
-# Dimensionality reduction
-# using umap to reduce the dimensionality of the data
-# https://umap-learn.readthedocs.io/en/latest/basic_usage.html
-from sklearn.cluster import KMeans, MiniBatchKMeans, OPTICS
-
-import umap
-
-# # Read in the list of selected images
-# select_images = list(
-#     pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
-#         f"top{select_how_many}"
-#     ].values
-# )
-# # switch to 10m images
-# select_images = [
-#     os.path.join(r"./outputs/selected_images_10m", os.path.basename(f))
-#     for f in select_images
-# # ]
-# select_images = glob("./outputs/selected_images_10m/*.tif")
-# # Get the image names
-# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
-
-# dim_reduct = Pipeline(
-#     [
-#         ("rescaler", StandardScaler(with_mean=True, with_std=True)),
-#         ("umap", umap.UMAP(n_components=5, n_neighbors=15)),
-#         # ("pca", MiniBatchSparsePCA(n_components=5)),
-#             ("clf", MiniBatchKMeans(5, random_state=0)),
-#     ]
-# )
-
-# with gw.open(
-#     select_images,
-#     nodata=9999,
-#     stack_dim="band",
-#     band_names=image_names,
-# ) as src:
-#     y = fit_predict(data=src, clf=dim_reduct)
-
-#     y = y + 1
-#     y.attrs = src.attrs
-# y.gw.to_raster(
-#     "./outputs/ym_prediction_optics_umap_c_5_n_15.tif",
-#     overwrite=True,
-# )
-
 
 ########################################################
 # UNSUPERVISED CLASIFICATION
 ########################################################
 # %% plot kmean andn the selected features
 
-
 # get important image paths
-select_images = get_selected_ranked_images()
+select_images = get_selected_ranked_images(
+    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
+)
 # Get the image names
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
 
-# get an EVI example
-
 # create multiple kmean classification to add to model later
-for i in range(10, 20, 5):
+for i in range(10, 21, 5):
     # create a pipeline to process the data and fit a model
-    pipe = Pipeline(
+    pipe_kmeans = Pipeline(
         [
             ("imp", SimpleImputer(strategy="mean")),
             ("rescaler", StandardScaler(with_mean=True, with_std=True)),
@@ -356,43 +432,43 @@ for i in range(10, 20, 5):
         stack_dim="band",
         band_names=image_names,
     ) as src:
-        y = fit_predict(data=src, clf=pipe)
+        y = fit_predict(data=src, clf=pipe_kmeans)
         y = y + 1
         y.attrs = src.attrs
     # save the image to a file
     y.gw.to_raster(
         f"./outputs/ym_prediction_kmean_{i}.tif",
         overwrite=True,
+        compress="lzw",
     )
-# # %%
 
-# # OPTICS
+# %%
+# # OPTICS  Memory error
 # import umap
 
-# pl = Pipeline(
+# optics_pipe = Pipeline(
 #     [
+#         ("imp", SimpleImputer(strategy="mean")),
 #         ("rescaler", StandardScaler(with_mean=True, with_std=True)),
-#         ("umap", umap.UMAP(n_components=5, n_neighbors=15)),
+#         ("umap", umap.UMAP(n_components=5, n_neighbors=15, n_jobs=1)),
 #         ("clf", OPTICS()),
 #     ]
 # )
 
-
 # with gw.open(
-#     select_images,
+#     select_images[0:15],
 #     nodata=9999,
 #     stack_dim="band",
-#     band_names=image_names,
 # ) as src:
 #     # fit a model to get Xy used to train model
-#     y = fit_predict(data=src, clf=pl)
+#     y = fit_predict(data=src, clf=optics_pipe)
 #     y = y + 1
 #     y.attrs = src.attrs
 # y.gw.to_raster(
 #     "./outputs/ym_prediction_optics_umap_c_5_n_15.tif",
 #     overwrite=True,
 # )
-# # %%
+
 
 # %%
 ########################################################
@@ -433,133 +509,202 @@ for i in range(10, 20, 5):
 # # Remove outliers from y (if applicable)
 # y_without_outliers = y[~outlier_mask]
 
-
+# %%
 ########################################################
 # Dimensionality reduction
 ########################################################
 
-# %% Iteratively search for best UMAP parameters
+# get optimal parameters
+conn = sqlite3.connect("models/study.db")
+study = optuna.load_study(
+    storage="sqlite:///models/study.db",
+    study_name="model_selection",
+)
+
+
+# Access the top trial
+top_trial = study.best_trials[0].params
+top_trial.pop("classifier")
+top_trial = {key.replace("rf_", ""): value for key, value in top_trial.items()}
+top_trial
+
+# %% get cleaned data
+
+target_string = next((string for string in images if "EVI" in string), None)
+
+with gw.config.update(ref_image=target_string):
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        df = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = df[range(1, len(images) + 1)]
+        X.columns = [os.path.basename(f).split(".")[0] for f in images]
+
+# remove nan and bad columns
+pipeline_scale_clean = Pipeline(
+    [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
+        ("variance_threshold", VarianceThreshold(threshold=0.5)),
+    ]
+)
+
+X = pipeline_scale_clean.fit_transform(X)
+
+
+# Define the pipeline steps for optimzer
+umap_pipeline = Pipeline(
+    [
+        ("umap", umap.UMAP()),
+        ("classifier", RandomForestClassifier(**top_trial)),
+    ]
+)
+# %% find optimal umap parameters
+
+
+# Define the objective function for Optuna
+def objective(trial):
+    # Define the parameter space for dimensionality reduction
+    dr_method = trial.suggest_categorical("dr_method", ["PCA", "UMAP"])
+
+    if dr_method == "PCA":
+        pca_params = {"n_components": trial.suggest_int("pca_n_components", 3, 25)}
+
+        # Set the PCA parameters in the pipeline
+        dr_pipeline.set_params(dim_reduction=PCA(**pca_params))
+
+    elif dr_method == "UMAP":
+        umap_params = {
+            "n_components": trial.suggest_int("umap_n_components", 3, 25),
+            "n_neighbors": trial.suggest_categorical(
+                "umap_n_neighbors", [3, 5, 8, 10, 15]
+            ),
+        }
+
+        # Set the UMAP parameters in the pipeline
+        dr_pipeline.set_params(dim_reduction=umap.UMAP(**umap_params))
+
+    # Fit the pipeline and calculate the score
+    score = cross_val_score(dr_pipeline, X, y, cv=5, scoring="balanced_accuracy").mean()
+
+    return score
+
+
+# Create the dimensionality reduction pipeline
+dr_pipeline = Pipeline(
+    [
+        ("dim_reduction", PCA(n_components=5)),
+        ("classifier", RandomForestClassifier(**top_trial)),
+    ]
+)
+
+# Create an SQLite connection
+conn = sqlite3.connect("models/study.db")
+
+# Create a study with SQLite storage
+storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
+
+# delete any existing study
+try:
+    study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
+    optuna.delete_study(study_name="umap_kmeans_selection", storage=storage)
+except:
+    pass
+
+# store current study
+study = optuna.create_study(
+    storage=storage, study_name="umap_kmeans_selection", direction="maximize"
+)
+
+# Optimize the objective function
+study.optimize(objective, n_trials=30)
+
+# Close the SQLite connection
+conn.close()
+# %%
+
+
+# %%
+
+########################################################
+# Classification performance with DimReduct and Random Forest Optimized
+########################################################
+# get optimal parameters
+# conn = sqlite3.connect("models/study.db")
+study = optuna.load_study(
+    storage="sqlite:///models/study.db",
+    study_name="umap_kmeans_selection",
+)
+
+# Access the top trial
+print(f"Best trial: {study.best_trial.value:.3f}")
+top_dr_trial = study.best_trials[0].params
+top_dr_trial
+top_dr_trial.pop("classifier")
+top_dr_trial = {key.replace("rf_", ""): value for key, value in top_trial.items()}
+# %%
+
+target_string = next((string for string in images if "EVI" in string), None)
+
+with gw.config.update(ref_image=target_string):
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        df = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = df[range(1, len(images) + 1)]
+        X.columns = [os.path.basename(f).split(".")[0] for f in images]
+
+# remove nan and bad columns
+pipeline_scale_clean = Pipeline(
+    [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
+        ("variance_threshold", VarianceThreshold(threshold=0.5)),
+    ]
+)
+
+X = pipeline_scale_clean.fit_transform(X)
+
 
 # Define the pipeline steps
 pipeline = Pipeline(
     [
-        ("variance_threshold", VarianceThreshold(threshold=0.5)),
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-        ("umap", umap.UMAP()),
-        ("classifier", RandomForestClassifier(n_estimators=500)),
-    ]
-)
-
-# Define the parameter grid for RandomizedSearchCV
-param_grid = {
-    "umap__n_components": range(3, 25),
-    "umap__n_neighbors": [3, 5, 8, 10, 15],
-}
-
-# create a random number between 0 and 5
-random_state = 0
-
-# Create empty lists to store results
-best_params_list = []
-best_scores_list = []
-
-# Iterate through different random_state values
-for random_state in range(15):
-    print(random_state)
-    # Create the RandomizedSearchCV object with current random_state
-    search = RandomizedSearchCV(
-        pipeline, param_grid, n_iter=2, cv=5, random_state=random_state
-    )
-
-    # Fit the data to perform the search
-    search.fit(X, y)
-
-    # Access the best parameters and best score
-    best_params = search.best_params_
-    best_score = search.best_score_
-
-    # Append results to lists
-    best_params_list.append(best_params)
-    best_scores_list.append(best_score)
-
-
-# %%
-# Convert results to a DataFrame
-results_df = pd.DataFrame(
-    {
-        "random_state": range(15),
-        "umap__n_components": [i["umap__n_components"] for i in best_params_list],
-        "umap__n_neighbors": [i["umap__n_neighbors"] for i in best_params_list],
-        "best_scores": best_scores_list,
-    }
-)
-plt.figure(figsize=(5, 5))
-plt.scatter(
-    x=results_df["umap__n_components"],
-    y=results_df["umap__n_neighbors"],
-    c=results_df["best_scores"],
-)
-plt.title("Dimensionality Reduction Parameter Search Results")
-plt.xlabel("umap__n_components")
-plt.ylabel("umap__n_neighbors")
-# add labels to points
-for i, txt in results_df.iterrows():
-    plt.annotate(
-        f'{int(txt["umap__n_components"])},{int(txt["umap__n_neighbors"])}',
-        (results_df["umap__n_components"][i], results_df["umap__n_neighbors"][i]),
-    )
-
-plt.gca().set_aspect("equal", "datalim")
-plt.colorbar()
-plt.savefig("./outputs/umap_parameter_search.png")
-
-# %%
-#   visualize UMAP components
-
-import umap
-from sklearn.feature_selection import VarianceThreshold
-
-components = 7
-neighbors = 5
-
-# %%
-pipeline = Pipeline(
-    [
-        ("variance_threshold", VarianceThreshold(threshold=0.5)),
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
         (
-            "umap",
-            umap.UMAP(n_components=components, n_neighbors=neighbors),
+            "dim_reduction",
+            PCA(n_components=top_dr_trial["pca_n_components"], random_state=42),
         ),
+        ("classifier", RandomForestClassifier(**top_trial)),
     ]
 )
 
-embedding = pipeline.fit_transform(X)
+# Predict the labels of the test data
+y_pred_dr = cross_val_score(
+    pipeline,
+    X,
+    y,
+    cv=5,
+    n_jobs=-1,
+    verbose=2,
+)
+y_pred_dr
 
-for i in range(1, components - 1):
-    plt.figure(figsize=(5, 5))
-    plt.scatter(
-        embedding[:, 1],
-        embedding[:, i + 1],
-        c=y.values,
-    )
-    plt.gca().set_aspect("equal", "datalim")
+# save cv results
+pd.DataFrame({"y_pred_dr_results_CV": y_pred_dr}).to_csv(
+    "outputs/y_pred_dr_results.csv"
+)
 
-
-# %%
-
-########################################################
-# Classification performance with UMAP and Random Forest
-########################################################
-from sklearn.model_selection import cross_val_score
-import umap
+# %% Compare to feature selection
 
 # get important image paths
-select_images = get_selected_ranked_images()
-# add unsupervised classification images
-select_images = select_images  # + glob("./outputs/*kmean*.tif") # kmeans might not help
+select_images = get_selected_ranked_images(
+    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
+)
+# get same number of features
+select_images = select_images[
+    0 : top_dr_trial["pca_n_components"]
+]  # + glob("./outputs/*kmean*.tif") # kmeans might not help
 
 # Get the image names
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
@@ -572,78 +717,243 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     X = X[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
 
+X = pipeline_scale_clean.fit_transform(X)
+
 # Define the pipeline steps
-pipeline = Pipeline(
+pipeline_feat = Pipeline(
     [
-        ("variance_threshold", VarianceThreshold(threshold=0.5)),
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-        (
-            "umap",
-            umap.UMAP(n_components=components, random_state=42, n_neighbors=neighbors),
-        ),
-        ("classifier", RandomForestClassifier(n_estimators=500)),
+        ("classifier", RandomForestClassifier(**top_trial)),
     ]
 )
 
 # Predict the labels of the test data
-y_pred = cross_val_score(
-    pipeline,
+y_pred_feat = cross_val_score(
+    pipeline_feat,
     X,
     y,
     cv=5,
     n_jobs=-1,
+    verbose=2,
 )
-y_pred
+y_pred_feat
+# save cv results
+pd.DataFrame({"y_pred_feat_results_CV": y_pred_feat}).to_csv(
+    "outputs/y_pred_feat_results.csv"
+)
+
+
+# NOTE: Feature selection is better than dim reduction
+
+
+##################################################################
 # %%
-from sklearn.metrics import accuracy_score
+########################################################
+# Final Model & Class level prediction performance
+########################################################
 
-num_splits = 5
-# Initialize a dictionary to store the accuracies for each class
-class_accuracies = {}
+# get optimal parameters
+pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
 
-# Perform the train-test splits and compute accuracies for each class
-for i in range(num_splits):
-    # Split the data into train and test sets, stratified by the class
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=i
+
+# get important image paths
+select_images = get_selected_ranked_images(
+    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
+)
+# get same number of features
+select_images = select_images[0:25] + glob("./outputs/*kmean*.tif")
+
+# Get the image names
+image_names = [os.path.basename(f).split(".")[0] for f in select_images]
+
+# extract data
+with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+    # fit a model to get Xy used to train model
+    X = gw.extract(src, lu_complete)
+    y = lu_complete["lc"]
+    y.reset_index(drop=True, inplace=True)
+    X = X[range(1, len(select_images) + 1)]
+    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+
+X = pipeline_scale_clean.fit_transform(X)
+
+# generate confusion matrix
+conf_matrix_list_of_arrays = []
+list_balanced_accuracy = []
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+
+    pipeline_performance.fit(X_train, y_train)
+    y_pred = pipeline_performance.predict(X_test)
+
+    balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+    list_balanced_accuracy.append(balanced_accuracy)
+
+    # Get the class names from the label encoder
+    class_names = pipeline_performance[
+        "classifier"
+    ].classes_  # le.inverse_transform(pipeline_performance["classifier"].classes_)
+
+    # Create the confusion matrix with class names as row and column index
+    conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)
+    conf_matrix_list_of_arrays.append(conf_matrix)
+
+conf_matrix_list_of_arrays
+
+# get aggregate confusion matrix
+agg_conf_matrix = np.sum(conf_matrix_list_of_arrays, axis=0)
+balanced_accuracy = balanced_accuracy.mean()
+
+# Calculate the row-wise sums
+row_sums = agg_conf_matrix.sum(axis=1, keepdims=True)
+
+# Convert counts to percentages by row
+conf_matrix_percent = agg_conf_matrix / row_sums
+
+# Get the class names
+class_names = le.inverse_transform(pipeline_performance["classifier"].classes_)
+
+# Create a heatmap using seaborn
+plt.figure(figsize=(10, 8))
+
+sns.heatmap(
+    conf_matrix_percent,
+    annot=True,
+    cmap="Blues",
+    fmt=".0%",
+    xticklabels=class_names,
+    yticklabels=class_names,
+)
+
+# Set labels and title
+plt.xlabel("Predicted")
+plt.ylabel("True")
+plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
+plt.savefig("outputs/final_class_perfomance_rf.png", bbox_inches="tight")
+
+# Show the plot
+plt.show()
+
+
+###############################################
+# %% Compare to unsupervised
+
+files = glob("./outputs/*kmean*.tif")
+with gw.open(
+    files,
+    nodata=9999,
+    stack_dim="band",
+) as src:
+    # fit a model to get Xy used to train model
+    X = gw.extract(src, lu_complete)
+
+    y = lu_complete["lc"]
+
+for i in range(0, len(files)):
+    print(files[i])
+
+    y_hat = X[i + 1]
+    y_hat = np.reshape(y_hat, (-1, 1))  # Reshape to (742, 1)
+    # Create an instance of RandomForestClassifier
+    rf_classifier = RandomForestClassifier(n_estimators=300, random_state=0)
+
+    # Fit the classifier to your training data
+    rf_classifier.fit(y_hat, y)
+
+    # Predict the labels for your training data
+    y_pred = rf_classifier.predict(y_hat)
+
+    # Calculate the balanced accuracy score for the training data
+    print(files[i])
+    print(f"balanced accuracy: {balanced_accuracy_score(y, y_pred)}")
+
+    conf_matrix = confusion_matrix(
+        y,
+        y_pred,  # labels=le.inverse_transform(rf_classifier.classes_)
     )
 
-    # Fit the classifier on the training data
-    pipeline.fit(X_train, y_train)
+    # Calculate the row-wise sums
+    row_sums = conf_matrix.sum(axis=1, keepdims=True)
 
-    # Predict the labels for the test data
-    y_pred = pipeline.predict(X_test)
+    # Convert counts to percentages by row
+    conf_matrix_percent = conf_matrix / row_sums
 
-    # Compute the accuracy for each class
-    accuracies = accuracy_score(y_test, y_pred, normalize=False)
+    # Get the class names
+    class_names = le.inverse_transform(rf_classifier.classes_)
 
-    # Store the accuracies in the dictionary
-    for class_label, accuracy in zip(pipeline["classifier"].classes_, accuracies):
-        if class_label not in class_accuracies:
-            class_accuracies[class_label] = []
-        class_accuracies[class_label].append(accuracy)
+    # Create a heatmap using seaborn
+    plt.figure(figsize=(10, 8))
 
+    sns.heatmap(
+        conf_matrix_percent,
+        annot=True,
+        cmap="Blues",
+        fmt=".0%",
+        xticklabels=class_names,
+        yticklabels=class_names,
+    )
+
+    # Set labels and title
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title(
+        f"Confusion Matrix Kmean: {files[i]} \n Balance Accuracy = {round(balanced_accuracy_score(y, y_pred),3)}"
+    )
+    plt.savefig(
+        f"outputs/final_class_perfomance_{os.path.basename(files[i])}.png",
+        bbox_inches="tight",
+    )
+
+    # Show the plot
+    plt.show()
+
+# %%
+
+# num_splits = 5
+# # Initialize a dictionary to store the accuracies for each class
+# class_accuracies = {}
+
+# # Perform the train-test splits and compute accuracies for each class
+# for i in range(num_splits):
+#     print(f"Split {i+1}/{num_splits}")
+#     # Split the data into train and test sets, stratified by the class
+#     X_train, X_test, y_train, y_test = train_test_split(
+#         X, y, test_size=0.2, stratify=y, random_state=i
+#     )
+
+#     # Fit the classifier on the training data
+#     pipeline.fit(X_train, y_train)
+
+#     # Predict the labels for the test data
+#     y_pred = pipeline.predict(X_test)
+
+#     # Compute the accuracy for each class
+#     accuracies = balanced_accuracy_score(y_test, y_pred)
+
+#     # Store the accuracies in the dictionary
+#     class_id = pipeline["classifier"].classes_
+#     for class_label, class_name, accuracy in zip(
+#         class_id, le.inverse_transform(class_id), accuracies
+#     ):
+#         if class_label not in class_accuracies:
+#             class_accuracies[class_name] = []
+#         class_accuracies[class_name].append(accuracy)
+
+#     # # Store the accuracies in the dictionary
+#     # for class_label, accuracy in zip(pipeline["classifier"].classes_, accuracies):
+#     #     if class_label not in class_accuracies:
+#     #         class_accuracies[class_label] = []
+#     #     class_accuracies[class_label].append(accuracy)
+# %%
 # Print the accuracies for each class
 for class_label, accuracies in class_accuracies.items():
     print(f"Class: {class_label}, Accuracies: {accuracies}")
 
 
 # %%
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import KFold, StratifiedKFold
-
-conf_matrix_list_of_arrays = []
-skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-for i, (train_index, test_index) in enumerate(skf.split(X, y)):
-    X_train, X_test = X.values[train_index], X.values[test_index]
-    y_train, y_test = y.values[train_index], y.values[test_index]
-
-    pipeline.fit(X_train, y_train)
-    conf_matrix = confusion_matrix(y_test, pipeline.predict(X_test))
-    conf_matrix_list_of_arrays.append(conf_matrix)
-conf_matrix_list_of_arrays
-
 # 55
 # %%
 
@@ -672,27 +982,19 @@ per_class_accuracies
 # MODEL PREDICTION   Use environment crop_pred
 ###########################################################
 
-import umap
-import geowombat as gw
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-import pandas as pd
-from geowombat.ml import fit_predict
-from sklearn.decomposition import PCA
-from sklearn.model_selection import StratifiedKFold, RandomizedSearchCV
-from scipy.stats import randint as sp_randint
-
 
 components = 7
 neighbors = 5
 
 # get important image paths
-select_images = get_selected_ranked_images()
+select_images = get_selected_ranked_images(
+    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
+)
 # add unsupervised classification images
 select_images = select_images[
-    0:15
+    0:10
 ]  # + glob("./outputs/*kmean*.tif") # kmeans might not help
 print(select_images)
 
@@ -706,7 +1008,7 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     y = lu_complete["lc"]
     X = X[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-
+# %%
 # Define the pipeline steps
 pipeline = Pipeline(
     [
@@ -753,18 +1055,27 @@ search.fit(X, y)
 # Access the best parameters and best score
 best_params = search.best_params_
 best_score = search.best_score_
-
+# %%
 # Save the trained model
 import pickle
 
-with open("models/final_model_rf.pkl", "wb") as file:
+with open(f"models/final_model_rf_{len(select_images)}.pkl", "wb") as file:
     pickle.dump(search, file)
 # save best params
-pd.DataFrame(best_params, index=pd.Index([0])).to_csv("models/best_params_rf.csv")
+pd.DataFrame(best_params, index=pd.Index([0])).to_csv(
+    f"models/best_params_rf_{len(select_images)}.csv"
+)
+# save class names
+
+pd.DataFrame(
+    {"class": search.classes_, "Names": le.inverse_transform(search.classes_)}
+).to_csv(f"models/class_names_rf_{len(select_images)}.csv")
 
 
 # %% Load the saved model
-with open("models/final_model_rf.pkl", "rb") as file:
+import pickle
+
+with open(f"models/final_model_rf_{len(select_images)}.pkl", "rb") as file:
     search = pickle.load(file)
 
 
@@ -776,6 +1087,7 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
         compress="lzw",
         overwrite=True,  # bigtiff=True
     )
+
 
 # %% Predict to the stack
 
@@ -791,13 +1103,30 @@ def user_func(w, block, model):
 
 gw.apply(
     "outputs/pred_stack.tif",
-    "outputs/final_model_rf.tif",
+    f"outputs/final_model_rf{len(select_images)}.tif",
     user_func,
     args=(search.best_estimator_,),
-    n_jobs=8,
+    n_jobs=16,
     count=1,
 )
 
+
+# %
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
+############################################################################################################
 
 # %%
 # GroupKFold

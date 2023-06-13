@@ -4,6 +4,10 @@ from sklearn.svm import SVC
 from lightgbm import LGBMClassifier
 import sqlite3
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import balanced_accuracy_score
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import os
 
 
 def isolate_classifier_dict(sorted_trials, desired_classifier):
@@ -74,6 +78,73 @@ def best_classifier_pipe(
     return Pipeline([("classifier", cl_estimator)])
 
 
+def get_selected_ranked_images(
+    original_rank_images_df, subset_image_list, select_how_many
+):
+    original = pd.read_csv(original_rank_images_df)
+    subset_image = pd.DataFrame({f"top{select_how_many}": subset_image_list})
+    original["basename"] = original[f"top{select_how_many}"].apply(
+        lambda x: os.path.basename(x)
+    )
+    subset_image["basename"] = subset_image[f"top{select_how_many}"].apply(
+        lambda x: os.path.basename(x)
+    )
+    ordered = subset_image.merge(
+        original, on=f"basename", how="left", suffixes=("", "_subset")
+    ).sort_values(ascending=True, by="rank")[
+        ["rank", f"top{select_how_many}", "basename"]
+    ]
+    return list(ordered[f"top{select_how_many}"])
+
+
+def classifier_objective(trial, X, y):
+    # Define the algorithm for optimization.
+
+    # Select classifier.
+    classifier_name = trial.suggest_categorical(
+        "classifier", ["SVC", "RandomForest", "LGBM"]
+    )
+
+    if classifier_name == "SVC":
+        svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
+        svc_kernel = trial.suggest_categorical("svc_kernel", ["linear", "rbf", "poly"])
+        svc_degree = trial.suggest_int("svc_degree", 1, 5)
+        classifier_obj = SVC(C=svc_c, kernel=svc_kernel, degree=svc_degree)
+    elif classifier_name == "RandomForest":
+        rf_max_depth = trial.suggest_int("rf_max_depth", 2, 32)
+        rf_n_estimators = trial.suggest_int("rf_n_estimators", 100, 1000, step=100)
+        rf_min_samples_split = trial.suggest_int("rf_min_samples_split", 2, 10)
+        classifier_obj = RandomForestClassifier(
+            max_depth=rf_max_depth,
+            n_estimators=rf_n_estimators,
+            min_samples_split=rf_min_samples_split,
+        )
+    else:
+        lgbm_max_depth = trial.suggest_int("lgbm_max_depth", 2, 32)
+        lgbm_learning_rate = trial.suggest_float("lgbm_learning_rate", 0.01, 0.1)
+        lgbm_num_leaves = trial.suggest_int("lgbm_num_leaves", 10, 100)
+        classifier_obj = LGBMClassifier(
+            max_depth=lgbm_max_depth,
+            learning_rate=lgbm_learning_rate,
+            num_leaves=lgbm_num_leaves,
+        )
+
+    # Fetch & split data.
+    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=0, stratify=y)
+
+    # Fit classifier.
+    classifier_obj.fit(X_train, y_train)
+    y_pred = classifier_obj.predict(X_val)
+
+    # Calculate error metric.
+    accuracy = balanced_accuracy_score(
+        y_val, y_pred
+    )  # Use accuracy as the error metric
+
+    return accuracy  # An objective value linked with the Trial object.
+
+
+# %%
 # from sklearn.datasets import make_classification
 # from sklearn.pipeline import Pipeline
 # from sklearn.ensemble import IsolationForest, RandomForestClassifier

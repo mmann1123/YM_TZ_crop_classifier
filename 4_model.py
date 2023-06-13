@@ -6,7 +6,11 @@
 os.chdir(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
 )
-from sklearn_helpers import best_classifier_pipe
+from sklearn_helpers import (
+    best_classifier_pipe,
+    get_selected_ranked_images,
+    classifier_objective,
+)
 
 import pandas as pd
 import numpy as np
@@ -20,6 +24,7 @@ from sklearn.model_selection import (
     RandomizedSearchCV,
     StratifiedKFold,
 )
+
 from sklearn.metrics import (
     confusion_matrix,
     precision_recall_fscore_support,
@@ -61,25 +66,14 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 import pandas as pd
 
 
-def get_selected_ranked_images(
-    original_rank_images_df,
-    subset_image_list,
-):
-    original = pd.read_csv(original_rank_images_df)
-    subset_image = pd.DataFrame({f"top{select_how_many}": subset_image_list})
-    original["basename"] = original[f"top{select_how_many}"].apply(
-        lambda x: os.path.basename(x)
-    )
-    subset_image["basename"] = subset_image[f"top{select_how_many}"].apply(
-        lambda x: os.path.basename(x)
-    )
-    ordered = subset_image.merge(
-        original, on=f"basename", how="left", suffixes=("", "_subset")
-    ).sort_values(ascending=True, by="rank")[
-        ["rank", f"top{select_how_many}", "basename"]
+# remove nan and bad columns
+pipeline_scale_clean = Pipeline(
+    [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
+        ("variance_threshold", VarianceThreshold(threshold=0.5)),
     ]
-    return list(ordered[f"top{select_how_many}"])
-
+)
 
 # %%
 # read YM training data and clean
@@ -176,65 +170,11 @@ with gw.config.update(ref_image=target_string):
         X = df[range(1, len(images) + 1)]
         X.columns = [os.path.basename(f).split(".")[0] for f in images]
 
-# remove nan and bad columns
-pipeline_scale_clean = Pipeline(
-    [
-        ("imputer", SimpleImputer(strategy="mean")),
-        ("scaler", StandardScaler()),
-        ("variance_threshold", VarianceThreshold(threshold=0.5)),
-    ]
-)
 
 X = pipeline_scale_clean.fit_transform(X)
 
 
-# %%
-def objective(trial):
-    # Define the algorithm for optimization.
-
-    # Select classifier.
-    classifier_name = trial.suggest_categorical(
-        "classifier", ["SVC", "RandomForest", "LGBM"]
-    )
-
-    if classifier_name == "SVC":
-        svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
-        svc_kernel = trial.suggest_categorical("svc_kernel", ["linear", "rbf", "poly"])
-        svc_degree = trial.suggest_int("svc_degree", 1, 5)
-        classifier_obj = SVC(C=svc_c, kernel=svc_kernel, degree=svc_degree)
-    elif classifier_name == "RandomForest":
-        rf_max_depth = trial.suggest_int("rf_max_depth", 2, 32)
-        rf_n_estimators = trial.suggest_int("rf_n_estimators", 100, 1000, step=100)
-        rf_min_samples_split = trial.suggest_int("rf_min_samples_split", 2, 10)
-        classifier_obj = RandomForestClassifier(
-            max_depth=rf_max_depth,
-            n_estimators=rf_n_estimators,
-            min_samples_split=rf_min_samples_split,
-        )
-    else:
-        lgbm_max_depth = trial.suggest_int("lgbm_max_depth", 2, 32)
-        lgbm_learning_rate = trial.suggest_float("lgbm_learning_rate", 0.01, 0.1)
-        lgbm_num_leaves = trial.suggest_int("lgbm_num_leaves", 10, 100)
-        classifier_obj = LGBMClassifier(
-            max_depth=lgbm_max_depth,
-            learning_rate=lgbm_learning_rate,
-            num_leaves=lgbm_num_leaves,
-        )
-
-    # Fetch & split data.
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=0, stratify=y)
-
-    # Fit classifier.
-    classifier_obj.fit(X_train, y_train)
-    y_pred = classifier_obj.predict(X_val)
-
-    # Calculate error metric.
-    accuracy = balanced_accuracy_score(
-        y_val, y_pred
-    )  # Use accuracy as the error metric
-
-    return accuracy  # An objective value linked with the Trial object.
-
+# %% Create optuna classifier study
 
 # Create an SQLite connection
 conn = sqlite3.connect("models/study.db")
@@ -254,8 +194,12 @@ study = optuna.create_study(
     storage=storage, study_name="model_selection", direction="maximize"
 )
 
+
 # Optimize the objective function
-study.optimize(objective, n_trials=300)
+study.optimize(
+    lambda trial: classifier_objective(trial, X, y),
+    n_trials=150,
+)
 
 # Close the SQLite connection
 conn.close()
@@ -302,26 +246,17 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 # Print the ranked listing of trials
 print(sorted_trials[["number", "value", "params_classifier"]])
 
-# %% Extract best parameters for LGBM
-
-# display(sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"])
-# LGBM_params = sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"]
-
-# # Extract columns that contain the string "params_lgbm"
-# params_lgbm_columns = [col for col in LGBM_params.columns if "params_lgbm" in col]
-
-# # Create a dictionary to store the column name and value from the first row
-# params_lgbm_dict = {col: LGBM_params.loc[1, col] for col in params_lgbm_columns}
-
-# # Print the dictionary
-# print(params_lgbm_dict)
-lgbm_pipe = best_classifier_pipe("models/study.db", "model_selection", "LGBM")
-params_lgbm_dict = lgbm_pipe["classifier"].get_params()
 
 # %%
 ########################################################
 # FEATURE SELECTION
 ########################################################
+# %% Extract best parameters for LGBM
+lgbm_pipe = best_classifier_pipe("models/study.db", "model_selection", "LGBM")
+params_lgbm_dict = lgbm_pipe["classifier"].get_params()
+
+
+# extract data
 target_string = next((string for string in images if "EVI" in string), None)
 
 with gw.config.update(ref_image=target_string):
@@ -330,14 +265,15 @@ with gw.config.update(ref_image=target_string):
         X = gw.extract(src, lu_complete)
         y = lu_complete["lc"]
         X = X[range(1, len(images) + 1)]
-        X.columns = [os.path.basename(f).split(".")[0] for f in images]
+        X_columns = [os.path.basename(f).split(".")[0] for f in images]
+
+X = pipeline_scale_clean.fit_transform(X)
 
 
-# %%
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=7, stratify=y
+)
 
-d_train = lgb.Dataset(X_train, label=y_train)
-d_test = lgb.Dataset(X_test, label=y_test)
 
 feature_importance_list = []
 
@@ -360,26 +296,25 @@ for metric in ["multi_error", "multi_logloss"]:
 
     # SHAP exaplainer
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X.values)
+    shap_values = explainer.shap_values(X)
 
     # feature importance
-    import matplotlib.pyplot as plt
-
     shap.summary_plot(
         shap_values,
-        X.values,
-        feature_names=[x.replace("_", ".") for x in X.columns],
+        X,
+        feature_names=[x.replace("_", ".") for x in X_columns],
         class_names=le.classes_,
         plot_type="bar",
         max_display=20,
+        plot_size=(10, 10),
     )
-    plt.savefig(f"outputs/significance_plot{metric}.png")  # Save the plot to a file
+    plt.legend(loc="lower center", bbox_to_anchor=(0.5, -0.2), ncol=2)
 
     # print top features
     vals = np.abs(shap_values).mean(0)
 
     feature_importance = pd.DataFrame(
-        list(zip(X_train.columns, sum(vals))),
+        list(zip(X_columns, sum(vals))),
         columns=["col_name", "feature_importance_vals"],
     )
     feature_importance.sort_values(
@@ -395,13 +330,13 @@ for metric in ["multi_error", "multi_logloss"]:
 # %%
 top_col_names = []
 
-while len(top_col_names) < 25:
-    # Get the top feature importance dataframe from the list
-    for row in range(len(feature_importance_list[0])):
+# Get the top feature importance dataframe from the list
+for row in range(len(feature_importance_list[0])):
+    if len(top_col_names) <= 25:
         feature_1 = images[feature_importance_list[0].iloc[row]["index"]]
         feature_2 = images[feature_importance_list[1].iloc[row]["index"]]
         # Get the top unique col_names from the current dataframe
-        unique_col_names = [feature_1, feature_2]
+        unique_col_names = set([feature_1, feature_2])
 
         # Add the unique col_names to the final list
         for col_name in unique_col_names:
@@ -475,6 +410,7 @@ for select_image in select_images:
 select_images = get_selected_ranked_images(
     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
 )
 # Get the image names
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
@@ -686,8 +622,15 @@ study.optimize(objective, n_trials=30)
 # Close the SQLite connection
 conn.close()
 # %%
+
+
+# %%
+
+########################################################
+# Classification performance with DimReduct and Random Forest Optimized
+########################################################
 # get optimal parameters
-conn = sqlite3.connect("models/study.db")
+# conn = sqlite3.connect("models/study.db")
 study = optuna.load_study(
     storage="sqlite:///models/study.db",
     study_name="umap_kmeans_selection",
@@ -699,14 +642,7 @@ top_dr_trial = study.best_trials[0].params
 top_dr_trial
 top_dr_trial.pop("classifier")
 top_dr_trial = {key.replace("rf_", ""): value for key, value in top_trial.items()}
-
 # %%
-
-########################################################
-# Classification performance with DimReduct and Random Forest Optimized
-########################################################
-from sklearn.model_selection import cross_val_score
-
 
 target_string = next((string for string in images if "EVI" in string), None)
 
@@ -763,6 +699,7 @@ pd.DataFrame({"y_pred_dr_results_CV": y_pred_dr}).to_csv(
 select_images = get_selected_ranked_images(
     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
 )
 # get same number of features
 select_images = select_images[
@@ -811,36 +748,21 @@ pd.DataFrame({"y_pred_feat_results_CV": y_pred_feat}).to_csv(
 ##################################################################
 # %%
 ########################################################
-# Class level prediction performance
+# Final Model & Class level prediction performance
 ########################################################
 
 # get optimal parameters
-conn = sqlite3.connect("models/study.db")
-study = optuna.load_study(
-    storage="sqlite:///models/study.db",
-    study_name="model_selection",
-)
+pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
 
-
-# %%
-# Define the pipeline steps
-pipeline_performance = Pipeline(
-    [
-        ("classifier", RandomForestClassifier(**top_trial)),
-    ]
-)
-
-# from sklearn.metrics import accuracy_score
 
 # get important image paths
 select_images = get_selected_ranked_images(
     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
 )
 # get same number of features
-select_images = select_images[0 : top_dr_trial["pca_n_components"]] + glob(
-    "./outputs/*kmean*.tif"
-)  # kmeans might not help
+select_images = select_images[0:25] + glob("./outputs/*kmean*.tif")
 
 # Get the image names
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
@@ -850,15 +772,15 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     # fit a model to get Xy used to train model
     X = gw.extract(src, lu_complete)
     y = lu_complete["lc"]
+    y.reset_index(drop=True, inplace=True)
     X = X[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
 
 X = pipeline_scale_clean.fit_transform(X)
 
-# %%
-
-
+# generate confusion matrix
 conf_matrix_list_of_arrays = []
+list_balanced_accuracy = []
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
 for i, (train_index, test_index) in enumerate(skf.split(X, y)):
     X_train, X_test = X[train_index], X[test_index]
@@ -867,8 +789,11 @@ for i, (train_index, test_index) in enumerate(skf.split(X, y)):
     pipeline_performance.fit(X_train, y_train)
     y_pred = pipeline_performance.predict(X_test)
 
+    balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+    list_balanced_accuracy.append(balanced_accuracy)
+
     # Get the class names from the label encoder
-    class_names = pipeline[
+    class_names = pipeline_performance[
         "classifier"
     ].classes_  # le.inverse_transform(pipeline_performance["classifier"].classes_)
 
@@ -880,7 +805,7 @@ conf_matrix_list_of_arrays
 
 # get aggregate confusion matrix
 agg_conf_matrix = np.sum(conf_matrix_list_of_arrays, axis=0)
-
+balanced_accuracy = balanced_accuracy.mean()
 
 # Calculate the row-wise sums
 row_sums = agg_conf_matrix.sum(axis=1, keepdims=True)
@@ -906,10 +831,12 @@ sns.heatmap(
 # Set labels and title
 plt.xlabel("Predicted")
 plt.ylabel("True")
-plt.title("Confusion Matrix")
+plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
+plt.savefig("outputs/final_class_perfomance_rf.png", bbox_inches="tight")
 
 # Show the plot
 plt.show()
+
 
 ###############################################
 # %% Compare to unsupervised
@@ -972,7 +899,13 @@ for i in range(0, len(files)):
     # Set labels and title
     plt.xlabel("Predicted")
     plt.ylabel("True")
-    plt.title("Confusion Matrix")
+    plt.title(
+        f"Confusion Matrix Kmean: {files[i]} \n Balance Accuracy = {round(balanced_accuracy_score(y, y_pred),3)}"
+    )
+    plt.savefig(
+        f"outputs/final_class_perfomance_{os.path.basename(files[i])}.png",
+        bbox_inches="tight",
+    )
 
     # Show the plot
     plt.show()
@@ -1057,6 +990,7 @@ neighbors = 5
 select_images = get_selected_ranked_images(
     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
 )
 # add unsupervised classification images
 select_images = select_images[

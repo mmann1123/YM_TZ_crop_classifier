@@ -2,6 +2,12 @@
 
 
 # %%
+# change directory first
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
+)
+from sklearn_helpers import best_classifier_pipe
+
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -12,6 +18,7 @@ from sklearn.model_selection import (
     KFold,
     cross_val_score,
     RandomizedSearchCV,
+    StratifiedKFold,
 )
 from sklearn.metrics import (
     confusion_matrix,
@@ -44,7 +51,6 @@ from sklearn.feature_selection import VarianceThreshold
 import umap
 from glob import glob
 
-# %%
 # how many images will be selected for importances
 select_how_many = 25
 
@@ -74,10 +80,6 @@ def get_selected_ranked_images(
     ]
     return list(ordered[f"top{select_how_many}"])
 
-
-os.chdir(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
-)
 
 # %%
 # read YM training data and clean
@@ -237,7 +239,6 @@ def objective(trial):
 # Create an SQLite connection
 conn = sqlite3.connect("models/study.db")
 
-
 # Create a study with SQLite storage
 storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
 
@@ -303,18 +304,19 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 
 # %% Extract best parameters for LGBM
 
-display(sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"])
-LGBM_params = sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"]
+# display(sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"])
+# LGBM_params = sorted_trials.loc[sorted_trials["params_classifier"] == "LGBM"]
 
-# Extract columns that contain the string "params_lgbm"
-params_lgbm_columns = [col for col in LGBM_params.columns if "params_lgbm" in col]
+# # Extract columns that contain the string "params_lgbm"
+# params_lgbm_columns = [col for col in LGBM_params.columns if "params_lgbm" in col]
 
-# Create a dictionary to store the column name and value from the first row
-params_lgbm_dict = {col: LGBM_params.loc[1, col] for col in params_lgbm_columns}
+# # Create a dictionary to store the column name and value from the first row
+# params_lgbm_dict = {col: LGBM_params.loc[1, col] for col in params_lgbm_columns}
 
-# Print the dictionary
-print(params_lgbm_dict)
-
+# # Print the dictionary
+# print(params_lgbm_dict)
+lgbm_pipe = best_classifier_pipe("models/study.db", "model_selection", "LGBM")
+params_lgbm_dict = lgbm_pipe["classifier"].get_params()
 
 # %%
 ########################################################
@@ -352,7 +354,7 @@ for metric in ["multi_error", "multi_logloss"]:
         d_train,
         10000,
         valid_sets=[d_test],
-        early_stopping_rounds=100,
+        early_stopping_rounds=200,
         verbose_eval=1000,
     )
 
@@ -692,10 +694,11 @@ study = optuna.load_study(
 )
 
 # Access the top trial
+print(f"Best trial: {study.best_trial.value:.3f}")
 top_dr_trial = study.best_trials[0].params
 top_dr_trial
-# top_dr_trial.pop("classifier")
-# top_dr_trial = {key.replace("rf_", ""): value for key, value in top_trial.items()}
+top_dr_trial.pop("classifier")
+top_dr_trial = {key.replace("rf_", ""): value for key, value in top_trial.items()}
 
 # %%
 
@@ -811,6 +814,15 @@ pd.DataFrame({"y_pred_feat_results_CV": y_pred_feat}).to_csv(
 # Class level prediction performance
 ########################################################
 
+# get optimal parameters
+conn = sqlite3.connect("models/study.db")
+study = optuna.load_study(
+    storage="sqlite:///models/study.db",
+    study_name="model_selection",
+)
+
+
+# %%
 # Define the pipeline steps
 pipeline_performance = Pipeline(
     [
@@ -845,8 +857,6 @@ X = pipeline_scale_clean.fit_transform(X)
 
 # %%
 
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import KFold, StratifiedKFold
 
 conf_matrix_list_of_arrays = []
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)

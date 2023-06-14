@@ -1,3 +1,4 @@
+# %%
 import optuna
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
@@ -8,6 +9,26 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
+from sklearn.model_selection import cross_val_score, StratifiedKFold
+
+
+def isolate_dr_dict(sorted_trials, desired_dr):
+    # get the desired classifier
+    class_params = sorted_trials.loc[sorted_trials["params_classifier"] == desired_dr]
+    class_params.reset_index(drop=True, inplace=True)
+
+    # Extract columns that contain the string "params_classifier"
+    params_columns = [
+        col for col in class_params.columns if f"params_%s" % desired_dr.lower() in col
+    ]
+    # Create a dictionary to store the column name and value from the first row
+    params_columns = {col: class_params.loc[0, col] for col in params_columns}
+    desired_params = {
+        key.replace(f"params_%s_" % desired_dr.lower(), ""): value
+        for key, value in params_columns.items()
+    }
+
+    return desired_params
 
 
 def isolate_classifier_dict(sorted_trials, desired_classifier):
@@ -21,7 +42,7 @@ def isolate_classifier_dict(sorted_trials, desired_classifier):
     if desired_classifier == "RandomForest":
         desired_classifier = "rf"
 
-    # Extract columns that contain the string "params_lgbm"
+    # Extract columns that contain the string "params_classifier"
     params_columns = [
         col
         for col in class_params.columns
@@ -38,6 +59,18 @@ def isolate_classifier_dict(sorted_trials, desired_classifier):
     if "c" in desired_params:
         value = desired_params.pop("c")
         desired_params["C"] = value
+    if "num_leaves" in desired_params:
+        value = desired_params.pop("num_leaves")
+        desired_params["num_leaves"] = int(value)
+    if "max_depth" in desired_params:
+        value = desired_params.pop("max_depth")
+        desired_params["max_depth"] = int(value)
+    if "min_samples_split" in desired_params:
+        value = desired_params.pop("min_samples_split")
+        desired_params["min_samples_split"] = int(value)
+    if "n_estimators" in desired_params:
+        value = desired_params.pop("n_estimators")
+        desired_params["n_estimators"] = int(value)
 
     return desired_params
 
@@ -129,19 +162,11 @@ def classifier_objective(trial, X, y):
             num_leaves=lgbm_num_leaves,
         )
 
-    # Fetch & split data.
-    X_train, X_val, y_train, y_val = train_test_split(X, y, random_state=0, stratify=y)
+    # Perform cross-validation
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scores = cross_val_score(classifier_obj, X, y, cv=skf, scoring="balanced_accuracy")
 
-    # Fit classifier.
-    classifier_obj.fit(X_train, y_train)
-    y_pred = classifier_obj.predict(X_val)
-
-    # Calculate error metric.
-    accuracy = balanced_accuracy_score(
-        y_val, y_pred
-    )  # Use accuracy as the error metric
-
-    return accuracy  # An objective value linked with the Trial object.
+    return scores.mean()  # Return the average balanced accuracy across folds
 
 
 # %%

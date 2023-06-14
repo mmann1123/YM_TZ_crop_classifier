@@ -308,7 +308,6 @@ for metric in ["multi_error", "multi_logloss"]:
         max_display=20,
         plot_size=(10, 10),
     )
-    plt.legend(loc="lower center", bbox_to_anchor=(0.5, -0.2), ncol=2)
 
     # print top features
     vals = np.abs(shap_values).mean(0)
@@ -327,7 +326,6 @@ for metric in ["multi_error", "multi_logloss"]:
     )
 
 # Iterate until we have 25 unique col_names or until there are no more feature importance dataframes
-# %%
 top_col_names = []
 
 # Get the top feature importance dataframe from the list
@@ -515,21 +513,13 @@ for i in range(10, 21, 5):
 ########################################################
 
 # get optimal parameters
-conn = sqlite3.connect("models/study.db")
-study = optuna.load_study(
-    storage="sqlite:///models/study.db",
-    study_name="model_selection",
-)
 
+classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
 
-# Access the top trial
-top_trial = study.best_trials[0].params
-top_trial.pop("classifier")
-top_trial = {key.replace("rf_", ""): value for key, value in top_trial.items()}
-top_trial
 
 # %% get cleaned data
 
+# get evi example
 target_string = next((string for string in images if "EVI" in string), None)
 
 with gw.config.update(ref_image=target_string):
@@ -551,19 +541,16 @@ pipeline_scale_clean = Pipeline(
 
 X = pipeline_scale_clean.fit_transform(X)
 
-
-# Define the pipeline steps for optimzer
-umap_pipeline = Pipeline(
-    [
-        ("umap", umap.UMAP()),
-        ("classifier", RandomForestClassifier(**top_trial)),
-    ]
+# %%
+# Create the dimensionality reduction pipeline
+dr_pipeline = Pipeline(
+    [("dim_reduction", PCA(n_components=5)), ("clf", classifier_pipe)]
 )
-# %% find optimal umap parameters
 
 
+#  find optimal umap parameters
 # Define the objective function for Optuna
-def objective(trial):
+def dr_objective(trial):
     # Define the parameter space for dimensionality reduction
     dr_method = trial.suggest_categorical("dr_method", ["PCA", "UMAP"])
 
@@ -590,14 +577,6 @@ def objective(trial):
     return score
 
 
-# Create the dimensionality reduction pipeline
-dr_pipeline = Pipeline(
-    [
-        ("dim_reduction", PCA(n_components=5)),
-        ("classifier", RandomForestClassifier(**top_trial)),
-    ]
-)
-
 # Create an SQLite connection
 conn = sqlite3.connect("models/study.db")
 
@@ -617,31 +596,25 @@ study = optuna.create_study(
 )
 
 # Optimize the objective function
-study.optimize(objective, n_trials=30)
+study.optimize(dr_objective, n_trials=50)
 
 # Close the SQLite connection
 conn.close()
-# %%
-
 
 # %%
 
 ########################################################
 # Classification performance with DimReduct and Random Forest Optimized
 ########################################################
-# get optimal parameters
-# conn = sqlite3.connect("models/study.db")
-study = optuna.load_study(
-    storage="sqlite:///models/study.db",
-    study_name="umap_kmeans_selection",
-)
 
-# Access the top trial
-print(f"Best trial: {study.best_trial.value:.3f}")
-top_dr_trial = study.best_trials[0].params
-top_dr_trial
-top_dr_trial.pop("classifier")
-top_dr_trial = {key.replace("rf_", ""): value for key, value in top_trial.items()}
+# get optimal parameters
+classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
+
+# Create a study with SQLite storage
+storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
+study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
+
+
 # %%
 
 target_string = next((string for string in images if "EVI" in string), None)
@@ -673,7 +646,7 @@ pipeline = Pipeline(
             "dim_reduction",
             PCA(n_components=top_dr_trial["pca_n_components"], random_state=42),
         ),
-        ("classifier", RandomForestClassifier(**top_trial)),
+        ("classifier", classifier_pipe),
     ]
 )
 
@@ -692,6 +665,8 @@ y_pred_dr
 pd.DataFrame({"y_pred_dr_results_CV": y_pred_dr}).to_csv(
     "outputs/y_pred_dr_results.csv"
 )
+
+print(f"Mean accuracy score: {y_pred_dr.mean():.3}")
 
 # %% Compare to feature selection
 
@@ -753,7 +728,7 @@ pd.DataFrame({"y_pred_feat_results_CV": y_pred_feat}).to_csv(
 
 # get optimal parameters
 pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
-
+pipeline_performance
 
 # get important image paths
 select_images = get_selected_ranked_images(

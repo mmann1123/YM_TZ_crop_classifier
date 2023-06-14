@@ -154,6 +154,64 @@ for year in list(range(2022, 2024)):
             task.start()
 
 
+##################################################################
+# %% HSV
+
+
+# Set parameters
+bands = ["B4", "B3", "B2"]
+# date_pattern = "mm_dd_yyyy"  # dd: day, MMM: month (JAN), y: year
+folder = "Tanzania_Fields"
+
+
+# extra = dict(sat="Sen_TOA")
+CLOUD_FILTER = 75
+
+
+# %% MONTHLY COMPOSITES
+
+for year in list(range(2022, 2024)):
+    for month in list(range(1, 13, 1)):
+        print("year ", str(year), " month ", str(month))
+        dt = pendulum.datetime(year, month, 1)
+
+        collection = get_s2A_SR_sr_cld_col(
+            site,
+            dt.start_of("month").strftime(r"%Y-%m-%d"),
+            dt.end_of("month").strftime(r"%Y-%m-%d"),
+            CLOUD_FILTER=CLOUD_FILTER,
+        )
+
+        s2_sr = (
+            collection.map(add_cld_shdw_mask)
+            .map(apply_cld_shdw_mask)
+            .select(bands)
+            .median()
+            .divide(10000)
+            .rgbToHsv()
+            .clip(site)
+        )
+        # print(s2_sr.getInfo())
+        hue = s2_sr.select("hue").multiply(1000)
+
+        hue = hue.unmask(9999)
+
+        hue = geetools.batch.utils.convertDataType("uint16")(hue)
+
+        # # export clipped result in Tiff
+
+        img_name = "S2_SR_hue" + "_M_" + str(year) + "_" + str(month).zfill(2)
+        export_config = {
+            "scale": 10,
+            "maxPixels": 5000000000,
+            "driveFolder": folder,
+            "region": site,
+            "crs": crs,
+        }
+        task = ee.batch.Export.image(hue, img_name, export_config)
+        task.start()
+
+
 # %% restrict training data to bounds
 import geopandas as gpd
 

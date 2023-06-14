@@ -33,7 +33,7 @@ missing_data = 9999
 
 # %%
 
-for band_name in ["B11", "B12"]:  # "B2", "B5", "B6", "EVI",
+for band_name in ["hue"]:  # "B11", "B12" "B2", "B5", "B6", "EVI",
     files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/{band_name}"
     file_glob = f"{files}/*.tif"
     strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m.tif"

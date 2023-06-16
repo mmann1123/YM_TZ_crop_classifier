@@ -130,7 +130,7 @@ def get_selected_ranked_images(
     return list(ordered[f"top{select_how_many}"])
 
 
-def classifier_objective(trial, X, y):
+def classifier_objective(trial, X, y, classifier_override=None):
     # Define the algorithm for optimization.
 
     # Select classifier.
@@ -138,28 +138,50 @@ def classifier_objective(trial, X, y):
         "classifier", ["SVC", "RandomForest", "LGBM"]
     )
 
+    if classifier_override is not None:
+        print(f"Overriding classifier using: {classifier_override}")
+        classifier_name = classifier_override
+
     if classifier_name == "SVC":
         svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
         svc_kernel = trial.suggest_categorical("svc_kernel", ["linear", "rbf", "poly"])
         svc_degree = trial.suggest_int("svc_degree", 1, 5)
-        classifier_obj = SVC(C=svc_c, kernel=svc_kernel, degree=svc_degree)
+        svc_gamma = trial.suggest_categorical("svc_gamma", ["scale", "auto"])
+        classifier_obj = SVC(
+            C=svc_c, kernel=svc_kernel, degree=svc_degree, gamma=svc_gamma
+        )
+
     elif classifier_name == "RandomForest":
         rf_max_depth = trial.suggest_int("rf_max_depth", 2, 32)
         rf_n_estimators = trial.suggest_int("rf_n_estimators", 100, 1000, step=100)
         rf_min_samples_split = trial.suggest_int("rf_min_samples_split", 2, 10)
+        rf_min_samples_leaf = trial.suggest_int("rf_min_samples_leaf", 1, 10)
+        rf_max_features = trial.suggest_categorical("rf_max_features", ["auto", "sqrt"])
+
         classifier_obj = RandomForestClassifier(
             max_depth=rf_max_depth,
             n_estimators=rf_n_estimators,
             min_samples_split=rf_min_samples_split,
+            min_samples_leaf=rf_min_samples_leaf,
+            max_features=rf_max_features,
         )
+
+    # ranges from https://docs.aws.amazon.com/sagemaker/latest/dg/lightgbm-tuning.html
     else:
-        lgbm_max_depth = trial.suggest_int("lgbm_max_depth", 2, 32)
+        lgbm_max_depth = trial.suggest_int("lgbm_max_depth", 10, 100)
         lgbm_learning_rate = trial.suggest_float("lgbm_learning_rate", 0.01, 0.1)
+        lgbm_bagging_fraction = trial.suggest_float("lgbm_bagging_fraction", 0.1, 1)
+        lgbm_bagging_freq = trial.suggest_int("lgbm_bagging_freq", 0, 10)
         lgbm_num_leaves = trial.suggest_int("lgbm_num_leaves", 10, 100)
+        lgbm_min_data_in_leaf = trial.suggest_int("lgbm_min_data_in_leaf", 10, 200)
+
         classifier_obj = LGBMClassifier(
             max_depth=lgbm_max_depth,
             learning_rate=lgbm_learning_rate,
             num_leaves=lgbm_num_leaves,
+            bagging_fraction=lgbm_bagging_fraction,
+            bagging_freq=lgbm_bagging_freq,
+            min_data_in_leaf=lgbm_min_data_in_leaf,
         )
 
     # Perform cross-validation

@@ -155,17 +155,19 @@ images = sorted(glob("./data/**/annual_features/**/**.tif"))
 images = [item for item in images if "(Case Conflict)" not in item]
 
 # %%
+
+
+# %%
 ########################################################
-# MODEL SELECTION
+# MODEL SELECTION for feature selection
 ########################################################
 # uses select_how_many from top of script
 
 target_string = next((string for string in images if "EVI" in string), None)
-
 with gw.config.update(ref_image=target_string):
     with gw.open(images, nodata=9999, stack_dim="band") as src:
         # fit a model to get Xy used to train model
-        df = gw.extract(src, lu_complete)
+        df = gw.extract(src, lu_complete, verbose=1)
         y = lu_complete["lc"]
         X = df[range(1, len(images) + 1)]
         X.columns = [os.path.basename(f).split(".")[0] for f in images]
@@ -174,7 +176,7 @@ with gw.config.update(ref_image=target_string):
 X = pipeline_scale_clean.fit_transform(X)
 
 
-# %% Create optuna classifier study
+#   Create optuna classifier study
 
 # Create an SQLite connection
 conn = sqlite3.connect("models/study.db")
@@ -184,21 +186,26 @@ storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
 
 # delete any existing study
 try:
-    study = optuna.load_study(study_name="model_selection", storage=storage)
-    optuna.delete_study(study_name="model_selection", storage=storage)
+    study = optuna.load_study(
+        study_name="model_selection_feature_selection", storage=storage
+    )
+    optuna.delete_study(study_name="model_selection_feature_selection", storage=storage)
 except:
     pass
 
 # create new study
 study = optuna.create_study(
-    storage=storage, study_name="model_selection", direction="maximize"
+    storage=storage,
+    study_name="model_selection_feature_selection",
+    direction="maximize",
 )
 
 
 # Optimize the objective function
 study.optimize(
-    lambda trial: classifier_objective(trial, X, y),
-    n_trials=150,
+    lambda trial: classifier_objective(trial, X, y, classifier_override="LGBM"),
+    # n_trials=150,
+    n_jobs=2,
 )
 
 # Close the SQLite connection
@@ -216,10 +223,12 @@ for key, value in trial.params.items():
     print("    {}: {}".format(key, value))
 
 # write params to csv
-pd.DataFrame(study.trials_dataframe()).to_csv("models/optuna_study_model_selection.csv")
+pd.DataFrame(study.trials_dataframe()).to_csv(
+    "models/optuna_study_model_selection_model_selection_feature_selection.csv"
+)
 
 
-# %% Save results
+#  Save results
 
 conn = sqlite3.connect("models/study.db")
 
@@ -249,13 +258,16 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 
 # %%
 ########################################################
-# FEATURE SELECTION
+# FEATURE SELECTION 2
 ########################################################
+
 # %% Extract best parameters for LGBM
-lgbm_pipe = best_classifier_pipe("models/study.db", "model_selection", "LGBM")
+lgbm_pipe = best_classifier_pipe(
+    "models/study.db", "model_selection_feature_selection", "LGBM"
+)
 params_lgbm_dict = lgbm_pipe["classifier"].get_params()
 
-
+# %%
 # extract data
 target_string = next((string for string in images if "EVI" in string), None)
 
@@ -264,108 +276,166 @@ with gw.config.update(ref_image=target_string):
         # fit a model to get Xy used to train model
         X = gw.extract(src, lu_complete)
         y = lu_complete["lc"]
+        y.reset_index(drop=True, inplace=True)
         X = X[range(1, len(images) + 1)]
         X_columns = [os.path.basename(f).split(".")[0] for f in images]
 
 X = pipeline_scale_clean.fit_transform(X)
+# %%
 
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=7, stratify=y
-)
-
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=7)
 
 feature_importance_list = []
+shaps_importance_list = []
+for train_index, test_index in skf.split(X, y):
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
 
-for metric in ["multi_error", "multi_logloss"]:
-    # Train the LightGBM model
-    params = params_lgbm_dict.copy()
-    params["objective"] = "multiclass"
-    params["metric"] = metric
-    params["num_classes"] = len(lu_complete["lc"].unique())
-    d_train = lgb.Dataset(X_train, label=y_train)
-    d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
-    model = lgb.train(
-        params,
-        d_train,
-        10000,
-        valid_sets=[d_test],
-        early_stopping_rounds=200,
-        verbose_eval=1000,
-    )
+    for metric in ["multi_error", "multi_logloss"]:
+        # Train the LightGBM model
+        params = params_lgbm_dict.copy()
+        params["objective"] = "multiclass"
+        params["metric"] = metric
+        params["num_classes"] = len(lu_complete["lc"].unique())
+        d_train = lgb.Dataset(X_train, label=y_train)
+        d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
+        model = lgb.train(
+            params,
+            d_train,
+            10000,
+            valid_sets=[d_test],
+            early_stopping_rounds=200,
+            verbose_eval=1000,
+        )
 
-    # SHAP exaplainer
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)
+        # SHAP exaplainer
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X)
+        shaps_importance_list.append(shap_values)
 
-    # feature importance
-    shap.summary_plot(
-        shap_values,
-        X,
-        feature_names=[x.replace("_", ".") for x in X_columns],
-        class_names=le.classes_,
-        plot_type="bar",
-        max_display=20,
-        plot_size=(10, 10),
-    )
+        # feature importance
+        shap.summary_plot(
+            shap_values,
+            X,
+            feature_names=[x.replace("_", ".") for x in X_columns],
+            class_names=le.classes_,
+            plot_type="bar",
+            max_display=20,
+            plot_size=(10, 10),
+        )
 
-    # print top features
-    vals = np.abs(shap_values).mean(0)
+        # print top features
+        vals = np.abs(shap_values).mean(0)
 
-    feature_importance = pd.DataFrame(
-        list(zip(X_columns, sum(vals))),
-        columns=["col_name", "feature_importance_vals"],
-    )
-    feature_importance.sort_values(
-        by=["feature_importance_vals"], ascending=False, inplace=True
-    )
-    feature_importance.head(20)
-    # Store the feature importance dataframe in the list
-    feature_importance_list.append(
-        pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
-    )
+        feature_importance = pd.DataFrame(
+            list(zip(X_columns, sum(vals))),
+            columns=["col_name", "feature_importance_vals"],
+        )
+        feature_importance.sort_values(
+            by=["feature_importance_vals"], ascending=False, inplace=True
+        )
+        # Store the feature importance dataframe in the list
+        feature_importance_list.append(
+            pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
+        )
 
-# Iterate until we have 25 unique col_names or until there are no more feature importance dataframes
-top_col_names = []
+# %% Calculate mean shapes values GIVES SAME ANSWER AS SUMMING SHAPS
 
-# Get the top feature importance dataframe from the list
-for row in range(len(feature_importance_list[0])):
-    if len(top_col_names) <= 25:
-        feature_1 = images[feature_importance_list[0].iloc[row]["index"]]
-        feature_2 = images[feature_importance_list[1].iloc[row]["index"]]
-        # Get the top unique col_names from the current dataframe
-        unique_col_names = set([feature_1, feature_2])
+mean_shaps = [sum(elements) for elements in zip(*shaps_importance_list)]
+# feature importance
+# %%
 
-        # Add the unique col_names to the final list
-        for col_name in unique_col_names:
-            if col_name not in top_col_names:
-                top_col_names.append(col_name)
-# Print the final list of top col_names
-print(top_col_names)
-out = pd.DataFrame({f"top{select_how_many}": top_col_names})
-out.reset_index(inplace=True)
-out.columns = ["rank", f"top{select_how_many}"]
+summary = shap.summary_plot(
+    mean_shaps,
+    X,
+    feature_names=[x.replace("_", ".") for x in X_columns],
+    class_names=le.classes_,
+    plot_type="bar",
+    max_display=20,
+    plot_size=(10, 10),
+    show=False,
+)
+
+plt.savefig("outputs/mean_shaps_importance.png", bbox_inches="tight")
+
+# top_indices = summary.data.iloc[:select_how_many].index.tolist()
+# print(top_indices)
+
+# %%
+# Summarize results by summing importance values
+# Concatenate the dataframes vertically
+merged_df = pd.concat(feature_importance_list, ignore_index=True)
+
+# Group by 'col_name' and sum 'feature_importance_vals'
+summed_feature_importance = (
+    merged_df.groupby("col_name")["feature_importance_vals"]
+    .sum()
+    .reset_index()
+    .sort_values(by="feature_importance_vals", ascending=False)
+)
+
+# Print the resulting dataframe
+print(summed_feature_importance)
+
+# Set the figure size
+plt.figure(figsize=(10, 50))
+
+# Create the bar plot
+sns.barplot(x="feature_importance_vals", y="col_name", data=summed_feature_importance)
+
+# Set the plot title and labels
+plt.title("Feature Importance")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+plt.savefig("outputs/shap_feature_importance.png", bbox_inches="tight")
+# Show the plot
+plt.show()
+
+
+# Set the figure size
+plt.figure(figsize=(10, 20))
+
+# Create the bar plot
+sns.barplot(
+    x="feature_importance_vals", y="col_name", data=summed_feature_importance[0:25]
+)
+
+# Set the plot title and labels
+plt.title("Feature Importance")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+plt.savefig("outputs/shap_feature_importance_top_25.png", bbox_inches="tight")
+# Show the plot
+plt.show()
+
+
+# %%
+# 25 unique col_names or until there are no more feature importance dataframes
+top_col_names = summed_feature_importance[0:select_how_many]
+top_col_names.reset_index(inplace=True, drop=True)
+top_col_names.rename(columns={"col_name": f"top{select_how_many}"}, inplace=True)
+# add paths
+top_col_names[f"top25_paths"] = [
+    glob(f"./data/**/annual_features/**/*{x}.tif")[0] for x in top_col_names["top25"]
+]
 
 # NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
-out = out[~out["top25"].str.contains("kurtosis")]
-out = out[~out["top25"].str.contains("mean_change")]
+# out = out[~out["top25"].str.contains("kurtosis")]
+# out = out[~out["top25"].str.contains("mean_change")]
 
-out.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
+top_col_names.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
 
 
 # %%
 # resample all selected features to 10m and set smallest dtype possible
 # Read in the list of selected images
-
-
 select_images = list(
     pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
         f"top{select_how_many}"
     ].values
 )
 
-
-# %% Reduce image size and create 10m resolution images
+# Reduce image size and create 10m resolution images
 
 os.makedirs("./outputs/selected_images_10m", exist_ok=True)
 
@@ -391,14 +461,106 @@ for select_image in select_images:
             select_image,
             nodata=9999,
             resampling="bilinear",
-            dtype=np.float32,
+            # dtype=np.float32,
         ) as src:
             src.gw.save(
                 f"./outputs/selected_images_10m/{os.path.basename(select_image)}",
                 overwrite=True,
+                compress="lzw",
             )
 
 
+# %%
+########################################################
+# MODEL SELECTION
+########################################################
+# uses select_how_many from top of script
+select_images = list(
+    pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
+        f"top{select_how_many}"
+    ].values25
+)
+
+with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+    # fit a model to get Xy used to train model
+    df = gw.extract(src, lu_complete)
+    y = lu_complete["lc"]
+    X = df[range(1, len(select_images) + 1)]
+    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+
+
+X = pipeline_scale_clean.fit_transform(X)
+
+
+# %% Create optuna classifier study
+
+# Create an SQLite connection
+conn = sqlite3.connect("models/study.db")
+
+# Create a study with SQLite storage
+storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
+
+# delete any existing study
+try:
+    study = optuna.load_study(study_name="model_selection", storage=storage)
+    optuna.delete_study(study_name="model_selection", storage=storage)
+except:
+    pass
+
+# create new study
+study = optuna.create_study(
+    storage=storage, study_name="model_selection", direction="maximize"
+)
+
+
+# Optimize the objective function
+study.optimize(lambda trial: classifier_objective(trial, X, y), n_trials=150, n_jobs=12)
+
+# Close the SQLite connection
+conn.close()
+
+print("Number of finished trials: {}".format(len(study.trials)))
+
+print("Best trial:")
+trial = study.best_trial
+
+print("  Value: {}".format(trial.value))
+
+print("  Params: ")
+for key, value in trial.params.items():
+    print("    {}: {}".format(key, value))
+
+# write params to csv
+pd.DataFrame(study.trials_dataframe()).to_csv("models/optuna_study_model_selection.csv")
+
+
+# Save results
+conn = sqlite3.connect("models/study.db")
+
+study = optuna.load_study(
+    storage="sqlite:///models/study.db",
+    study_name="model_selection",
+)
+
+
+# Access the top trials
+top_trials = study.best_trials
+
+# Iterate over the top trials and print their scores and parameters
+for i, trial in enumerate(top_trials):
+    print(f"Rank {i+1}: Score = {trial.value}")
+    print(f"Parameters: {trial.params}")
+
+# Get the DataFrame of all trials
+trials_df = study.trials_dataframe()
+
+# Sort the trials by the objective value in ascending order
+sorted_trials = trials_df.sort_values("value", ascending=False)
+
+# Print the ranked listing of trials
+print(sorted_trials[["number", "value", "params_classifier"]])
+
+# %%
 ########################################################
 # UNSUPERVISED CLASIFICATION
 ########################################################

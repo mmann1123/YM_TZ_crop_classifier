@@ -324,21 +324,6 @@ for train_index, test_index in skf.split(X, y):
             plot_size=(10, 10),
         )
 
-        # print top features
-        vals = np.abs(shap_values).mean(0)
-
-        feature_importance = pd.DataFrame(
-            list(zip(X_columns, sum(vals))),
-            columns=["col_name", "feature_importance_vals"],
-        )
-        feature_importance.sort_values(
-            by=["feature_importance_vals"], ascending=False, inplace=True
-        )
-        # Store the feature importance dataframe in the list
-        feature_importance_list.append(
-            pd.DataFrame(feature_importance).iloc[:50].reset_index(drop=False)
-        )
-
 # %% Calculate mean shapes values GIVES SAME ANSWER AS SUMMING SHAPS
 
 mean_shaps = [sum(elements) for elements in zip(*shaps_importance_list)]
@@ -360,53 +345,19 @@ plt.savefig("outputs/mean_shaps_importance.png", bbox_inches="tight")
 
 # top_indices = summary.data.iloc[:select_how_many].index.tolist()
 # print(top_indices)
-
 # %%
-# Summarize results by summing importance values
-# Concatenate the dataframes vertically
-merged_df = pd.concat(feature_importance_list, ignore_index=True)
 
-# Group by 'col_name' and sum 'feature_importance_vals'
-summed_feature_importance = (
-    merged_df.groupby("col_name")["feature_importance_vals"]
-    .sum()
-    .reset_index()
-    .sort_values(by="feature_importance_vals", ascending=False)
+# print top features
+vals = np.abs(mean_shaps).mean(0)
+
+feature_importance = pd.DataFrame(
+    list(zip(X_columns, sum(vals))),
+    columns=["col_name", "feature_importance_vals"],
 )
-
-# Print the resulting dataframe
-print(summed_feature_importance)
-
-# Set the figure size
-plt.figure(figsize=(10, 50))
-
-# Create the bar plot
-sns.barplot(x="feature_importance_vals", y="col_name", data=summed_feature_importance)
-
-# Set the plot title and labels
-plt.title("Feature Importance")
-plt.xlabel("Importance")
-plt.ylabel("Feature")
-plt.savefig("outputs/shap_feature_importance.png", bbox_inches="tight")
-# Show the plot
-plt.show()
-
-
-# Set the figure size
-plt.figure(figsize=(10, 20))
-
-# Create the bar plot
-sns.barplot(
-    x="feature_importance_vals", y="col_name", data=summed_feature_importance[0:25]
+feature_importance.sort_values(
+    by=["feature_importance_vals"], ascending=False, inplace=True
 )
-
-# Set the plot title and labels
-plt.title("Feature Importance")
-plt.xlabel("Importance")
-plt.ylabel("Feature")
-plt.savefig("outputs/shap_feature_importance_top_25.png", bbox_inches="tight")
-# Show the plot
-plt.show()
+feature_importance.head(20)
 
 
 # %%

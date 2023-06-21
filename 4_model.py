@@ -158,7 +158,7 @@ images = [item for item in images if "(Case Conflict)" not in item]
 
 # %%
 ########################################################
-# MODEL SELECTION for feature selection
+# MODEL SELECTION for feature selection using LGBM
 ########################################################
 # uses select_how_many from top of script
 
@@ -203,7 +203,7 @@ study = optuna.create_study(
 # Optimize the objective function
 study.optimize(
     lambda trial: classifier_objective(trial, X, y, classifier_override="LGBM"),
-    # n_trials=150,
+    n_trials=200,
     n_jobs=2,
 )
 
@@ -282,6 +282,8 @@ with gw.config.update(ref_image=target_string):
 X = pipeline_scale_clean.fit_transform(X)
 # %%
 
+# THIS STRATIFICATION SEEMS TO BE A PROBLEM, NOT GETTING BEST MODEL
+
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=7)
 
 feature_importance_list = []
@@ -328,7 +330,7 @@ for train_index, test_index in skf.split(X, y):
 mean_shaps = [sum(elements) for elements in zip(*shaps_importance_list)]
 # feature importance
 #
-
+# %%
 summary = shap.summary_plot(
     mean_shaps,
     X,
@@ -382,7 +384,7 @@ explainer2 = shap.Explainer(model, X)
 shap_values2 = explainer(X)
 
 shap.plots.beeswarm(explainer2)
-# %%
+# %% write out top features
 
 # top_indices = summary.data.iloc[:select_how_many].index.tolist()
 # print(top_indices)
@@ -418,6 +420,7 @@ top_col_names[f"top{select_how_many}"] = [
 
 top_col_names.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
 top_col_names
+
 
 # %%
 

@@ -104,7 +104,7 @@ hexgrid.to_file(
 
 # %%
 sample = gpd.read_file(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth.gpkg"
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth_cleaned.gpkg"
 ).to_crs(hexgrid.crs)
 gpd.overlay(sample, hexgrid, how="intersection").to_file(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_data.gpkg",
@@ -113,6 +113,7 @@ gpd.overlay(sample, hexgrid, how="intersection").to_file(
 ##############################################################
 # CLASS DIFFERENTIATION CHECK
 ###############################################################
+
 # %%  Figure out how to reassign similar classes
 import geopandas as gpd
 from sklearn.decomposition import IncrementalPCA, PCA
@@ -122,7 +123,7 @@ import os
 from dask.distributed import Client, LocalCluster
 
 os.chdir(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/"
 )
 
 missing_data = 9999
@@ -132,21 +133,26 @@ files = sorted(glob("./data/**/annual_features/**/**.tif"))
 # Get the names of the bands
 band_names = [os.path.basename(f).split(".")[0] for f in files]
 # Read the training data
-data = gpd.read_file("./data/training_data.gpkg")
+data = gpd.read_file("./data/training_cleaned.geojson")
+data["Primary land cover"].unique()
+# %%
+
 # Only keep the land cover and geometry columns
 data = data[["Primary land cover", "geometry"]]
-
 # restrict land cover classes
+
+# 'vegetables','other', 'speciality_crops', 'eggplant',  'tree_crops', '', 'okra', '', 'don_t_know'
+
 keep = [
-    "Cassava",
-    "Maize (Mahindi)*",
-    "Rice (Mpunga)*",
-    "Cotton (Pamba)*",
-    "Sorghum (Mtama)*",
-    "Millet (Ulezi)*",
-    "Soybeans*",
-    "Sunflower (Alizeti)*",
-    "Other grains (examples: wheat, barley, oats, rye…)",
+    "cassava",
+    "maize",
+    "rice",
+    "cotton",
+    "sorghum",
+    "millet",
+    "soybeans",
+    "sunflower",
+    "other_grain",
 ]
 data.loc[data["Primary land cover"].isin(keep) == False, "Primary land cover"] = "Other"
 data["lc_name"] = data["Primary land cover"]
@@ -162,9 +168,8 @@ lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"
 lu_complete["lc_name"]
 
 
-# %%
+# %% GET IMAGES EXTRACTED
 
-# get an EVI example
 target_string = next((string for string in files if "EVI" in string), None)
 
 with gw.config.update(ref_image=target_string):
@@ -185,6 +190,7 @@ with gw.config.update(ref_image=target_string):
         print(X)
 
 # %% Calc cluster assignments
+
 from sklearn.cluster import KMeans
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
@@ -256,8 +262,7 @@ for state in range(0, 30):
 print(result_dict)
 
 
-# %%
-# Visualize
+# %%  VISUALIZE
 
 # Convert the dictionary to a pandas DataFrame
 data2 = []

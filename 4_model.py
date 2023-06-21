@@ -57,7 +57,7 @@ import umap
 from glob import glob
 
 # how many images will be selected for importances
-select_how_many = 25
+select_how_many = 50
 
 
 from glob import glob
@@ -79,7 +79,7 @@ pipeline_scale_clean = Pipeline(
 # read YM training data and clean
 import geopandas as gpd
 
-lu = gpd.read_file("./data/training_data.gpkg")
+lu = gpd.read_file("./data/training_cleaned.geojson")
 np.unique(lu["Primary land cover"])
 
 # restrict land cover classes
@@ -101,22 +101,21 @@ print(lu["Primary land cover"].value_counts())
 
 lu["lc_name"] = lu["Primary land cover"]
 keep = [
-    "Rice (Mpunga)*",
-    "Maize (Mahindi)*",
-    "Cassava",
-    # "Vegetables and pulses (examples: eggplant, potatoes, tomatoes, okra, onion, yam, beans, cowpea, chickpeas, lentils, peas…)",
-    "Sunflower (Alizeti)*",
-    "Sorghum (Mtama)*",
-    # "Other (later, specify in optional notes)",
-    "Cotton (Pamba)*",
-    # "Specialty crops (cocoa, coffee, tea, sugar, and spices)",
-    # "Okra ",
-    # "Eggplant",
-    # "Other grains (examples: wheat, barley, oats, rye…)",
-    # "Soybeans*",
-    # "Tree crops (examples: banana, coconut, guava, fig, jackfruit, palm oil, lemon, mango, tropical almond, neem tree...)",
-    # "Don't know",
-    # "Millet (Ulezi)*",
+    "rice",
+    "maize",
+    "cassava",
+    # "vegetables",
+    "sunflower",
+    "sorghum",
+    # "other",
+    "cotton",
+    # "speciality_crops",
+    # "okra ",
+    # "eggplant",
+    # "soybeans",
+    # "tree_crops",
+    # "millet",
+    # "other_grain",
 ]
 drop = [
     "Don't know",
@@ -229,12 +228,12 @@ pd.DataFrame(study.trials_dataframe()).to_csv(
 
 
 #  Save results
-
+# %%
 conn = sqlite3.connect("models/study.db")
 
 study = optuna.load_study(
     storage="sqlite:///models/study.db",
-    study_name="model_selection",
+    study_name="model_selection_feature_selection",
 )
 
 
@@ -324,11 +323,11 @@ for train_index, test_index in skf.split(X, y):
             plot_size=(10, 10),
         )
 
-# %% Calculate mean shapes values GIVES SAME ANSWER AS SUMMING SHAPS
+#  Calculate mean shapes values
 
 mean_shaps = [sum(elements) for elements in zip(*shaps_importance_list)]
 # feature importance
-# %%
+#
 
 summary = shap.summary_plot(
     mean_shaps,
@@ -343,9 +342,51 @@ summary = shap.summary_plot(
 
 plt.savefig("outputs/mean_shaps_importance.png", bbox_inches="tight")
 
+# %% By default the features are ordered using shap_values.abs.mean(0), which is the mean absolute value of the SHAP values for each feature. This order however places more emphasis on broad average impact, and less on rare but high magnitude impacts. If we want to find features with high impacts for individual people we can instead sort by the max absolute value:
+
+shap.plots.bar(explainer.abs.max(0))
+
+# summary = shap.summary_plot(
+#     mean_shaps.abs.max(0),
+#     X,
+#     feature_names=[x.replace("_", ".") for x in X_columns],
+#     class_names=le.classes_,
+#     plot_type="bar",
+#     max_display=20,
+#     plot_size=(10, 10),
+#     show=False,
+# )
+
+# %% feature clustering to find redundant features
+# https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
+
+clustering = shap.utils.hclust(
+    X, y
+)  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
+# %%
+summary = shap.summary_plot(
+    mean_shaps,
+    X,
+    feature_names=[x.replace("_", ".") for x in X_columns],
+    class_names=le.classes_,
+    plot_type="bar",
+    max_display=20,
+    plot_size=(10, 10),
+    show=False,
+    clustering=clustering,
+)
+
+
+# %%
+explainer2 = shap.Explainer(model, X)
+shap_values2 = explainer(X)
+
+shap.plots.beeswarm(explainer2)
+# %%
+
 # top_indices = summary.data.iloc[:select_how_many].index.tolist()
 # print(top_indices)
-# %%
+#
 
 # print top features
 vals = np.abs(mean_shaps).mean(0)
@@ -360,14 +401,15 @@ feature_importance.sort_values(
 feature_importance.head(20)
 
 
-# %%
-# 25 unique col_names or until there are no more feature importance dataframes
-top_col_names = summed_feature_importance[0:select_how_many]
+#
+# top unique col_names or until there are no more feature importance dataframes
+top_col_names = feature_importance[0:select_how_many]
 top_col_names.reset_index(inplace=True, drop=True)
-top_col_names.rename(columns={"col_name": f"top{select_how_many}"}, inplace=True)
+top_col_names.rename(columns={"col_name": f"top{select_how_many}names"}, inplace=True)
 # add paths
-top_col_names[f"top25_paths"] = [
-    glob(f"./data/**/annual_features/**/*{x}.tif")[0] for x in top_col_names["top25"]
+top_col_names[f"top{select_how_many}"] = [
+    glob(f"./data/**/annual_features/**/*{x}.tif")[0]
+    for x in top_col_names[f"top{select_how_many}names"]
 ]
 
 # NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
@@ -375,7 +417,36 @@ top_col_names[f"top25_paths"] = [
 # out = out[~out["top25"].str.contains("mean_change")]
 
 top_col_names.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
+top_col_names
 
+# %%
+
+
+# Create a dictionary to store the top 5 variables for each class
+top_variables_dict = {}
+
+# Iterate over the classes
+for class_index, class_name in enumerate(le.classes_):
+    # Get the mean SHAP values for the current class
+    class_shaps = mean_shaps[class_index]
+
+    # Calculate the absolute mean SHAP values
+    abs_shaps = np.abs(class_shaps)
+
+    # Get the indices of the top 5 variables
+    top_indices = np.argsort(abs_shaps)[-5:]
+
+    # Get the names of the top 5 variables
+    top_variables = [X_columns[i] for i in top_indices]
+
+    # Store the top variables in the dictionary
+    top_variables_dict[class_name] = top_variables
+
+# Print the top variables for each class
+for class_name, top_variables in top_variables_dict.items():
+    print(f"Class: {class_name}")
+    print("Top Variables:", top_variables)
+    print()
 
 # %%
 # resample all selected features to 10m and set smallest dtype possible
@@ -412,7 +483,6 @@ for select_image in select_images:
             select_image,
             nodata=9999,
             resampling="bilinear",
-            # dtype=np.float32,
         ) as src:
             src.gw.save(
                 f"./outputs/selected_images_10m/{os.path.basename(select_image)}",
@@ -429,7 +499,7 @@ for select_image in select_images:
 select_images = list(
     pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
         f"top{select_how_many}"
-    ].values25
+    ].values
 )
 
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
@@ -465,7 +535,7 @@ study = optuna.create_study(
 
 
 # Optimize the objective function
-study.optimize(lambda trial: classifier_objective(trial, X, y), n_trials=150, n_jobs=12)
+study.optimize(lambda trial: classifier_objective(trial, X, y), n_trials=350, n_jobs=12)
 
 # Close the SQLite connection
 conn.close()

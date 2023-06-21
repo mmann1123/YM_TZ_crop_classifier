@@ -212,6 +212,34 @@ for year in list(range(2022, 2024)):
         task.start()
 
 
+# %% read in points from csv
+
+import pandas as pd
+import geopandas as gpd
+
+points = pd.read_csv(
+    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth_cleaned.csv"
+)
+
+points = gpd.GeoDataFrame(
+    points,
+    geometry=gpd.points_from_xy(
+        x=points._field_center_longitude, y=points._field_center_latitude
+    ),
+    crs="EPSG:4326",
+)
+points = (
+    points[["primar", "Field_size", "geometry"]]
+    .rename(columns={"primar": "Primary land cover"})
+    .to_crs(crs)
+)
+
+points.to_file(
+    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth_cleaned.gpkg",
+    driver="GPKG",
+)
+
+
 # %% restrict training data to bounds
 import geopandas as gpd
 
@@ -219,22 +247,29 @@ bbox = gpd.read_file(
     r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/bounds.gpkg",
 )
 points = gpd.read_file(
-    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth.gpkg"
+    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth_cleaned.gpkg"
 )
 print(points.shape)
 points.head()
+
+
 # %%  Create land use codes
 from sklearn import preprocessing
+import numpy as np
 
 points_clip = points.clip(bbox)
-points_clip = points_clip[["Primary land cover", "geometry"]]
+points_clip = points_clip[["Primary land cover", "Field_size", "geometry"]]
 le = preprocessing.LabelEncoder()
 points_clip["lc_code"] = le.fit_transform(points_clip["Primary land cover"])
+points_clip["Field_code"] = points_clip["Field_size"].map(
+    {"small": 15, "medium": 45, "large": 90, np.nan: 0}
+)
+points_clip = points_clip[points_clip["Primary land cover"].notna()]
+
 points_clip.to_crs(crs).to_file(
-    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/ML_training/data/training.geojson",
+    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_cleaned.geojson",
     driver="GeoJSON",
 )
-# %%
 points_clip.head()
 
 # %%

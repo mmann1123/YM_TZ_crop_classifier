@@ -284,7 +284,7 @@ X = pipeline_scale_clean.fit_transform(X)
 
 # THIS STRATIFICATION SEEMS TO BE A PROBLEM, NOT GETTING BEST MODEL
 
-skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=7)
+skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=7)
 
 feature_importance_list = []
 shaps_importance_list = []
@@ -326,8 +326,10 @@ for train_index, test_index in skf.split(X, y):
         )
 
 #  Calculate mean shapes values
-
-mean_shaps = [sum(elements) for elements in zip(*shaps_importance_list)]
+# %%
+mean_shaps = [
+    np.mean(np.abs(elements), axis=0) for elements in zip(*shaps_importance_list)
+]
 # feature importance
 #
 # %%
@@ -344,20 +346,28 @@ summary = shap.summary_plot(
 
 plt.savefig("outputs/mean_shaps_importance.png", bbox_inches="tight")
 
-# %% By default the features are ordered using shap_values.abs.mean(0), which is the mean absolute value of the SHAP values for each feature. This order however places more emphasis on broad average impact, and less on rare but high magnitude impacts. If we want to find features with high impacts for individual people we can instead sort by the max absolute value:
 
-shap.plots.bar(explainer.abs.max(0))
+# %% By default the features are ordered using shap_values.abs.mean(0), which is the mean absolute value of
+# the SHAP values for each feature.
+# This order however places more emphasis on broad average impact, and less on rare but high magnitude impacts.
+# If we want to find features with high impacts for individual classes we can instead sort by the max absolute
+# value:
 
-# summary = shap.summary_plot(
-#     mean_shaps.abs.max(0),
-#     X,
-#     feature_names=[x.replace("_", ".") for x in X_columns],
-#     class_names=le.classes_,
-#     plot_type="bar",
-#     max_display=20,
-#     plot_size=(10, 10),
-#     show=False,
-# )
+max_shaps = [
+    np.max(np.abs(elements), axis=0) for elements in zip(*shaps_importance_list)
+]
+summary = shap.summary_plot(
+    max_shaps,
+    X,
+    feature_names=[x.replace("_", ".") for x in X_columns],
+    class_names=le.classes_,
+    plot_type="bar",
+    max_display=20,
+    plot_size=(10, 10),
+    show=False,
+)
+plt.savefig("outputs/max_shaps_importance.png", bbox_inches="tight")
+
 
 # %% feature clustering to find redundant features
 # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
@@ -378,6 +388,7 @@ summary = shap.summary_plot(
     clustering=clustering,
 )
 
+plt.savefig("outputs/mean_shaps_importance_clustering.png", bbox_inches="tight")
 
 # %%
 explainer2 = shap.Explainer(model, X)
@@ -391,35 +402,68 @@ shap.plots.beeswarm(explainer2)
 #
 
 # print top features
-vals = np.abs(mean_shaps).mean(0)
 
-feature_importance = pd.DataFrame(
-    list(zip(X_columns, sum(vals))),
-    columns=["col_name", "feature_importance_vals"],
+
+def extract_top_from_shaps(
+    shaps_list,
+    column_names=X_columns,
+    select_how_many=10,
+    remove_containing=None,
+    file_prefix="mean",
+):
+    vals = np.abs(shaps_list).mean(axis=0)
+
+    feature_importance = pd.DataFrame(
+        list(zip(column_names, sum(vals))),
+        columns=["col_name", "feature_importance_vals"],
+    )
+    feature_importance.sort_values(
+        by=["feature_importance_vals"], ascending=False, inplace=True
+    )
+    feature_importance.head(20)
+    #
+    # top unique col_names or until there are no more feature importance dataframes
+    top_col_names = feature_importance[0:select_how_many]
+    top_col_names.reset_index(inplace=True, drop=True)
+    top_col_names.rename(
+        columns={"col_name": f"top{select_how_many}names"}, inplace=True
+    )
+    # add paths
+    top_col_names[f"top{select_how_many}"] = [
+        glob(f"./data/**/annual_features/**/*{x}.tif")[0]
+        for x in top_col_names[f"top{select_how_many}names"]
+    ]
+
+    # NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
+    if remove_containing:
+        for remove in remove_containing:
+            top_col_names = top_col_names[
+                ~top_col_names[f"top{select_how_many}names"].str.contains(remove)
+            ]
+    # out = out[~out["top25"].str.contains("kurtosis")]
+    # out = out[~out["top25"].str.contains("mean_change")]
+
+    top_col_names.to_csv(
+        f"./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
+    )
+    print(top_col_names)
+    return top_col_names
+
+
+extract_top_from_shaps(
+    shaps_list=mean_shaps,
+    column_names=X_columns,
+    select_how_many=10,
+    remove_containing=["kurtosis", "mean_change"],
+    file_prefix="mean",
 )
-feature_importance.sort_values(
-    by=["feature_importance_vals"], ascending=False, inplace=True
+extract_top_from_shaps(
+    shaps_list=max_shaps,
+    column_names=X_columns,
+    select_how_many=10,
+    remove_containing=["kurtosis", "mean_change"],
+    file_prefix="max",
 )
-feature_importance.head(20)
-
-
-#
-# top unique col_names or until there are no more feature importance dataframes
-top_col_names = feature_importance[0:select_how_many]
-top_col_names.reset_index(inplace=True, drop=True)
-top_col_names.rename(columns={"col_name": f"top{select_how_many}names"}, inplace=True)
-# add paths
-top_col_names[f"top{select_how_many}"] = [
-    glob(f"./data/**/annual_features/**/*{x}.tif")[0]
-    for x in top_col_names[f"top{select_how_many}names"]
-]
-
-# NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
-# out = out[~out["top25"].str.contains("kurtosis")]
-# out = out[~out["top25"].str.contains("mean_change")]
-
-top_col_names.to_csv(f"./outputs/selected_images_{select_how_many}.csv", index=False)
-top_col_names
 
 
 # %%
@@ -451,7 +495,7 @@ for class_name, top_variables in top_variables_dict.items():
     print("Top Variables:", top_variables)
     print()
 
-# %%
+# %% RESAMPLE IMAGES
 # resample all selected features to 10m and set smallest dtype possible
 # Read in the list of selected images
 select_images = list(
@@ -516,7 +560,7 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
 X = pipeline_scale_clean.fit_transform(X)
 
 
-# %% Create optuna classifier study
+#  Create optuna classifier study
 
 # Create an SQLite connection
 conn = sqlite3.connect("models/study.db")

@@ -9,7 +9,12 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
-from sklearn.model_selection import cross_val_score, StratifiedKFold, GroupShuffleSplit
+from sklearn.model_selection import (
+    cross_val_score,
+    StratifiedKFold,
+    StratifiedGroupKFold,
+)
+import numpy as np
 
 
 def extract_top_from_shaps(
@@ -230,10 +235,11 @@ def classifier_objective(trial, X, y, classifier_override=None, groups=None):
             bagging_freq=lgbm_bagging_freq,
             min_data_in_leaf=lgbm_min_data_in_leaf,
         )
-
     # Perform cross-validation
-    if groups:
-        gss = GroupShuffleSplit(n_splits=5, random_state=42)
+    if groups is not None:
+        gss = StratifiedGroupKFold(n_splits=5, random_state=42)
+        print(gss)
+
         scores = cross_val_score(
             classifier_obj, X, y, groups=groups, cv=gss, scoring="balanced_accuracy"
         )

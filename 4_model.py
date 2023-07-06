@@ -24,6 +24,7 @@ from sklearn.model_selection import (
     cross_val_score,
     RandomizedSearchCV,
     StratifiedKFold,
+    StratifiedGroupKFold,
 )
 
 from sklearn.metrics import (
@@ -84,7 +85,9 @@ lu = gpd.read_file("./data/training_cleaned.geojson")
 
 
 # get buffer size based on field size
-lu.Field_size.replace({'small':10, 'medium':20, 'large':30,np.nan:10}, inplace=True)
+lu.Field_size.replace(
+    {"small": 10, "medium": 20, "large": 30, np.nan: 10}, inplace=True
+)
 
 
 np.unique(lu["Primary land cover"])
@@ -135,14 +138,16 @@ lu.loc[lu["lc_name"].isin(keep) == False, "lc_name"] = "Other"
 
 # add additional training data
 other_training = gpd.read_file("./data/other_training.gpkg").to_crs(lu.crs)
-other_training['Field_size'] =20
+other_training["Field_size"] = 20
 
 
-lu_complete = lu[["lc_name", 'Field_size',"geometry"]].overlay(
-    other_training[["lc_name",'Field_size', "geometry"]], how="union"
+lu_complete = lu[["lc_name", "Field_size", "geometry"]].overlay(
+    other_training[["lc_name", "Field_size", "geometry"]], how="union"
 )
 lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"])
-lu_complete["Field_size"] = lu_complete["Field_size_1"].fillna(lu_complete["Field_size_2"])
+lu_complete["Field_size"] = lu_complete["Field_size_1"].fillna(
+    lu_complete["Field_size_2"]
+)
 
 
 # drop two missing values
@@ -156,7 +161,7 @@ print(lu_complete["lc"].unique())
 
 # buffer points based on filed size
 lu_poly = lu_complete.copy()
-lu_poly['geometry'] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
+lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
 
 
 # images = glob("./data/EVI/annual_features/*/**.tif")
@@ -167,12 +172,10 @@ images = sorted(glob("./data/**/annual_features/**/**.tif"))
 # remove dropbox case conflict images
 images = [item for item in images if "(Case Conflict)" not in item]
 
-# %%
-
 
 # %%
 ########################################################
-# Get LGBM parameters for feature selection  
+# Get LGBM parameters for feature selection
 ########################################################
 # uses select_how_many from top of script
 
@@ -184,11 +187,11 @@ with gw.config.update(ref_image=target_string):
         y = df["lc"]
         X = df[range(1, len(images) + 1)]
         X.columns = [os.path.basename(f).split(".")[0] for f in images]
-
+        groups = df.id.values
 
 X = pipeline_scale_clean.fit_transform(X)
 
-#%%
+# %%
 #   Create optuna classifier study
 
 # Create an SQLite connection
@@ -216,9 +219,11 @@ study = optuna.create_study(
 
 # Optimize the objective function
 study.optimize(
-    lambda trial: classifier_objective(trial, X, y, classifier_override="LGBM"),
-    n_trials=200,
-    n_jobs=2,
+    lambda trial: classifier_objective(
+        trial, X, y, classifier_override="LGBM", groups=groups
+    ),
+    n_trials=100,
+    n_jobs=3,
 )
 
 # Close the SQLite connection
@@ -270,7 +275,7 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 
 # %%
 ########################################################
-# FEATURE SELECTION 2
+# FEATURE SELECTION
 ########################################################
 
 # %% Extract best parameters for LGBM
@@ -286,22 +291,25 @@ target_string = next((string for string in images if "EVI" in string), None)
 with gw.config.update(ref_image=target_string):
     with gw.open(images, nodata=9999, stack_dim="band") as src:
         # fit a model to get Xy used to train model
-        X = gw.extract(src, lu_complete)
-        y = lu_complete["lc"]
+        df = gw.extract(src, lu_poly, verbose=1)
+        y = df["lc"]
         y.reset_index(drop=True, inplace=True)
         X = X[range(1, len(images) + 1)]
         X_columns = [os.path.basename(f).split(".")[0] for f in images]
+        groups = df.id.values
+
 
 X = pipeline_scale_clean.fit_transform(X)
 # %%
 
 # THIS STRATIFICATION SEEMS TO BE A PROBLEM, NOT GETTING BEST MODEL
+# maybe resolved by getting the max shap as well as the mean shap
 
-skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=7)
+skf = StratifiedGroupKFold(n_splits=10, shuffle=True, random_state=7)
 
 feature_importance_list = []
 shaps_importance_list = []
-for train_index, test_index in skf.split(X, y):
+for train_index, test_index in skf.split(X, y, groups=groups):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
 
@@ -344,8 +352,6 @@ mean_shaps = [
     np.mean(np.abs(elements), axis=0) for elements in zip(*shaps_importance_list)
 ]
 # feature importance
-#
-# %%
 summary = shap.summary_plot(
     mean_shaps,
     X,
@@ -382,32 +388,32 @@ summary = shap.summary_plot(
 plt.savefig("outputs/max_shaps_importance.png", bbox_inches="tight")
 
 
-# %% feature clustering to find redundant features
-# https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
+# # %% feature clustering to find redundant features
+# # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
 
-clustering = shap.utils.hclust(
-    X, y
-)  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
-# %%
-summary = shap.summary_plot(
-    mean_shaps,
-    X,
-    feature_names=[x.replace("_", ".") for x in X_columns],
-    class_names=le.classes_,
-    plot_type="bar",
-    max_display=20,
-    plot_size=(10, 10),
-    show=False,
-    clustering=clustering,
-)
+# clustering = shap.utils.hclust(
+#     X, y
+# )  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
+# # %%
+# summary = shap.summary_plot(
+#     mean_shaps,
+#     X,
+#     feature_names=[x.replace("_", ".") for x in X_columns],
+#     class_names=le.classes_,
+#     plot_type="bar",
+#     max_display=20,
+#     plot_size=(10, 10),
+#     show=False,
+#     clustering=clustering,
+# )
 
-plt.savefig("outputs/mean_shaps_importance_clustering.png", bbox_inches="tight")
+# plt.savefig("outputs/mean_shaps_importance_clustering.png", bbox_inches="tight")
 
-# %%
-explainer2 = shap.Explainer(model, X)
-shap_values2 = explainer(X)
+# # %%
+# explainer2 = shap.Explainer(model, X)
+# shap_values2 = explainer(X)
 
-shap.plots.beeswarm(explainer2)
+# shap.plots.beeswarm(explainer2)
 # %% write out top features from shaps mean and max
 # to "./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
 
@@ -416,14 +422,14 @@ extract_top_from_shaps(
     shaps_list=mean_shaps,
     column_names=X_columns,
     select_how_many=select_how_many,
-    remove_containing=["kurtosis", "mean_change"],
+    remove_containing=None,
     file_prefix="mean",
 )
 extract_top_from_shaps(
     shaps_list=max_shaps,
     column_names=X_columns,
     select_how_many=select_how_many,
-    remove_containing=["kurtosis", "mean_change"],
+    remove_containing=None,
     file_prefix="max",
 )
 
@@ -518,11 +524,11 @@ select_images = glob("./outputs/selected_images_10m/*.tif")
 
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     # fit a model to get Xy used to train model
-    df = gw.extract(src, lu_complete.buffer(20))
-    y = lu_complete["lc"]
+    df = gw.extract(src, lu_poly, verbose=1)
+    y = df["lc"]
     X = df[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-
+    groups = df.id.values
 
 X = pipeline_scale_clean.fit_transform(X)
 
@@ -549,7 +555,11 @@ study = optuna.create_study(
 
 
 # Optimize the objective function
-study.optimize(lambda trial: classifier_objective(trial, X, y), n_trials=150, n_jobs=12)
+study.optimize(
+    lambda trial: classifier_objective(trial, X, y, groups=groups),
+    n_trials=150,
+    n_jobs=12,
+)
 
 # Close the SQLite connection
 conn.close()
@@ -614,11 +624,11 @@ select_images = set(
 )
 select_images
 # get important image paths
-select_images sdf = get_selected_ranked_images(
-    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-    select_how_many=select_how_many,
-)
+# select_images = get_selected_ranked_images(
+#     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+#     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+#     select_how_many=select_how_many,
+# )
 # Get the image names
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
 
@@ -648,34 +658,6 @@ for i in range(10, 21, 5):
         overwrite=True,
         compress="lzw",
     )
-
-# %%
-# # OPTICS  Memory error
-# import umap
-
-# optics_pipe = Pipeline(
-#     [
-#         ("imp", SimpleImputer(strategy="mean")),
-#         ("rescaler", StandardScaler(with_mean=True, with_std=True)),
-#         ("umap", umap.UMAP(n_components=5, n_neighbors=15, n_jobs=1)),
-#         ("clf", OPTICS()),
-#     ]
-# )
-
-# with gw.open(
-#     select_images[0:15],
-#     nodata=9999,
-#     stack_dim="band",
-# ) as src:
-#     # fit a model to get Xy used to train model
-#     y = fit_predict(data=src, clf=optics_pipe)
-#     y = y + 1
-#     y.attrs = src.attrs
-# y.gw.to_raster(
-#     "./outputs/ym_prediction_optics_umap_c_5_n_15.tif",
-#     overwrite=True,
-# )
-
 
 # %%
 ########################################################

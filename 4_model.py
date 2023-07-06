@@ -10,6 +10,7 @@ from sklearn_helpers import (
     best_classifier_pipe,
     get_selected_ranked_images,
     classifier_objective,
+    extract_top_from_shaps,
 )
 
 import pandas as pd
@@ -57,7 +58,7 @@ import umap
 from glob import glob
 
 # how many images will be selected for importances
-select_how_many = 50
+select_how_many = 20
 
 
 from glob import glob
@@ -80,6 +81,12 @@ pipeline_scale_clean = Pipeline(
 import geopandas as gpd
 
 lu = gpd.read_file("./data/training_cleaned.geojson")
+
+
+# get buffer size based on field size
+lu.Field_size.replace({'small':10, 'medium':20, 'large':30,np.nan:10}, inplace=True)
+
+
 np.unique(lu["Primary land cover"])
 
 # restrict land cover classes
@@ -128,13 +135,15 @@ lu.loc[lu["lc_name"].isin(keep) == False, "lc_name"] = "Other"
 
 # add additional training data
 other_training = gpd.read_file("./data/other_training.gpkg").to_crs(lu.crs)
+other_training['Field_size'] =20
 
-lu_complete = lu[["lc_name", "geometry"]].overlay(
-    other_training[["lc_name", "geometry"]], how="union"
+
+lu_complete = lu[["lc_name", 'Field_size',"geometry"]].overlay(
+    other_training[["lc_name",'Field_size', "geometry"]], how="union"
 )
 lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"])
+lu_complete["Field_size"] = lu_complete["Field_size_1"].fillna(lu_complete["Field_size_2"])
 
-lu_complete["lc_name"]
 
 # drop two missing values
 lu_complete.dropna(subset=["lc_name"], inplace=True)
@@ -144,6 +153,11 @@ lu_complete.dropna(subset=["lc_name"], inplace=True)
 le = LabelEncoder()
 lu_complete["lc"] = le.fit_transform(lu_complete["lc_name"])
 print(lu_complete["lc"].unique())
+
+# buffer points based on filed size
+lu_poly = lu_complete.copy()
+lu_poly['geometry'] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
+
 
 # images = glob("./data/EVI/annual_features/*/**.tif")
 
@@ -158,7 +172,7 @@ images = [item for item in images if "(Case Conflict)" not in item]
 
 # %%
 ########################################################
-# MODEL SELECTION for feature selection using LGBM
+# Get LGBM parameters for feature selection  
 ########################################################
 # uses select_how_many from top of script
 
@@ -166,15 +180,15 @@ target_string = next((string for string in images if "EVI" in string), None)
 with gw.config.update(ref_image=target_string):
     with gw.open(images, nodata=9999, stack_dim="band") as src:
         # fit a model to get Xy used to train model
-        df = gw.extract(src, lu_complete, verbose=1)
-        y = lu_complete["lc"]
+        df = gw.extract(src, lu_poly, verbose=1)
+        y = df["lc"]
         X = df[range(1, len(images) + 1)]
         X.columns = [os.path.basename(f).split(".")[0] for f in images]
 
 
 X = pipeline_scale_clean.fit_transform(X)
 
-
+#%%
 #   Create optuna classifier study
 
 # Create an SQLite connection
@@ -228,7 +242,6 @@ pd.DataFrame(study.trials_dataframe()).to_csv(
 
 
 #  Save results
-# %%
 conn = sqlite3.connect("models/study.db")
 
 study = optuna.load_study(
@@ -395,72 +408,21 @@ explainer2 = shap.Explainer(model, X)
 shap_values2 = explainer(X)
 
 shap.plots.beeswarm(explainer2)
-# %% write out top features
-
-# top_indices = summary.data.iloc[:select_how_many].index.tolist()
-# print(top_indices)
-#
-
-# print top features
-
-
-def extract_top_from_shaps(
-    shaps_list,
-    column_names=X_columns,
-    select_how_many=10,
-    remove_containing=None,
-    file_prefix="mean",
-):
-    vals = np.abs(shaps_list).mean(axis=0)
-
-    feature_importance = pd.DataFrame(
-        list(zip(column_names, sum(vals))),
-        columns=["col_name", "feature_importance_vals"],
-    )
-    feature_importance.sort_values(
-        by=["feature_importance_vals"], ascending=False, inplace=True
-    )
-    feature_importance.head(20)
-    #
-    # top unique col_names or until there are no more feature importance dataframes
-    top_col_names = feature_importance[0:select_how_many]
-    top_col_names.reset_index(inplace=True, drop=True)
-    top_col_names.rename(
-        columns={"col_name": f"top{select_how_many}names"}, inplace=True
-    )
-    # add paths
-    top_col_names[f"top{select_how_many}"] = [
-        glob(f"./data/**/annual_features/**/*{x}.tif")[0]
-        for x in top_col_names[f"top{select_how_many}names"]
-    ]
-
-    # NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
-    if remove_containing:
-        for remove in remove_containing:
-            top_col_names = top_col_names[
-                ~top_col_names[f"top{select_how_many}names"].str.contains(remove)
-            ]
-    # out = out[~out["top25"].str.contains("kurtosis")]
-    # out = out[~out["top25"].str.contains("mean_change")]
-
-    top_col_names.to_csv(
-        f"./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
-    )
-    print(top_col_names)
-    return top_col_names
+# %% write out top features from shaps mean and max
+# to "./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
 
 
 extract_top_from_shaps(
     shaps_list=mean_shaps,
     column_names=X_columns,
-    select_how_many=10,
+    select_how_many=select_how_many,
     remove_containing=["kurtosis", "mean_change"],
     file_prefix="mean",
 )
 extract_top_from_shaps(
     shaps_list=max_shaps,
     column_names=X_columns,
-    select_how_many=10,
+    select_how_many=select_how_many,
     remove_containing=["kurtosis", "mean_change"],
     file_prefix="max",
 )
@@ -469,41 +431,50 @@ extract_top_from_shaps(
 # %%
 
 
-# Create a dictionary to store the top 5 variables for each class
-top_variables_dict = {}
+# # Create a dictionary to store the top 5 variables for each class
+# top_variables_dict = {}
 
-# Iterate over the classes
-for class_index, class_name in enumerate(le.classes_):
-    # Get the mean SHAP values for the current class
-    class_shaps = mean_shaps[class_index]
+# # Iterate over the classes
+# for class_index, class_name in enumerate(le.classes_):
+#     # Get the mean SHAP values for the current class
+#     class_shaps = mean_shaps[class_index]
 
-    # Calculate the absolute mean SHAP values
-    abs_shaps = np.abs(class_shaps)
+#     # Calculate the absolute mean SHAP values
+#     abs_shaps = np.abs(class_shaps)
 
-    # Get the indices of the top 5 variables
-    top_indices = np.argsort(abs_shaps)[-5:]
+#     # Get the indices of the top 5 variables
+#     top_indices = np.argsort(abs_shaps)[-5:]
 
-    # Get the names of the top 5 variables
-    top_variables = [X_columns[i] for i in top_indices]
+#     # Get the names of the top 5 variables
+#     top_variables = [X_columns[i] for i in top_indices]
 
-    # Store the top variables in the dictionary
-    top_variables_dict[class_name] = top_variables
+#     # Store the top variables in the dictionary
+#     top_variables_dict[class_name] = top_variables
 
-# Print the top variables for each class
-for class_name, top_variables in top_variables_dict.items():
-    print(f"Class: {class_name}")
-    print("Top Variables:", top_variables)
-    print()
+# # Print the top variables for each class
+# for class_name, top_variables in top_variables_dict.items():
+#     print(f"Class: {class_name}")
+#     print("Top Variables:", top_variables)
+#     print()
 
 # %% RESAMPLE IMAGES
 # resample all selected features to 10m and set smallest dtype possible
 # Read in the list of selected images
-select_images = list(
-    pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
-        f"top{select_how_many}"
-    ].values
+select_images = set(
+    list(
+        pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
+            f"top{select_how_many}"
+        ].values
+    )
+    + list(
+        pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
+            f"top{select_how_many}"
+        ].values
+    )
 )
+select_images
 
+# %%
 # Reduce image size and create 10m resolution images
 
 os.makedirs("./outputs/selected_images_10m", exist_ok=True)
@@ -543,15 +514,11 @@ for select_image in select_images:
 # MODEL SELECTION
 ########################################################
 # uses select_how_many from top of script
-select_images = list(
-    pd.read_csv(f"./outputs/selected_images_{select_how_many}.csv")[
-        f"top{select_how_many}"
-    ].values
-)
+select_images = glob("./outputs/selected_images_10m/*.tif")
 
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     # fit a model to get Xy used to train model
-    df = gw.extract(src, lu_complete)
+    df = gw.extract(src, lu_complete.buffer(20))
     y = lu_complete["lc"]
     X = df[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
@@ -582,7 +549,7 @@ study = optuna.create_study(
 
 
 # Optimize the objective function
-study.optimize(lambda trial: classifier_objective(trial, X, y), n_trials=350, n_jobs=12)
+study.optimize(lambda trial: classifier_objective(trial, X, y), n_trials=150, n_jobs=12)
 
 # Close the SQLite connection
 conn.close()
@@ -633,9 +600,21 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 # UNSUPERVISED CLASIFICATION
 ########################################################
 # %% plot kmean andn the selected features
-
+select_images = set(
+    list(
+        pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
+            f"top{select_how_many}"
+        ].values
+    )
+    + list(
+        pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
+            f"top{select_how_many}"
+        ].values
+    )
+)
+select_images
 # get important image paths
-select_images = get_selected_ranked_images(
+select_images sdf = get_selected_ranked_images(
     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
     select_how_many=select_how_many,

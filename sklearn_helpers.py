@@ -9,7 +9,53 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
-from sklearn.model_selection import cross_val_score, StratifiedKFold
+from sklearn.model_selection import cross_val_score, StratifiedKFold, GroupShuffleSplit
+
+
+def extract_top_from_shaps(
+    shaps_list,
+    column_names,
+    select_how_many=10,
+    remove_containing=None,
+    file_prefix="mean",
+):
+    vals = np.abs(shaps_list).mean(axis=0)
+
+    feature_importance = pd.DataFrame(
+        list(zip(column_names, sum(vals))),
+        columns=["col_name", "feature_importance_vals"],
+    )
+    feature_importance.sort_values(
+        by=["feature_importance_vals"], ascending=False, inplace=True
+    )
+    feature_importance.head(20)
+    #
+    # top unique col_names or until there are no more feature importance dataframes
+    top_col_names = feature_importance[0:select_how_many]
+    top_col_names.reset_index(inplace=True, drop=True)
+    top_col_names.rename(
+        columns={"col_name": f"top{select_how_many}names"}, inplace=True
+    )
+    # add paths
+    top_col_names[f"top{select_how_many}"] = [
+        glob(f"./data/**/annual_features/**/*{x}.tif")[0]
+        for x in top_col_names[f"top{select_how_many}names"]
+    ]
+
+    # NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
+    if remove_containing:
+        for remove in remove_containing:
+            top_col_names = top_col_names[
+                ~top_col_names[f"top{select_how_many}names"].str.contains(remove)
+            ]
+    # out = out[~out["top25"].str.contains("kurtosis")]
+    # out = out[~out["top25"].str.contains("mean_change")]
+
+    top_col_names.to_csv(
+        f"./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
+    )
+    print(top_col_names)
+    return top_col_names
 
 
 def isolate_dr_dict(sorted_trials, desired_dr):
@@ -130,7 +176,8 @@ def get_selected_ranked_images(
     return list(ordered[f"top{select_how_many}"])
 
 
-def classifier_objective(trial, X, y, classifier_override=None):
+# %%
+def classifier_objective(trial, X, y, classifier_override=None, groups=None):
     # Define the algorithm for optimization.
 
     # Select classifier.
@@ -185,8 +232,16 @@ def classifier_objective(trial, X, y, classifier_override=None):
         )
 
     # Perform cross-validation
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    scores = cross_val_score(classifier_obj, X, y, cv=skf, scoring="balanced_accuracy")
+    if groups:
+        gss = GroupShuffleSplit(n_splits=5, random_state=42)
+        scores = cross_val_score(
+            classifier_obj, X, y, groups=groups, cv=gss, scoring="balanced_accuracy"
+        )
+    else:
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        scores = cross_val_score(
+            classifier_obj, X, y, cv=skf, scoring="balanced_accuracy"
+        )
 
     return scores.mean()  # Return the average balanced accuracy across folds
 

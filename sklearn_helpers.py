@@ -122,6 +122,9 @@ def isolate_classifier_dict(sorted_trials, desired_classifier):
     if "n_estimators" in desired_params:
         value = desired_params.pop("n_estimators")
         desired_params["n_estimators"] = int(value)
+    if "min_samples_leaf" in desired_params:
+        value = desired_params.pop("min_samples_leaf")
+        desired_params["min_samples_leaf"] = int(value)
 
     return desired_params
 

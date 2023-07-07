@@ -29,7 +29,7 @@ from sklearn.model_selection import (
 
 from sklearn.metrics import (
     confusion_matrix,
-    precision_recall_fscore_support,
+    cohen_kappa_score,
     accuracy_score,
 )
 from sklearn.preprocessing import (
@@ -560,7 +560,7 @@ study.optimize(
     n_trials=150,
     n_jobs=12,
 )
-
+# %%
 # Close the SQLite connection
 conn.close()
 
@@ -605,24 +605,28 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 # Print the ranked listing of trials
 print(sorted_trials[["number", "value", "params_classifier"]])
 
+
 # %%
 ########################################################
 # UNSUPERVISED CLASIFICATION
 ########################################################
 # %% plot kmean andn the selected features
-select_images = set(
-    list(
-        pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
-            f"top{select_how_many}"
-        ].values
-    )
-    + list(
-        pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
-            f"top{select_how_many}"
-        ].values
+select_images = list(
+    set(
+        list(
+            pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
+                f"top{select_how_many}"
+            ].values
+        )
+        + list(
+            pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
+                f"top{select_how_many}"
+            ].values
+        )
     )
 )
 select_images
+
 # get important image paths
 # select_images = get_selected_ranked_images(
 #     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
@@ -633,7 +637,11 @@ select_images
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
 
 # create multiple kmean classification to add to model later
+# get an EVI example
+target_string = next((string for string in select_images if "EVI" in string), None)
+
 for i in range(10, 21, 5):
+    print("working on kmean", i, "...")
     # create a pipeline to process the data and fit a model
     pipe_kmeans = Pipeline(
         [
@@ -643,21 +651,22 @@ for i in range(10, 21, 5):
         ]
     )
     # load the data and fit a model to get Xy used to train model
-    with gw.open(
-        select_images,
-        nodata=9999,
-        stack_dim="band",
-        band_names=image_names,
-    ) as src:
-        y = fit_predict(data=src, clf=pipe_kmeans)
-        y = y + 1
-        y.attrs = src.attrs
-    # save the image to a file
-    y.gw.to_raster(
-        f"./outputs/ym_prediction_kmean_{i}.tif",
-        overwrite=True,
-        compress="lzw",
-    )
+    with gw.config.update(ref_image=target_string):
+        with gw.open(
+            select_images,
+            nodata=9999,
+            stack_dim="band",
+            band_names=image_names,
+        ) as src:
+            y = fit_predict(data=src, clf=pipe_kmeans)
+            y = y + 1
+            y.attrs = src.attrs
+        # save the image to a file
+        y.gw.to_raster(
+            f"./outputs/ym_prediction_kmean_{i}.tif",
+            overwrite=True,
+            compress="lzw",
+        )
 
 # %%
 ########################################################
@@ -699,98 +708,98 @@ for i in range(10, 21, 5):
 # y_without_outliers = y[~outlier_mask]
 
 # %%
-########################################################
-# Dimensionality reduction
-########################################################
+# ########################################################
+# # Dimensionality reduction
+# ########################################################
 
-# get optimal parameters
+# # get optimal parameters
 
-classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
-
-
-# %% get cleaned data
-
-# get evi example
-target_string = next((string for string in images if "EVI" in string), None)
-
-with gw.config.update(ref_image=target_string):
-    with gw.open(images, nodata=9999, stack_dim="band") as src:
-        # fit a model to get Xy used to train model
-        df = gw.extract(src, lu_complete)
-        y = lu_complete["lc"]
-        X = df[range(1, len(images) + 1)]
-        X.columns = [os.path.basename(f).split(".")[0] for f in images]
-
-# remove nan and bad columns
-pipeline_scale_clean = Pipeline(
-    [
-        ("imputer", SimpleImputer(strategy="mean")),
-        ("scaler", StandardScaler()),
-        ("variance_threshold", VarianceThreshold(threshold=0.5)),
-    ]
-)
-
-X = pipeline_scale_clean.fit_transform(X)
-
-# %%
-# Create the dimensionality reduction pipeline
-dr_pipeline = Pipeline(
-    [("dim_reduction", PCA(n_components=5)), ("clf", classifier_pipe)]
-)
+# classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
 
 
-#  find optimal umap parameters
-# Define the objective function for Optuna
-def dr_objective(trial):
-    # Define the parameter space for dimensionality reduction
-    dr_method = trial.suggest_categorical("dr_method", ["PCA", "UMAP"])
+# # %% get cleaned data
 
-    if dr_method == "PCA":
-        pca_params = {"n_components": trial.suggest_int("pca_n_components", 3, 25)}
+# # get evi example
+# target_string = next((string for string in images if "EVI" in string), None)
 
-        # Set the PCA parameters in the pipeline
-        dr_pipeline.set_params(dim_reduction=PCA(**pca_params))
+# with gw.config.update(ref_image=target_string):
+#     with gw.open(images, nodata=9999, stack_dim="band") as src:
+#         # fit a model to get Xy used to train model
+#         df = gw.extract(src, lu_complete)
+#         y = lu_complete["lc"]
+#         X = df[range(1, len(images) + 1)]
+#         X.columns = [os.path.basename(f).split(".")[0] for f in images]
 
-    elif dr_method == "UMAP":
-        umap_params = {
-            "n_components": trial.suggest_int("umap_n_components", 3, 25),
-            "n_neighbors": trial.suggest_categorical(
-                "umap_n_neighbors", [3, 5, 8, 10, 15]
-            ),
-        }
+# # remove nan and bad columns
+# pipeline_scale_clean = Pipeline(
+#     [
+#         ("imputer", SimpleImputer(strategy="mean")),
+#         ("scaler", StandardScaler()),
+#         ("variance_threshold", VarianceThreshold(threshold=0.5)),
+#     ]
+# )
 
-        # Set the UMAP parameters in the pipeline
-        dr_pipeline.set_params(dim_reduction=umap.UMAP(**umap_params))
+# X = pipeline_scale_clean.fit_transform(X)
 
-    # Fit the pipeline and calculate the score
-    score = cross_val_score(dr_pipeline, X, y, cv=5, scoring="balanced_accuracy").mean()
+# # %%
+# # Create the dimensionality reduction pipeline
+# dr_pipeline = Pipeline(
+#     [("dim_reduction", PCA(n_components=5)), ("clf", classifier_pipe)]
+# )
 
-    return score
+
+# #  find optimal umap parameters
+# # Define the objective function for Optuna
+# def dr_objective(trial):
+#     # Define the parameter space for dimensionality reduction
+#     dr_method = trial.suggest_categorical("dr_method", ["PCA", "UMAP"])
+
+#     if dr_method == "PCA":
+#         pca_params = {"n_components": trial.suggest_int("pca_n_components", 3, 25)}
+
+#         # Set the PCA parameters in the pipeline
+#         dr_pipeline.set_params(dim_reduction=PCA(**pca_params))
+
+#     elif dr_method == "UMAP":
+#         umap_params = {
+#             "n_components": trial.suggest_int("umap_n_components", 3, 25),
+#             "n_neighbors": trial.suggest_categorical(
+#                 "umap_n_neighbors", [3, 5, 8, 10, 15]
+#             ),
+#         }
+
+#         # Set the UMAP parameters in the pipeline
+#         dr_pipeline.set_params(dim_reduction=umap.UMAP(**umap_params))
+
+#     # Fit the pipeline and calculate the score
+#     score = cross_val_score(dr_pipeline, X, y, cv=5, scoring="balanced_accuracy").mean()
+
+#     return score
 
 
-# Create an SQLite connection
-conn = sqlite3.connect("models/study.db")
+# # Create an SQLite connection
+# conn = sqlite3.connect("models/study.db")
 
-# Create a study with SQLite storage
-storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
+# # Create a study with SQLite storage
+# storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
 
-# delete any existing study
-try:
-    study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
-    optuna.delete_study(study_name="umap_kmeans_selection", storage=storage)
-except:
-    pass
+# # delete any existing study
+# try:
+#     study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
+#     optuna.delete_study(study_name="umap_kmeans_selection", storage=storage)
+# except:
+#     pass
 
-# store current study
-study = optuna.create_study(
-    storage=storage, study_name="umap_kmeans_selection", direction="maximize"
-)
+# # store current study
+# study = optuna.create_study(
+#     storage=storage, study_name="umap_kmeans_selection", direction="maximize"
+# )
 
-# Optimize the objective function
-study.optimize(dr_objective, n_trials=50)
+# # Optimize the objective function
+# study.optimize(dr_objective, n_trials=50)
 
-# Close the SQLite connection
-conn.close()
+# # Close the SQLite connection
+# conn.close()
 
 # %%
 
@@ -798,114 +807,114 @@ conn.close()
 # Classification performance with DimReduct and Random Forest Optimized
 ########################################################
 
-# get optimal parameters
-classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
+# # get optimal parameters
+# classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
 
-# Create a study with SQLite storage
-storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
-study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
-
-
-# %%
-
-target_string = next((string for string in images if "EVI" in string), None)
-
-with gw.config.update(ref_image=target_string):
-    with gw.open(images, nodata=9999, stack_dim="band") as src:
-        # fit a model to get Xy used to train model
-        df = gw.extract(src, lu_complete)
-        y = lu_complete["lc"]
-        X = df[range(1, len(images) + 1)]
-        X.columns = [os.path.basename(f).split(".")[0] for f in images]
-
-# remove nan and bad columns
-pipeline_scale_clean = Pipeline(
-    [
-        ("imputer", SimpleImputer(strategy="mean")),
-        ("scaler", StandardScaler()),
-        ("variance_threshold", VarianceThreshold(threshold=0.5)),
-    ]
-)
-
-X = pipeline_scale_clean.fit_transform(X)
+# # Create a study with SQLite storage
+# storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
+# study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
 
 
-# Define the pipeline steps
-pipeline = Pipeline(
-    [
-        (
-            "dim_reduction",
-            PCA(n_components=top_dr_trial["pca_n_components"], random_state=42),
-        ),
-        ("classifier", classifier_pipe),
-    ]
-)
+# # %%
 
-# Predict the labels of the test data
-y_pred_dr = cross_val_score(
-    pipeline,
-    X,
-    y,
-    cv=5,
-    n_jobs=-1,
-    verbose=2,
-)
-y_pred_dr
+# target_string = next((string for string in images if "EVI" in string), None)
 
-# save cv results
-pd.DataFrame({"y_pred_dr_results_CV": y_pred_dr}).to_csv(
-    "outputs/y_pred_dr_results.csv"
-)
+# with gw.config.update(ref_image=target_string):
+#     with gw.open(images, nodata=9999, stack_dim="band") as src:
+#         # fit a model to get Xy used to train model
+#         df = gw.extract(src, lu_complete)
+#         y = lu_complete["lc"]
+#         X = df[range(1, len(images) + 1)]
+#         X.columns = [os.path.basename(f).split(".")[0] for f in images]
 
-print(f"Mean accuracy score: {y_pred_dr.mean():.3}")
+# # remove nan and bad columns
+# pipeline_scale_clean = Pipeline(
+#     [
+#         ("imputer", SimpleImputer(strategy="mean")),
+#         ("scaler", StandardScaler()),
+#         ("variance_threshold", VarianceThreshold(threshold=0.5)),
+#     ]
+# )
 
-# %% Compare to feature selection
+# X = pipeline_scale_clean.fit_transform(X)
 
-# get important image paths
-select_images = get_selected_ranked_images(
-    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-    select_how_many=select_how_many,
-)
-# get same number of features
-select_images = select_images[
-    0 : top_dr_trial["pca_n_components"]
-]  # + glob("./outputs/*kmean*.tif") # kmeans might not help
 
-# Get the image names
-image_names = [os.path.basename(f).split(".")[0] for f in select_images]
+# # Define the pipeline steps
+# pipeline = Pipeline(
+#     [
+#         (
+#             "dim_reduction",
+#             PCA(n_components=top_dr_trial["pca_n_components"], random_state=42),
+#         ),
+#         ("classifier", classifier_pipe),
+#     ]
+# )
 
-# extract data
-with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-    # fit a model to get Xy used to train model
-    X = gw.extract(src, lu_complete)
-    y = lu_complete["lc"]
-    X = X[range(1, len(select_images) + 1)]
-    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+# # Predict the labels of the test data
+# y_pred_dr = cross_val_score(
+#     pipeline,
+#     X,
+#     y,
+#     cv=5,
+#     n_jobs=-1,
+#     verbose=2,
+# )
+# y_pred_dr
 
-X = pipeline_scale_clean.fit_transform(X)
+# # save cv results
+# pd.DataFrame({"y_pred_dr_results_CV": y_pred_dr}).to_csv(
+#     "outputs/y_pred_dr_results.csv"
+# )
 
-# Define the pipeline steps
-pipeline_feat = Pipeline(
-    [
-        ("classifier", RandomForestClassifier(**top_trial)),
-    ]
-)
+# print(f"Mean accuracy score: {y_pred_dr.mean():.3}")
 
-# Predict the labels of the test data
-y_pred_feat = cross_val_score(
-    pipeline_feat,
-    X,
-    y,
-    cv=5,
-    n_jobs=-1,
-    verbose=2,
-)
-y_pred_feat
-# save cv results
-pd.DataFrame({"y_pred_feat_results_CV": y_pred_feat}).to_csv(
-    "outputs/y_pred_feat_results.csv"
-)
+# # %% Compare to feature selection
+
+# # get important image paths
+# select_images = get_selected_ranked_images(
+#     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+#     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+#     select_how_many=select_how_many,
+# )
+# # get same number of features
+# select_images = select_images[
+#     0 : top_dr_trial["pca_n_components"]
+# ]  # + glob("./outputs/*kmean*.tif") # kmeans might not help
+
+# # Get the image names
+# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
+
+# # extract data
+# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+#     # fit a model to get Xy used to train model
+#     X = gw.extract(src, lu_complete)
+#     y = lu_complete["lc"]
+#     X = X[range(1, len(select_images) + 1)]
+#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+
+# X = pipeline_scale_clean.fit_transform(X)
+
+# # Define the pipeline steps
+# pipeline_feat = Pipeline(
+#     [
+#         ("classifier", RandomForestClassifier(**top_trial)),
+#     ]
+# )
+
+# # Predict the labels of the test data
+# y_pred_feat = cross_val_score(
+#     pipeline_feat,
+#     X,
+#     y,
+#     cv=5,
+#     n_jobs=-1,
+#     verbose=2,
+# )
+# y_pred_feat
+# # save cv results
+# pd.DataFrame({"y_pred_feat_results_CV": y_pred_feat}).to_csv(
+#     "outputs/y_pred_feat_results.csv"
+# )
 
 
 # NOTE: Feature selection is better than dim reduction
@@ -922,17 +931,33 @@ pipeline_performance = best_classifier_pipe("models/study.db", "model_selection"
 pipeline_performance
 
 # get important image paths
-select_images = get_selected_ranked_images(
-    original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-    subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-    select_how_many=select_how_many,
+# select_images = get_selected_ranked_images(
+#     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+#     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+#     select_how_many=select_how_many,
+# )
+select_images = list(
+    set(
+        list(
+            pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
+                f"top{select_how_many}"
+            ].values
+        )
+        + list(
+            pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
+                f"top{select_how_many}"
+            ].values
+        )
+    )
 )
 # get same number of features
-select_images = select_images[0:25] + glob("./outputs/*kmean*.tif")
+select_images = select_images + glob("./outputs/*kmean*.tif")
 
 # Get the image names
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
+select_images
 
+# %%
 # extract data
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     # fit a model to get Xy used to train model
@@ -941,22 +966,43 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     y.reset_index(drop=True, inplace=True)
     X = X[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+    # use polygons
+    # df = gw.extract(src, lu_poly, verbose=1)
+    # y = df["lc"]
+    # y.reset_index(drop=True, inplace=True)
+    # X = df[range(1, len(select_images) + 1)]
+    # X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+    # groups = df.id.values
 
 X = pipeline_scale_clean.fit_transform(X)
 
 # generate confusion matrix
 conf_matrix_list_of_arrays = []
 list_balanced_accuracy = []
+list_kappa = []
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+# skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=0)
+# for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
 for i, (train_index, test_index) in enumerate(skf.split(X, y)):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
 
+    new_params = {
+        # update from 1.0 to 1
+        "min_samples_leaf": 1,
+    }
+
+    pipeline_performance["classifier"].set_params(**new_params)
+
     pipeline_performance.fit(X_train, y_train)
     y_pred = pipeline_performance.predict(X_test)
 
+    # get performance metrics
     balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
     list_balanced_accuracy.append(balanced_accuracy)
+
+    kappa_accuracy = cohen_kappa_score(y_test, y_pred)
+    list_kappa.append(kappa_accuracy)
 
     # Get the class names from the label encoder
     class_names = pipeline_performance[
@@ -1024,7 +1070,7 @@ for i in range(0, len(files)):
     y_hat = X[i + 1]
     y_hat = np.reshape(y_hat, (-1, 1))  # Reshape to (742, 1)
     # Create an instance of RandomForestClassifier
-    rf_classifier = RandomForestClassifier(n_estimators=300, random_state=0)
+    rf_classifier = RandomForestClassifier()
 
     # Fit the classifier to your training data
     rf_classifier.fit(y_hat, y)

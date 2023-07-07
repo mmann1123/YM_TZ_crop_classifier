@@ -188,14 +188,22 @@ def get_selected_ranked_images(
 def classifier_objective(trial, X, y, classifier_override=None, groups=None):
     # Define the algorithm for optimization.
 
-    # Select classifier.
-    classifier_name = trial.suggest_categorical(
-        "classifier", ["SVC", "RandomForest", "LGBM"]
-    )
+    # check for valid override values
+    if classifier_override in [None, "SVC", "RandomForest", "LGBM"]:
+        pass
+    else:
+        raise ValueError(
+            "classifier_override must be one of None, 'SVC', 'RandomForest', or 'LGBM'"
+        )
 
+    # Select classifier.
     if classifier_override is not None:
         print(f"Overriding classifier using: {classifier_override}")
-        classifier_name = classifier_override
+        classifier_name = trial.suggest_categorical("classifier", [classifier_override])
+    else:
+        classifier_name = trial.suggest_categorical(
+            "classifier", ["SVC", "RandomForest", "LGBM"]
+        )
 
     if classifier_name == "SVC":
         svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
@@ -240,7 +248,7 @@ def classifier_objective(trial, X, y, classifier_override=None, groups=None):
         )
     # Perform cross-validation
     if groups is not None:
-        gss = StratifiedGroupKFold(n_splits=5, random_state=42)
+        gss = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
         print(gss)
 
         scores = cross_val_score(

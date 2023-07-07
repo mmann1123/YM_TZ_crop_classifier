@@ -517,7 +517,7 @@ for select_image in select_images:
 
 # %%
 ########################################################
-# MODEL SELECTION
+# MODEL SELECTION between RF, LGBM, SVC
 ########################################################
 # uses select_how_many from top of script
 select_images = glob("./outputs/selected_images_10m/*.tif")
@@ -556,11 +556,13 @@ study = optuna.create_study(
 
 # Optimize the objective function
 study.optimize(
-    lambda trial: classifier_objective(trial, X, y, groups=groups),
-    n_trials=150,
+    lambda trial: classifier_objective(
+        trial, X, y, groups=groups, classifier_override="RandomForest"
+    ),
+    n_trials=50,
     n_jobs=12,
 )
-# %%
+
 # Close the SQLite connection
 conn.close()
 
@@ -936,21 +938,9 @@ pipeline_performance
 #     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
 #     select_how_many=select_how_many,
 # )
-select_images = list(
-    set(
-        list(
-            pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
-                f"top{select_how_many}"
-            ].values
-        )
-        + list(
-            pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
-                f"top{select_how_many}"
-            ].values
-        )
-    )
-)
-# get same number of features
+
+select_images = glob("./outputs/selected_images_10m/*.tif")
+
 select_images = select_images + glob("./outputs/*kmean*.tif")
 
 # Get the image names
@@ -959,40 +949,36 @@ select_images
 
 # %%
 # extract data
+# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+#     # fit a model to get Xy used to train model
+#     X = gw.extract(src, lu_complete)
+#     y = lu_complete["lc"]
+#     y.reset_index(drop=True, inplace=True)
+#     X = X[range(1, len(select_images) + 1)]
+#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     # fit a model to get Xy used to train model
-    X = gw.extract(src, lu_complete)
-    y = lu_complete["lc"]
-    y.reset_index(drop=True, inplace=True)
-    X = X[range(1, len(select_images) + 1)]
+    df = gw.extract(src, lu_poly, verbose=1)
+    y = df["lc"]
+    X = df[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-    # use polygons
-    # df = gw.extract(src, lu_poly, verbose=1)
-    # y = df["lc"]
-    # y.reset_index(drop=True, inplace=True)
-    # X = df[range(1, len(select_images) + 1)]
-    # X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-    # groups = df.id.values
+    groups = df.id.values
+
 
 X = pipeline_scale_clean.fit_transform(X)
+
 
 # generate confusion matrix
 conf_matrix_list_of_arrays = []
 list_balanced_accuracy = []
 list_kappa = []
-skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
-# skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=0)
-# for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
-for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+# skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
+    # for i, (train_index, test_index) in enumerate(skf.split(X, y)):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
-
-    new_params = {
-        # update from 1.0 to 1
-        "min_samples_leaf": 1,
-    }
-
-    pipeline_performance["classifier"].set_params(**new_params)
 
     pipeline_performance.fit(X_train, y_train)
     y_pred = pipeline_performance.predict(X_test)

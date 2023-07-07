@@ -277,6 +277,9 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 ########################################################
 # FEATURE SELECTION
 ########################################################
+# %% working well enough
+
+# NOTE consider using sklearn best k features as well as optuna
 
 # %% Extract best parameters for LGBM
 lgbm_pipe = best_classifier_pipe(
@@ -300,10 +303,6 @@ with gw.config.update(ref_image=target_string):
 
 
 X = pipeline_scale_clean.fit_transform(X)
-# %%
-
-# THIS STRATIFICATION SEEMS TO BE A PROBLEM, NOT GETTING BEST MODEL
-# maybe resolved by getting the max shap as well as the mean shap
 
 skf = StratifiedGroupKFold(n_splits=10, shuffle=True, random_state=7)
 
@@ -508,7 +507,10 @@ for select_image in select_images:
             nodata=9999,
             resampling="bilinear",
         ) as src:
-            src.gw.save(
+            # replace missing with mean
+            data = src.gw.replace({9999: src.mean()})
+            data = data.gw.replace({np.nan: src.mean()})
+            data.gw.save(
                 f"./outputs/selected_images_10m/{os.path.basename(select_image)}",
                 overwrite=True,
                 compress="lzw",
@@ -1003,7 +1005,8 @@ conf_matrix_list_of_arrays
 
 # get aggregate confusion matrix
 agg_conf_matrix = np.sum(conf_matrix_list_of_arrays, axis=0)
-balanced_accuracy = balanced_accuracy.mean()
+balanced_accuracy = np.array(list_balanced_accuracy).mean()
+kappa_accuracy = np.array(list_kappa).mean()
 
 # Calculate the row-wise sums
 row_sums = agg_conf_matrix.sum(axis=1, keepdims=True)
@@ -1013,7 +1016,7 @@ conf_matrix_percent = agg_conf_matrix / row_sums
 
 # Get the class names
 class_names = le.inverse_transform(pipeline_performance["classifier"].classes_)
-
+# %%
 # Create a heatmap using seaborn
 plt.figure(figsize=(10, 8))
 
@@ -1029,11 +1032,49 @@ sns.heatmap(
 # Set labels and title
 plt.xlabel("Predicted")
 plt.ylabel("True")
-plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
+# plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
+plt.title(f"RF Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
 plt.savefig("outputs/final_class_perfomance_rf.png", bbox_inches="tight")
 
 # Show the plot
 plt.show()
+
+##################################################################
+# Write out final mode
+##################################################################
+# # %%
+
+# %% Create a prediction stack
+
+with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+    src = pipeline_scale_clean.fit_transform(src)
+
+    src.gw.save(
+        "outputs/pred_stack.tif",
+        compress="lzw",
+        overwrite=True,  # bigtiff=True
+    )
+
+
+# %%
+# predict to stack
+def user_func(w, block, model):
+    pred_shape = list(block.shape)
+    X = block.reshape(pred_shape[0], -1).T
+    pred_shape[0] = 1
+    y_hat = model.predict(X)
+    X_reshaped = y_hat.T.reshape(pred_shape)
+    return w, X_reshaped
+
+
+gw.apply(
+    "outputs/pred_stack.tif",
+    f"outputs/final_model_rf{len(select_images)}.tif",
+    user_func,
+    args=(pipeline_performance,),
+    n_jobs=16,
+    count=1,
+)
 
 
 ###############################################
@@ -1066,7 +1107,7 @@ for i in range(0, len(files)):
 
     # Calculate the balanced accuracy score for the training data
     print(files[i])
-    print(f"balanced accuracy: {balanced_accuracy_score(y, y_pred)}")
+    print(f"Kapa accuracy: {cohen_kappa_score(y, y_pred)}")
 
     conf_matrix = confusion_matrix(
         y,
@@ -1098,7 +1139,7 @@ for i in range(0, len(files)):
     plt.xlabel("Predicted")
     plt.ylabel("True")
     plt.title(
-        f"Confusion Matrix Kmean: {files[i]} \n Balance Accuracy = {round(balanced_accuracy_score(y, y_pred),3)}"
+        f"Confusion Matrix Kmean: {files[i]} \n Kappa Accuracy = {round(cohen_kappa_score(y, y_pred),3)}"
     )
     plt.savefig(
         f"outputs/final_class_perfomance_{os.path.basename(files[i])}.png",

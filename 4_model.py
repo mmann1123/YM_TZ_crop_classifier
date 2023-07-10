@@ -1,5 +1,5 @@
 # %% env:crop_class
-
+# %%
 
 # %%
 # change directory first
@@ -59,7 +59,7 @@ import umap
 from glob import glob
 
 # how many images will be selected for importances
-select_how_many = 20
+select_how_many = 10
 
 
 from glob import glob
@@ -191,7 +191,7 @@ with gw.config.update(ref_image=target_string):
 
 X = pipeline_scale_clean.fit_transform(X)
 
-# %%
+
 #   Create optuna classifier study
 
 # Create an SQLite connection
@@ -277,9 +277,8 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 ########################################################
 # FEATURE SELECTION
 ########################################################
-# %% working well enough
 
-# NOTE consider using sklearn best k features as well as optuna
+# NOTE combining mean,max shaps and kbest is working well
 
 # %% Extract best parameters for LGBM
 lgbm_pipe = best_classifier_pipe(
@@ -297,7 +296,7 @@ with gw.config.update(ref_image=target_string):
         df = gw.extract(src, lu_poly, verbose=1)
         y = df["lc"]
         y.reset_index(drop=True, inplace=True)
-        X = X[range(1, len(images) + 1)]
+        X = df[range(1, len(images) + 1)]
         X_columns = [os.path.basename(f).split(".")[0] for f in images]
         groups = df.id.values
 
@@ -362,7 +361,7 @@ summary = shap.summary_plot(
     show=False,
 )
 
-plt.savefig("outputs/mean_shaps_importance.png", bbox_inches="tight")
+plt.savefig(f"outputs/mean_shaps_importance_{select_how_many}.png", bbox_inches="tight")
 
 
 # %% By default the features are ordered using shap_values.abs.mean(0), which is the mean absolute value of
@@ -384,9 +383,84 @@ summary = shap.summary_plot(
     plot_size=(10, 10),
     show=False,
 )
-plt.savefig("outputs/max_shaps_importance.png", bbox_inches="tight")
+plt.savefig(f"outputs/max_shaps_importance_{select_how_many}.png", bbox_inches="tight")
 
 
+# %% write out top features from shaps mean and max
+# to "./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
+
+
+extract_top_from_shaps(
+    shaps_list=mean_shaps,
+    column_names=X_columns,
+    select_how_many=select_how_many,
+    remove_containing=None,
+    file_prefix="mean",
+)
+extract_top_from_shaps(
+    shaps_list=max_shaps,
+    column_names=X_columns,
+    select_how_many=select_how_many,
+    remove_containing=None,
+    file_prefix="max",
+)
+
+
+# %% Get kbest features from sklearn
+from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
+
+pl = Pipeline(
+    [
+        ("variance_threshold", VarianceThreshold()),  # Remove low variance features
+        ("impute", SimpleImputer(strategy="constant", fill_value=9999)),
+        (
+            "feature_selection",
+            SelectKBest(k=select_how_many, score_func=f_classif),
+        ),  # Select top k features based on ANOVA F-value
+        ("clf", RandomForestClassifier()),
+    ]
+)
+
+gridsearch = GridSearchCV(
+    pl,
+    cv=KFold(n_splits=3),
+    scoring="balanced_accuracy",
+    param_grid={"clf__n_estimators": [1000]},
+)
+
+with gw.config.update(ref_image=images[-1]):
+    with gw.open(images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        X = gw.extract(src, lu_complete)
+        y = lu_complete["lc"]
+        X = X[range(1, len(images) + 1)]
+        del src
+
+gridsearch.fit(X=X.values, y=y.values)
+print(gridsearch.cv_results_)
+print(gridsearch.best_score_)
+print(gridsearch.best_params_)
+print(
+    [
+        os.path.basename(images[i])
+        for i in gridsearch.best_estimator_.named_steps[
+            "feature_selection"
+        ].get_support(indices=True)
+    ]
+)
+
+kbest_images = [
+    images[i]
+    for i in gridsearch.best_estimator_.named_steps["feature_selection"].get_support(
+        indices=True
+    )
+]
+pd.DataFrame({f"top{select_how_many}": kbest_images}).to_csv(
+    f"./outputs/selected_images_kbest_{select_how_many}.csv",
+)
+
+
+# FIND REDUNDANT FEATURES #
 # # %% feature clustering to find redundant features
 # # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
 
@@ -413,56 +487,11 @@ plt.savefig("outputs/max_shaps_importance.png", bbox_inches="tight")
 # shap_values2 = explainer(X)
 
 # shap.plots.beeswarm(explainer2)
-# %% write out top features from shaps mean and max
-# to "./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
 
 
-extract_top_from_shaps(
-    shaps_list=mean_shaps,
-    column_names=X_columns,
-    select_how_many=select_how_many,
-    remove_containing=None,
-    file_prefix="mean",
-)
-extract_top_from_shaps(
-    shaps_list=max_shaps,
-    column_names=X_columns,
-    select_how_many=select_how_many,
-    remove_containing=None,
-    file_prefix="max",
-)
-
-
-# %%
-
-
-# # Create a dictionary to store the top 5 variables for each class
-# top_variables_dict = {}
-
-# # Iterate over the classes
-# for class_index, class_name in enumerate(le.classes_):
-#     # Get the mean SHAP values for the current class
-#     class_shaps = mean_shaps[class_index]
-
-#     # Calculate the absolute mean SHAP values
-#     abs_shaps = np.abs(class_shaps)
-
-#     # Get the indices of the top 5 variables
-#     top_indices = np.argsort(abs_shaps)[-5:]
-
-#     # Get the names of the top 5 variables
-#     top_variables = [X_columns[i] for i in top_indices]
-
-#     # Store the top variables in the dictionary
-#     top_variables_dict[class_name] = top_variables
-
-# # Print the top variables for each class
-# for class_name, top_variables in top_variables_dict.items():
-#     print(f"Class: {class_name}")
-#     print("Top Variables:", top_variables)
-#     print()
-
+##############################################################
 # %% RESAMPLE IMAGES
+##############################################################
 # resample all selected features to 10m and set smallest dtype possible
 # Read in the list of selected images
 select_images = set(
@@ -476,10 +505,17 @@ select_images = set(
             f"top{select_how_many}"
         ].values
     )
+    + list(
+        pd.read_csv(f"./outputs/selected_images_kbest_{select_how_many}.csv")[
+            f"top{select_how_many}"
+        ].values
+    )
 )
+
+
 select_images
 
-# %%
+
 # Reduce image size and create 10m resolution images
 
 os.makedirs("./outputs/selected_images_10m", exist_ok=True)
@@ -1016,7 +1052,6 @@ conf_matrix_percent = agg_conf_matrix / row_sums
 
 # Get the class names
 class_names = le.inverse_transform(pipeline_performance["classifier"].classes_)
-# %%
 # Create a heatmap using seaborn
 plt.figure(figsize=(10, 8))
 
@@ -1034,11 +1069,14 @@ plt.xlabel("Predicted")
 plt.ylabel("True")
 # plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
 plt.title(f"RF Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
-plt.savefig("outputs/final_class_perfomance_rf.png", bbox_inches="tight")
+plt.savefig(
+    f"outputs/final_class_perfomance_rf_kbest_{select_how_many}.png",
+    bbox_inches="tight",
+)
 
 # Show the plot
 plt.show()
-
+# %%
 ##################################################################
 # Write out final mode
 ##################################################################

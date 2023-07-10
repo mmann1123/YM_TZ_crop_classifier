@@ -15,6 +15,7 @@ from sklearn.model_selection import (
     StratifiedGroupKFold,
 )
 import numpy as np
+from glob import glob
 
 
 def extract_top_from_shaps(
@@ -23,6 +24,7 @@ def extract_top_from_shaps(
     select_how_many=10,
     remove_containing=None,
     file_prefix="mean",
+    data_dir="/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data",
 ):
     vals = np.abs(shaps_list).mean(axis=0)
 
@@ -42,7 +44,8 @@ def extract_top_from_shaps(
         columns={"col_name": f"top{select_how_many}names"}, inplace=True
     )
     # add paths
-    top_col_names[f"top{select_how_many}"] = [
+    print("adding paths from directory", data_dir)
+    top_col_names[f"top{select_how_many}names"] = [
         glob(f"./data/**/annual_features/**/*{x}.tif")[0]
         for x in top_col_names[f"top{select_how_many}names"]
     ]
@@ -439,3 +442,5 @@ def classifier_objective(trial, X, y, classifier_override=None, groups=None):
 
 # #     def fit(self, *args, **kwargs):
 # #         return self
+
+# %%

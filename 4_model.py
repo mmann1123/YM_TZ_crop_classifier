@@ -11,6 +11,8 @@ from sklearn_helpers import (
     get_selected_ranked_images,
     classifier_objective,
     extract_top_from_shaps,
+    remove_collinear_features,
+    remove_list_from_list,
 )
 import pickle
 import pandas as pd
@@ -75,6 +77,12 @@ pipeline_scale_clean = Pipeline(
         ("imputer", SimpleImputer(strategy="mean")),
         ("scaler", StandardScaler()),
         ("variance_threshold", VarianceThreshold(threshold=0.5)),
+    ]
+)
+pipeline_scale = Pipeline(
+    [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
     ]
 )
 
@@ -465,6 +473,9 @@ pd.DataFrame({f"top{select_how_many}names": kbest_images}).to_csv(
 # # %% feature clustering to find redundant features
 # # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
 # Read in the list of selected images
+
+# Trying other method
+# https://stackoverflow.com/questions/29294983/how-to-calculate-correlation-between-all-columns-and-remove-highly-correlated-on
 select_images = list(
     set(
         list(
@@ -496,19 +507,16 @@ with gw.config.update(ref_image=target_string):
         X = df[range(1, len(select_images) + 1)]
         X_columns = [os.path.basename(f).split(".")[0] for f in select_images]
         groups = df.id.values
+# %%
+# remove nan and bad columns
 
-
-X = pipeline_scale_clean.fit_transform(X)
-
-
-# this takes a long time
-# clustering = shap.utils.hclust(
-#     X, y
-# )  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
-
-# # save model to disk
-# with open("./models/clustering_model.pkl", "wb") as f:
-#     pickle.dump(clustering, f)
+X = pipeline_scale.fit_transform(X)
+# %%
+remove_collinear_features(
+    pd.DataFrame(X, columns=X_columns),
+    threshold=0.9,
+    out_df=f"./outputs/collinear_features_{select_how_many}.csv",
+)
 
 
 ##############################################################
@@ -516,27 +524,36 @@ X = pipeline_scale_clean.fit_transform(X)
 ##############################################################
 # resample all selected features to 10m and set smallest dtype possible
 # Read in the list of selected images
-select_images = set(
-    list(
-        pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
-            f"top{select_how_many}"
-        ].values
-    )
-    + list(
-        pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
-            f"top{select_how_many}"
-        ].values
-    )
-    + list(
-        pd.read_csv(f"./outputs/selected_images_kbest_{select_how_many}.csv")[
-            f"top{select_how_many}"
-        ].values
+select_images = list(
+    set(
+        list(
+            pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
+                f"top{select_how_many}names"
+            ].values
+        )
+        + list(
+            pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
+                f"top{select_how_many}names"
+            ].values
+        )
+        + list(
+            pd.read_csv(f"./outputs/selected_images_kbest_{select_how_many}.csv")[
+                f"top{select_how_many}names"
+            ].values
+        )
     )
 )
+# %%
+# remove highly correlated features
+high_corr = list(
+    pd.read_csv(f"./outputs/collinear_features_{select_how_many}.csv")[
+        f"highcorrelation"
+    ].values
+)
 
+select_images = remove_list_from_list(select_images, high_corr)
 
-select_images
-
+# %%
 
 # Reduce image size and create 10m resolution images
 
@@ -580,6 +597,7 @@ for select_image in select_images:
 # MODEL SELECTION between RF, LGBM, SVC
 ########################################################
 # uses select_how_many from top of script
+
 select_images = glob("./outputs/selected_images_10m/*.tif")
 
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
@@ -590,7 +608,7 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
     groups = df.id.values
 
-X = pipeline_scale_clean.fit_transform(X)
+X = pipeline_scale.fit_transform(X)
 
 
 #  Create optuna classifier study
@@ -619,7 +637,7 @@ study.optimize(
     lambda trial: classifier_objective(
         trial, X, y, groups=groups, classifier_override="RandomForest"
     ),
-    n_trials=50,
+    n_trials=75,
     n_jobs=12,
 )
 
@@ -673,20 +691,8 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 # UNSUPERVISED CLASIFICATION
 ########################################################
 # %% plot kmean andn the selected features
-select_images = list(
-    set(
-        list(
-            pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
-                f"top{select_how_many}"
-            ].values
-        )
-        + list(
-            pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
-                f"top{select_how_many}"
-            ].values
-        )
-    )
-)
+select_images = glob("./outputs/selected_images_10m/*.tif")
+
 select_images
 
 # get important image paths
@@ -729,255 +735,6 @@ for i in range(10, 21, 5):
             overwrite=True,
             compress="lzw",
         )
-
-# %%
-########################################################
-# Outlier Removal NOT NEEDED JUST REMOVING WATER Urban
-########################################################
-# from sklearn.ensemble import IsolationForest
-
-
-# # get important image paths
-# select_images = get_selected_ranked_images()
-# # Get the image names
-# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
-
-
-# with gw.open(
-#     select_images, nodata=9999, stack_dim="band", band_names=image_names
-# ) as src:
-#     # fit a model to get Xy used to train model
-#     X = gw.extract(src, lu_complete)
-#     y = lu_complete["lc"]
-#     # select only extracted values - labeled with integers
-#     X = X[range(1, len(select_images) + 1)]
-#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-
-# pipeline = Pipeline(
-#     [
-#         ("variance_threshold", VarianceThreshold(threshold=0.5)),
-#         ("imputer", SimpleImputer(strategy="median")),
-#         ("scaler", StandardScaler()),
-#         ("umap", IsolationForest(contamination="auto")),
-#     ]
-# )
-# outlier_mask = pipeline.fit_predict(X) == -1
-
-# # Remove outliers from X
-# X_without_outliers = X[~outlier_mask]
-
-# # Remove outliers from y (if applicable)
-# y_without_outliers = y[~outlier_mask]
-
-# %%
-# ########################################################
-# # Dimensionality reduction
-# ########################################################
-
-# # get optimal parameters
-
-# classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
-
-
-# # %% get cleaned data
-
-# # get evi example
-# target_string = next((string for string in images if "EVI" in string), None)
-
-# with gw.config.update(ref_image=target_string):
-#     with gw.open(images, nodata=9999, stack_dim="band") as src:
-#         # fit a model to get Xy used to train model
-#         df = gw.extract(src, lu_complete)
-#         y = lu_complete["lc"]
-#         X = df[range(1, len(images) + 1)]
-#         X.columns = [os.path.basename(f).split(".")[0] for f in images]
-
-# # remove nan and bad columns
-# pipeline_scale_clean = Pipeline(
-#     [
-#         ("imputer", SimpleImputer(strategy="mean")),
-#         ("scaler", StandardScaler()),
-#         ("variance_threshold", VarianceThreshold(threshold=0.5)),
-#     ]
-# )
-
-# X = pipeline_scale_clean.fit_transform(X)
-
-# # %%
-# # Create the dimensionality reduction pipeline
-# dr_pipeline = Pipeline(
-#     [("dim_reduction", PCA(n_components=5)), ("clf", classifier_pipe)]
-# )
-
-
-# #  find optimal umap parameters
-# # Define the objective function for Optuna
-# def dr_objective(trial):
-#     # Define the parameter space for dimensionality reduction
-#     dr_method = trial.suggest_categorical("dr_method", ["PCA", "UMAP"])
-
-#     if dr_method == "PCA":
-#         pca_params = {"n_components": trial.suggest_int("pca_n_components", 3, 25)}
-
-#         # Set the PCA parameters in the pipeline
-#         dr_pipeline.set_params(dim_reduction=PCA(**pca_params))
-
-#     elif dr_method == "UMAP":
-#         umap_params = {
-#             "n_components": trial.suggest_int("umap_n_components", 3, 25),
-#             "n_neighbors": trial.suggest_categorical(
-#                 "umap_n_neighbors", [3, 5, 8, 10, 15]
-#             ),
-#         }
-
-#         # Set the UMAP parameters in the pipeline
-#         dr_pipeline.set_params(dim_reduction=umap.UMAP(**umap_params))
-
-#     # Fit the pipeline and calculate the score
-#     score = cross_val_score(dr_pipeline, X, y, cv=5, scoring="balanced_accuracy").mean()
-
-#     return score
-
-
-# # Create an SQLite connection
-# conn = sqlite3.connect("models/study.db")
-
-# # Create a study with SQLite storage
-# storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
-
-# # delete any existing study
-# try:
-#     study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
-#     optuna.delete_study(study_name="umap_kmeans_selection", storage=storage)
-# except:
-#     pass
-
-# # store current study
-# study = optuna.create_study(
-#     storage=storage, study_name="umap_kmeans_selection", direction="maximize"
-# )
-
-# # Optimize the objective function
-# study.optimize(dr_objective, n_trials=50)
-
-# # Close the SQLite connection
-# conn.close()
-
-# %%
-
-########################################################
-# Classification performance with DimReduct and Random Forest Optimized
-########################################################
-
-# # get optimal parameters
-# classifier_pipe = best_classifier_pipe("models/study.db", "model_selection")
-
-# # Create a study with SQLite storage
-# storage = optuna.storages.RDBStorage(url="sqlite:///models/study.db")
-# study = optuna.load_study(study_name="umap_kmeans_selection", storage=storage)
-
-
-# # %%
-
-# target_string = next((string for string in images if "EVI" in string), None)
-
-# with gw.config.update(ref_image=target_string):
-#     with gw.open(images, nodata=9999, stack_dim="band") as src:
-#         # fit a model to get Xy used to train model
-#         df = gw.extract(src, lu_complete)
-#         y = lu_complete["lc"]
-#         X = df[range(1, len(images) + 1)]
-#         X.columns = [os.path.basename(f).split(".")[0] for f in images]
-
-# # remove nan and bad columns
-# pipeline_scale_clean = Pipeline(
-#     [
-#         ("imputer", SimpleImputer(strategy="mean")),
-#         ("scaler", StandardScaler()),
-#         ("variance_threshold", VarianceThreshold(threshold=0.5)),
-#     ]
-# )
-
-# X = pipeline_scale_clean.fit_transform(X)
-
-
-# # Define the pipeline steps
-# pipeline = Pipeline(
-#     [
-#         (
-#             "dim_reduction",
-#             PCA(n_components=top_dr_trial["pca_n_components"], random_state=42),
-#         ),
-#         ("classifier", classifier_pipe),
-#     ]
-# )
-
-# # Predict the labels of the test data
-# y_pred_dr = cross_val_score(
-#     pipeline,
-#     X,
-#     y,
-#     cv=5,
-#     n_jobs=-1,
-#     verbose=2,
-# )
-# y_pred_dr
-
-# # save cv results
-# pd.DataFrame({"y_pred_dr_results_CV": y_pred_dr}).to_csv(
-#     "outputs/y_pred_dr_results.csv"
-# )
-
-# print(f"Mean accuracy score: {y_pred_dr.mean():.3}")
-
-# # %% Compare to feature selection
-
-# # get important image paths
-# select_images = get_selected_ranked_images(
-#     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-#     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-#     select_how_many=select_how_many,
-# )
-# # get same number of features
-# select_images = select_images[
-#     0 : top_dr_trial["pca_n_components"]
-# ]  # + glob("./outputs/*kmean*.tif") # kmeans might not help
-
-# # Get the image names
-# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
-
-# # extract data
-# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-#     # fit a model to get Xy used to train model
-#     X = gw.extract(src, lu_complete)
-#     y = lu_complete["lc"]
-#     X = X[range(1, len(select_images) + 1)]
-#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-
-# X = pipeline_scale_clean.fit_transform(X)
-
-# # Define the pipeline steps
-# pipeline_feat = Pipeline(
-#     [
-#         ("classifier", RandomForestClassifier(**top_trial)),
-#     ]
-# )
-
-# # Predict the labels of the test data
-# y_pred_feat = cross_val_score(
-#     pipeline_feat,
-#     X,
-#     y,
-#     cv=5,
-#     n_jobs=-1,
-#     verbose=2,
-# )
-# y_pred_feat
-# # save cv results
-# pd.DataFrame({"y_pred_feat_results_CV": y_pred_feat}).to_csv(
-#     "outputs/y_pred_feat_results.csv"
-# )
-
 
 # NOTE: Feature selection is better than dim reduction
 

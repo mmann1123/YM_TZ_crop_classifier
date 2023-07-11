@@ -12,7 +12,7 @@ from sklearn_helpers import (
     classifier_objective,
     extract_top_from_shaps,
 )
-
+import pickle
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -45,6 +45,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import PCA
 from sklearn.cluster import MiniBatchKMeans, OPTICS
 import lightgbm as lgb
+import xgboost
 import optuna
 import shap
 import sqlite3
@@ -455,30 +456,139 @@ kbest_images = [
         indices=True
     )
 ]
-pd.DataFrame({f"top{select_how_many}": kbest_images}).to_csv(
+pd.DataFrame({f"top{select_how_many}names": kbest_images}).to_csv(
     f"./outputs/selected_images_kbest_{select_how_many}.csv",
 )
 
-
+# %%
 # FIND REDUNDANT FEATURES #
 # # %% feature clustering to find redundant features
 # # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
+# Read in the list of selected images
+select_images = list(
+    set(
+        list(
+            pd.read_csv(f"./outputs/selected_images_mean_{select_how_many}.csv")[
+                f"top{select_how_many}names"
+            ].values
+        )
+        + list(
+            pd.read_csv(f"./outputs/selected_images_max_{select_how_many}.csv")[
+                f"top{select_how_many}names"
+            ].values
+        )
+        + list(
+            pd.read_csv(f"./outputs/selected_images_kbest_{select_how_many}.csv")[
+                f"top{select_how_many}names"
+            ].values
+        )
+    )
+)
 
+target_string = next((string for string in images if "EVI" in string), None)
+
+with gw.config.update(ref_image=target_string):
+    with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+        # fit a model to get Xy used to train model
+        df = gw.extract(src, lu_poly, verbose=1)
+        y = df["lc"]
+        y.reset_index(drop=True, inplace=True)
+        X = df[range(1, len(select_images) + 1)]
+        X_columns = [os.path.basename(f).split(".")[0] for f in select_images]
+        groups = df.id.values
+
+
+X = pipeline_scale_clean.fit_transform(X)
+
+
+# this takes a long time
 # clustering = shap.utils.hclust(
 #     X, y
 # )  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
-# # %%
-# summary = shap.summary_plot(
-#     mean_shaps,
-#     X,
-#     feature_names=[x.replace("_", ".") for x in X_columns],
-#     class_names=le.classes_,
-#     plot_type="bar",
-#     max_display=20,
-#     plot_size=(10, 10),
-#     show=False,
-#     clustering=clustering,
+
+# # save model to disk
+# with open("./models/clustering_model.pkl", "wb") as f:
+#     pickle.dump(clustering, f)
+
+
+# %%
+# Load the saved model
+with open("./models/clustering_model.pkl", "rb") as f:
+    clustering = pickle.load(f)
+
+# %%
+
+model = xgboost.XGBClassifier().fit(X, y)
+with open("./models/xgboost_model.pkl", "wb") as f:
+    pickle.dump(model, f)
+with open("./models/xgboost_model.pkl", "rb") as f:
+    model = pickle.load(f)
+
+# compute SHAP values
+explainer = shap.Explainer(model, X)
+shap_values = explainer(X)
+shap.plots.bar(shap_values, clustering=clustering)
+
+# %%
+# train XGBoost model
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.5, random_state=42, stratify=y
+)
+
+model = xgboost.XGBClassifier().fit(X_train, y_train)
+# %%
+# compute SHAP values
+explainer = shap.Explainer(model, X_train, check_additivity=False)
+shap_values = explainer(X_train, check_additivity=False)
+
+shap.plots.bar(shap_values)
+# %%
+clustering = shap.utils.hclust(
+    X, y
+)  # by default this trains (X.shape[1] choose 2) 2-feature XGBoost models
+shap.plots.bar(shap_values, clustering=clustering)
+# %%
+# X_train, X_test, y_train, y_test = train_test_split(
+#     X, y, test_size=0.2, random_state=7, stratify=y
 # )
+# # %% Extract best parameters for LGBM
+# lgbm_pipe = best_classifier_pipe(
+#     "models/study.db", "model_selection_feature_selection", "LGBM"
+# )
+# params_lgbm_dict = lgbm_pipe["classifier"].get_params()
+
+# params = params_lgbm_dict.copy()
+# params["objective"] = "multiclass"
+# params["metric"] = "multi_logloss"
+# params["num_classes"] = len(lu_complete["lc"].unique())
+# d_train = lgb.Dataset(X_train, label=y_train)
+# d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
+# model = lgb.train(
+#     params,
+#     d_train,
+#     10000,
+#     valid_sets=[d_test],
+#     early_stopping_rounds=200,
+#     verbose_eval=1000,
+# )
+
+# # SHAP exaplainer
+# explainer = shap.TreeExplainer(model)
+# shap_values = explainer.shap_values(X)
+
+
+# %%
+summary = shap.summary_plot(
+    shap_values,
+    X,
+    feature_names=[x.replace("_", ".") for x in X_columns],
+    class_names=le.classes_,
+    plot_type="bar",
+    max_display=20,
+    plot_size=(10, 10),
+    show=False,
+    clustering=clustering,
+)
 
 # plt.savefig("outputs/mean_shaps_importance_clustering.png", bbox_inches="tight")
 
@@ -1334,7 +1444,6 @@ best_params = search.best_params_
 best_score = search.best_score_
 # %%
 # Save the trained model
-import pickle
 
 with open(f"models/final_model_rf_{len(select_images)}.pkl", "wb") as file:
     pickle.dump(search, file)

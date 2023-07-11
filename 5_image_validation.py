@@ -86,34 +86,8 @@ for crop in df_filtered["primar"].unique():
 
 
 # %%
-# %% All of images
+# %% Plot 100  images
 # Filter rows with valid URLs and assigned crop labels
-
-keep = [
-    "rice",
-    "maize",
-    "cassava",
-    "sunflower",
-    "sorghum",
-    "cotton",
-    "soybeans",
-    "millet",
-]
-drop = [
-    "Don't know",
-    "Other (later, specify in optional notes)",
-    "vegetables",
-    "other",
-    "speciality_crops",
-    "eggplant",
-    "okra ",
-    "tree_crops",
-    "other_grain",
-]
-
-# apply keep/drop
-df_filtered.drop(df_filtered[df_filtered["primar"].isin(drop)].index, inplace=True)
-
 
 for crop in df_filtered["primar"].unique():
     try:
@@ -180,6 +154,32 @@ for crop in df_filtered["primar"].unique():
     plt.show()
 
 # %% plot ALL images
+
+keep = [
+    "rice",
+    "maize",
+    "cassava",
+    "sunflower",
+    "sorghum",
+    "cotton",
+    "soybeans",
+    "millet",
+]
+drop = [
+    "Don't know",
+    "Other (later, specify in optional notes)",
+    "vegetables",
+    "other",
+    "speciality_crops",
+    "eggplant",
+    "okra ",
+    "tree_crops",
+    "other_grain",
+]
+
+# apply keep/drop
+df_filtered.drop(df_filtered[df_filtered["primar"].isin(drop)].index, inplace=True)
+
 
 for crop in df_filtered["primar"].unique():
     print("working on", crop)

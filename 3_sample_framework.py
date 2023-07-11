@@ -9,12 +9,14 @@ import pandas as pd
 
 
 # %% read in points from csv
+import os
 
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/"
+)
 crs = "EPSG:32736"
 
-points = pd.read_csv(
-    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth_cleaned.csv"
-)
+points = pd.read_csv(r"kobo_field_collections/TZ_ground_truth_cleaned_mm.csv")
 
 points = gpd.GeoDataFrame(
     points,
@@ -24,26 +26,26 @@ points = gpd.GeoDataFrame(
     crs="EPSG:4326",
 )
 points = (
-    points[["primar", "Field_size", "geometry"]]
+    points[["primar", "Field_size", "Quality", "geometry"]]
     .rename(columns={"primar": "Primary land cover"})
     .to_crs(crs)
 )
 
+points["Quality"].fillna("OK", inplace=True)
+
 points.to_file(
-    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth_cleaned.gpkg",
+    r"kobo_field_collections/TZ_ground_truth_cleaned.gpkg",
     driver="GPKG",
 )
 
-
+points
 # %% restrict training data to bounds
 import geopandas as gpd
 
 bbox = gpd.read_file(
-    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/bounds.gpkg",
+    r"./Land_Cover/data/bounds.gpkg",
 )
-points = gpd.read_file(
-    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_ground_truth_cleaned.gpkg"
-)
+points = gpd.read_file(r"./kobo_field_collections/TZ_ground_truth_cleaned.gpkg")
 print(points.shape)
 points.head()
 
@@ -53,7 +55,7 @@ from sklearn import preprocessing
 import numpy as np
 
 points_clip = points.clip(bbox)
-points_clip = points_clip[["Primary land cover", "Field_size", "geometry"]]
+points_clip = points_clip[["Primary land cover", "Field_size", "Quality", "geometry"]]
 le = preprocessing.LabelEncoder()
 points_clip["lc_code"] = le.fit_transform(points_clip["Primary land cover"])
 points_clip["Field_code"] = points_clip["Field_size"].map(
@@ -62,7 +64,7 @@ points_clip["Field_code"] = points_clip["Field_size"].map(
 points_clip = points_clip[points_clip["Primary land cover"].notna()]
 
 points_clip.to_crs(crs).to_file(
-    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data/training_cleaned.geojson",
+    r"./Land_Cover/data/training_cleaned.geojson",
     driver="GeoJSON",
 )
 points_clip.head()

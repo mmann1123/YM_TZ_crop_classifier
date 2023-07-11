@@ -9,7 +9,110 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
-from sklearn.model_selection import cross_val_score, StratifiedKFold
+from sklearn.model_selection import (
+    cross_val_score,
+    StratifiedKFold,
+    StratifiedGroupKFold,
+)
+import numpy as np
+from glob import glob
+
+
+def remove_list_from_list(main_list, remove_containing):
+    for remove in remove_containing:
+        main_list = [x for x in main_list if remove not in x]
+    return main_list
+
+
+def remove_collinear_features(x, threshold, out_df="./outputs/collinear_features.csv"):
+    """
+    Objective:
+        Remove collinear features in a dataframe with a correlation coefficient
+        greater than the threshold. Removing collinear features can help a model
+        to generalize and improves the interpretability of the model.
+
+    Inputs:
+        x: features dataframe
+        threshold: features with correlations greater than this value are removed
+
+    Output:
+        dataframe that contains only the non-highly-collinear features
+    """
+
+    # Calculate the correlation matrix
+    corr_matrix = x.corr()
+    iters = range(len(corr_matrix.columns) - 1)
+    drop_cols = []
+
+    # Iterate through the correlation matrix and compare correlations
+    for i in iters:
+        for j in range(i + 1):
+            item = corr_matrix.iloc[j : (j + 1), (i + 1) : (i + 2)]
+            col = item.columns
+            row = item.index
+            val = abs(item.values)
+
+            # If correlation exceeds the threshold
+            if val >= threshold:
+                # Print the correlated features and the correlation value
+                print(col.values[0], "|", row.values[0], "|", round(val[0][0], 2))
+                drop_cols.append(col.values[0])
+
+    # Drop one of each pair of correlated columns
+    drops = set(drop_cols)
+    print("Dropping", drops, "columns")
+    pd.DataFrame({"highcorrelation": list(drops)}).to_csv(out_df, index=False)
+    x = x.drop(columns=drops)
+
+    return x
+
+
+def extract_top_from_shaps(
+    shaps_list,
+    column_names,
+    select_how_many=10,
+    remove_containing=None,
+    file_prefix="mean",
+    data_dir="/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data",
+):
+    vals = np.abs(shaps_list).mean(axis=0)
+
+    feature_importance = pd.DataFrame(
+        list(zip(column_names, sum(vals))),
+        columns=["col_name", "feature_importance_vals"],
+    )
+    feature_importance.sort_values(
+        by=["feature_importance_vals"], ascending=False, inplace=True
+    )
+    feature_importance.head(20)
+    #
+    # top unique col_names or until there are no more feature importance dataframes
+    top_col_names = feature_importance[0:select_how_many]
+    top_col_names.reset_index(inplace=True, drop=True)
+    top_col_names.rename(
+        columns={"col_name": f"top{select_how_many}names"}, inplace=True
+    )
+    # add paths
+    print("adding paths from directory", data_dir)
+    top_col_names[f"top{select_how_many}names"] = [
+        glob(f"./data/**/annual_features/**/*{x}.tif")[0]
+        for x in top_col_names[f"top{select_how_many}names"]
+    ]
+
+    # NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
+    if remove_containing:
+        for remove in remove_containing:
+            top_col_names = top_col_names[
+                ~top_col_names[f"top{select_how_many}names"].str.contains(remove)
+            ]
+    # out = out[~out["top25"].str.contains("kurtosis")]
+    # out = out[~out["top25"].str.contains("mean_change")]
+
+    top_col_names.to_csv(
+        f"./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
+    )
+    print(top_col_names)
+    return top_col_names
 
 
 def isolate_dr_dict(sorted_trials, desired_dr):
@@ -71,6 +174,9 @@ def isolate_classifier_dict(sorted_trials, desired_classifier):
     if "n_estimators" in desired_params:
         value = desired_params.pop("n_estimators")
         desired_params["n_estimators"] = int(value)
+    if "min_samples_leaf" in desired_params:
+        value = desired_params.pop("min_samples_leaf")
+        desired_params["min_samples_leaf"] = int(value)
 
     return desired_params
 
@@ -130,41 +236,85 @@ def get_selected_ranked_images(
     return list(ordered[f"top{select_how_many}"])
 
 
-def classifier_objective(trial, X, y):
+# %%
+def classifier_objective(trial, X, y, classifier_override=None, groups=None):
     # Define the algorithm for optimization.
 
+    # check for valid override values
+    if classifier_override in [None, "SVC", "RandomForest", "LGBM"]:
+        pass
+    else:
+        raise ValueError(
+            "classifier_override must be one of None, 'SVC', 'RandomForest', or 'LGBM'"
+        )
+
     # Select classifier.
-    classifier_name = trial.suggest_categorical(
-        "classifier", ["SVC", "RandomForest", "LGBM"]
-    )
+    if classifier_override is not None:
+        print(f"Overriding classifier using: {classifier_override}")
+        classifier_name = trial.suggest_categorical("classifier", [classifier_override])
+    else:
+        classifier_name = trial.suggest_categorical(
+            "classifier", ["SVC", "RandomForest", "LGBM"]
+        )
 
     if classifier_name == "SVC":
         svc_c = trial.suggest_float("svc_c", 1e-10, 1e10, log=True)
         svc_kernel = trial.suggest_categorical("svc_kernel", ["linear", "rbf", "poly"])
         svc_degree = trial.suggest_int("svc_degree", 1, 5)
-        classifier_obj = SVC(C=svc_c, kernel=svc_kernel, degree=svc_degree)
+        svc_gamma = trial.suggest_categorical("svc_gamma", ["scale", "auto"])
+        classifier_obj = SVC(
+            C=svc_c, kernel=svc_kernel, degree=svc_degree, gamma=svc_gamma
+        )
+
     elif classifier_name == "RandomForest":
         rf_max_depth = trial.suggest_int("rf_max_depth", 2, 32)
         rf_n_estimators = trial.suggest_int("rf_n_estimators", 100, 1000, step=100)
         rf_min_samples_split = trial.suggest_int("rf_min_samples_split", 2, 10)
+        rf_min_samples_leaf = trial.suggest_int("rf_min_samples_leaf", 1, 10)
+        rf_max_features = trial.suggest_categorical("rf_max_features", ["auto", "sqrt"])
+        rf_criterion = trial.suggest_categorical(
+            "rf_criterion", ["gini", "entropy", "log_loss"]
+        )
+
         classifier_obj = RandomForestClassifier(
             max_depth=rf_max_depth,
             n_estimators=rf_n_estimators,
             min_samples_split=rf_min_samples_split,
+            min_samples_leaf=rf_min_samples_leaf,
+            max_features=rf_max_features,
+            criterion=rf_criterion,
         )
+
+    # ranges from https://docs.aws.amazon.com/sagemaker/latest/dg/lightgbm-tuning.html
     else:
-        lgbm_max_depth = trial.suggest_int("lgbm_max_depth", 2, 32)
+        lgbm_max_depth = trial.suggest_int("lgbm_max_depth", 10, 100)
         lgbm_learning_rate = trial.suggest_float("lgbm_learning_rate", 0.01, 0.1)
+        lgbm_bagging_fraction = trial.suggest_float("lgbm_bagging_fraction", 0.1, 1)
+        lgbm_bagging_freq = trial.suggest_int("lgbm_bagging_freq", 0, 10)
         lgbm_num_leaves = trial.suggest_int("lgbm_num_leaves", 10, 100)
+        lgbm_min_data_in_leaf = trial.suggest_int("lgbm_min_data_in_leaf", 10, 200)
+
         classifier_obj = LGBMClassifier(
             max_depth=lgbm_max_depth,
             learning_rate=lgbm_learning_rate,
             num_leaves=lgbm_num_leaves,
+            bagging_fraction=lgbm_bagging_fraction,
+            bagging_freq=lgbm_bagging_freq,
+            min_data_in_leaf=lgbm_min_data_in_leaf,
         )
-
     # Perform cross-validation
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    scores = cross_val_score(classifier_obj, X, y, cv=skf, scoring="balanced_accuracy")
+    if groups is not None:
+        gss = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+        print(gss)
+
+        scores = cross_val_score(
+            classifier_obj, X, y, groups=groups, cv=gss, scoring="balanced_accuracy"
+        )
+    else:
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        scores = cross_val_score(
+            classifier_obj, X, y, cv=skf, scoring="balanced_accuracy"
+        )
 
     return scores.mean()  # Return the average balanced accuracy across folds
 
@@ -345,3 +495,5 @@ def classifier_objective(trial, X, y):
 
 # #     def fit(self, *args, **kwargs):
 # #         return self
+
+# %%

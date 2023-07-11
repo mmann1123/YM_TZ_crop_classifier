@@ -18,6 +18,55 @@ import numpy as np
 from glob import glob
 
 
+def remove_list_from_list(main_list, remove_containing):
+    for remove in remove_containing:
+        main_list = [x for x in main_list if remove not in x]
+    return main_list
+
+
+def remove_collinear_features(x, threshold, out_df="./outputs/collinear_features.csv"):
+    """
+    Objective:
+        Remove collinear features in a dataframe with a correlation coefficient
+        greater than the threshold. Removing collinear features can help a model
+        to generalize and improves the interpretability of the model.
+
+    Inputs:
+        x: features dataframe
+        threshold: features with correlations greater than this value are removed
+
+    Output:
+        dataframe that contains only the non-highly-collinear features
+    """
+
+    # Calculate the correlation matrix
+    corr_matrix = x.corr()
+    iters = range(len(corr_matrix.columns) - 1)
+    drop_cols = []
+
+    # Iterate through the correlation matrix and compare correlations
+    for i in iters:
+        for j in range(i + 1):
+            item = corr_matrix.iloc[j : (j + 1), (i + 1) : (i + 2)]
+            col = item.columns
+            row = item.index
+            val = abs(item.values)
+
+            # If correlation exceeds the threshold
+            if val >= threshold:
+                # Print the correlated features and the correlation value
+                print(col.values[0], "|", row.values[0], "|", round(val[0][0], 2))
+                drop_cols.append(col.values[0])
+
+    # Drop one of each pair of correlated columns
+    drops = set(drop_cols)
+    print("Dropping", drops, "columns")
+    pd.DataFrame({"highcorrelation": list(drops)}).to_csv(out_df, index=False)
+    x = x.drop(columns=drops)
+
+    return x
+
+
 def extract_top_from_shaps(
     shaps_list,
     column_names,
@@ -223,6 +272,9 @@ def classifier_objective(trial, X, y, classifier_override=None, groups=None):
         rf_min_samples_split = trial.suggest_int("rf_min_samples_split", 2, 10)
         rf_min_samples_leaf = trial.suggest_int("rf_min_samples_leaf", 1, 10)
         rf_max_features = trial.suggest_categorical("rf_max_features", ["auto", "sqrt"])
+        rf_criterion = trial.suggest_categorical(
+            "rf_criterion", ["gini", "entropy", "log_loss"]
+        )
 
         classifier_obj = RandomForestClassifier(
             max_depth=rf_max_depth,
@@ -230,6 +282,7 @@ def classifier_objective(trial, X, y, classifier_override=None, groups=None):
             min_samples_split=rf_min_samples_split,
             min_samples_leaf=rf_min_samples_leaf,
             max_features=rf_max_features,
+            criterion=rf_criterion,
         )
 
     # ranges from https://docs.aws.amazon.com/sagemaker/latest/dg/lightgbm-tuning.html

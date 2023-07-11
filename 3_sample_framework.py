@@ -62,6 +62,7 @@ points_clip["Field_code"] = points_clip["Field_size"].map(
     {"small": 15, "medium": 45, "large": 90, np.nan: 0}
 )
 points_clip = points_clip[points_clip["Primary land cover"].notna()]
+points["Quality"].fillna("OK", inplace=True)
 
 points_clip.to_crs(crs).to_file(
     r"./Land_Cover/data/training_cleaned.geojson",

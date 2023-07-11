@@ -62,7 +62,7 @@ import umap
 from glob import glob
 
 # how many images will be selected for importances
-select_how_many = 10
+select_how_many = 15
 
 
 from glob import glob
@@ -507,11 +507,11 @@ with gw.config.update(ref_image=target_string):
         X = df[range(1, len(select_images) + 1)]
         X_columns = [os.path.basename(f).split(".")[0] for f in select_images]
         groups = df.id.values
-# %%
+
 # remove nan and bad columns
 
 X = pipeline_scale.fit_transform(X)
-# %%
+
 remove_collinear_features(
     pd.DataFrame(X, columns=X_columns),
     threshold=0.9,
@@ -684,59 +684,6 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 
 # Print the ranked listing of trials
 print(sorted_trials[["number", "value", "params_classifier"]])
-
-
-# %%
-########################################################
-# UNSUPERVISED CLASIFICATION
-########################################################
-# # %% plot kmean andn the selected features
-# select_images = glob("./outputs/selected_images_10m/*.tif")
-
-# select_images
-
-# # get important image paths
-# # select_images = get_selected_ranked_images(
-# #     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-# #     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-# #     select_how_many=select_how_many,
-# # )
-# # Get the image names
-# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
-
-# # create multiple kmean classification to add to model later
-# # get an EVI example
-# target_string = next((string for string in select_images if "EVI" in string), None)
-
-# for i in range(10, 21, 5):
-#     print("working on kmean", i, "...")
-#     # create a pipeline to process the data and fit a model
-#     pipe_kmeans = Pipeline(
-#         [
-#             ("imp", SimpleImputer(strategy="mean")),
-#             ("rescaler", StandardScaler(with_mean=True, with_std=True)),
-#             ("clf", MiniBatchKMeans(i, random_state=0)),
-#         ]
-#     )
-#     # load the data and fit a model to get Xy used to train model
-#     with gw.config.update(ref_image=target_string):
-#         with gw.open(
-#             select_images,
-#             nodata=9999,
-#             stack_dim="band",
-#             band_names=image_names,
-#         ) as src:
-#             y = fit_predict(data=src, clf=pipe_kmeans)
-#             y = y + 1
-#             y.attrs = src.attrs
-#         # save the image to a file
-#         y.gw.to_raster(
-#             f"./outputs/ym_prediction_kmean_{i}.tif",
-#             overwrite=True,
-#             compress="lzw",
-#         )
-
-# # NOTE: Feature selection is better than dim reduction
 
 
 ##################################################################

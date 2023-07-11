@@ -690,53 +690,53 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 ########################################################
 # UNSUPERVISED CLASIFICATION
 ########################################################
-# %% plot kmean andn the selected features
-select_images = glob("./outputs/selected_images_10m/*.tif")
+# # %% plot kmean andn the selected features
+# select_images = glob("./outputs/selected_images_10m/*.tif")
 
-select_images
+# select_images
 
-# get important image paths
-# select_images = get_selected_ranked_images(
-#     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-#     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-#     select_how_many=select_how_many,
-# )
-# Get the image names
-image_names = [os.path.basename(f).split(".")[0] for f in select_images]
+# # get important image paths
+# # select_images = get_selected_ranked_images(
+# #     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
+# #     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
+# #     select_how_many=select_how_many,
+# # )
+# # Get the image names
+# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
 
-# create multiple kmean classification to add to model later
-# get an EVI example
-target_string = next((string for string in select_images if "EVI" in string), None)
+# # create multiple kmean classification to add to model later
+# # get an EVI example
+# target_string = next((string for string in select_images if "EVI" in string), None)
 
-for i in range(10, 21, 5):
-    print("working on kmean", i, "...")
-    # create a pipeline to process the data and fit a model
-    pipe_kmeans = Pipeline(
-        [
-            ("imp", SimpleImputer(strategy="mean")),
-            ("rescaler", StandardScaler(with_mean=True, with_std=True)),
-            ("clf", MiniBatchKMeans(i, random_state=0)),
-        ]
-    )
-    # load the data and fit a model to get Xy used to train model
-    with gw.config.update(ref_image=target_string):
-        with gw.open(
-            select_images,
-            nodata=9999,
-            stack_dim="band",
-            band_names=image_names,
-        ) as src:
-            y = fit_predict(data=src, clf=pipe_kmeans)
-            y = y + 1
-            y.attrs = src.attrs
-        # save the image to a file
-        y.gw.to_raster(
-            f"./outputs/ym_prediction_kmean_{i}.tif",
-            overwrite=True,
-            compress="lzw",
-        )
+# for i in range(10, 21, 5):
+#     print("working on kmean", i, "...")
+#     # create a pipeline to process the data and fit a model
+#     pipe_kmeans = Pipeline(
+#         [
+#             ("imp", SimpleImputer(strategy="mean")),
+#             ("rescaler", StandardScaler(with_mean=True, with_std=True)),
+#             ("clf", MiniBatchKMeans(i, random_state=0)),
+#         ]
+#     )
+#     # load the data and fit a model to get Xy used to train model
+#     with gw.config.update(ref_image=target_string):
+#         with gw.open(
+#             select_images,
+#             nodata=9999,
+#             stack_dim="band",
+#             band_names=image_names,
+#         ) as src:
+#             y = fit_predict(data=src, clf=pipe_kmeans)
+#             y = y + 1
+#             y.attrs = src.attrs
+#         # save the image to a file
+#         y.gw.to_raster(
+#             f"./outputs/ym_prediction_kmean_{i}.tif",
+#             overwrite=True,
+#             compress="lzw",
+#         )
 
-# NOTE: Feature selection is better than dim reduction
+# # NOTE: Feature selection is better than dim reduction
 
 
 ##################################################################
@@ -744,6 +744,7 @@ for i in range(10, 21, 5):
 ########################################################
 # Final Model & Class level prediction performance
 ########################################################
+# NOTE: Performs better without kmeans included
 
 # get optimal parameters
 pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
@@ -758,7 +759,7 @@ pipeline_performance
 
 select_images = glob("./outputs/selected_images_10m/*.tif")
 
-select_images = select_images + glob("./outputs/*kmean*.tif")
+select_images = select_images
 
 # Get the image names
 image_names = [os.path.basename(f).split(".")[0] for f in select_images]
@@ -855,6 +856,7 @@ plt.savefig(
 
 # Show the plot
 plt.show()
+
 # %%
 ##################################################################
 # Write out final mode

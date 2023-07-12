@@ -177,6 +177,12 @@ def isolate_classifier_dict(sorted_trials, desired_classifier):
     if "min_samples_leaf" in desired_params:
         value = desired_params.pop("min_samples_leaf")
         desired_params["min_samples_leaf"] = int(value)
+    if "min_data_in_leaf" in desired_params:
+        value = desired_params.pop("min_data_in_leaf")
+        desired_params["min_data_in_leaf"] = int(value)
+    if "bagging_freq" in desired_params:
+        value = desired_params.pop("bagging_freq")
+        desired_params["bagging_freq"] = int(value)
 
     return desired_params
 
@@ -237,21 +243,24 @@ def get_selected_ranked_images(
 
 
 # %%
-def classifier_objective(trial, X, y, classifier_override=None, groups=None):
+def classifier_objective(
+    trial, X, y, classifier_override=None, groups=None, weights=None
+):
     # Define the algorithm for optimization.
 
     # check for valid override values
-    if classifier_override in [None, "SVC", "RandomForest", "LGBM"]:
+    classifier_override = list(classifier_override)
+    if all([x in [None, "SVC", "RandomForest", "LGBM"] for x in classifier_override]):
         pass
     else:
         raise ValueError(
-            "classifier_override must be one of None, 'SVC', 'RandomForest', or 'LGBM'"
+            "classifier_override must be one of None, 'SVC', 'RandomForest', or 'LGBM' or a list"
         )
 
     # Select classifier.
     if classifier_override is not None:
         print(f"Overriding classifier using: {classifier_override}")
-        classifier_name = trial.suggest_categorical("classifier", [classifier_override])
+        classifier_name = trial.suggest_categorical("classifier", classifier_override)
     else:
         classifier_name = trial.suggest_categorical(
             "classifier", ["SVC", "RandomForest", "LGBM"]
@@ -303,13 +312,43 @@ def classifier_objective(trial, X, y, classifier_override=None, groups=None):
             min_data_in_leaf=lgbm_min_data_in_leaf,
         )
     # Perform cross-validation
+    params = {}
+    if weights is not None:
+        params["sample_weight"] = weights
+
     if groups is not None:
-        gss = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+        gss = StratifiedGroupKFold(
+            n_splits=5,
+            shuffle=True,
+            random_state=42,
+        )
         print(gss)
 
-        scores = cross_val_score(
-            classifier_obj, X, y, groups=groups, cv=gss, scoring="balanced_accuracy"
-        )
+        try:
+            # Try to use sample weights if provided
+            scores = []
+            for train_index, val_index in gss.split(X, y, groups):
+                X_train, X_val = X[train_index], X[val_index]
+                y_train, y_val = y[train_index], y[val_index]
+                sample_weights_train = weights[
+                    train_index
+                ]  # Replace sample_weights with your array of sample weights
+
+                # Fit the classifier on the training data, passing the sample weights
+                classifier_obj.fit(X_train, y_train, sample_weight=sample_weights_train)
+
+                # Predict the labels for the validation set
+                y_pred = classifier_obj.predict(X_val)
+
+                # Calculate the evaluation metric (e.g., balanced accuracy)
+                score = balanced_accuracy_score(y_val, y_pred)
+                scores.append(score)
+            scores = np.array(scores)
+        except:
+            # if can't use sample weights
+            scores = cross_val_score(
+                classifier_obj, X, y, groups=groups, cv=gss, scoring="balanced_accuracy"
+            )
     else:
         skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
         scores = cross_val_score(

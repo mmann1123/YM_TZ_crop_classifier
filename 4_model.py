@@ -133,7 +133,7 @@ keep = [
     # "eggplant",
     # "soybeans",
     # "tree_crops",
-    # "millet",
+    "millet",
     # "other_grain",
 ]
 drop = [
@@ -145,12 +145,17 @@ drop = [
 lu.drop(lu[lu["lc_name"].isin(drop)].index, inplace=True)
 lu.loc[lu["lc_name"].isin(keep) == False, "lc_name"] = "Other"
 
+# combine sorghum and millet
+lu.lc_name.replace(
+    {"millet": "millet_sorghum", "sorghum": "millet_sorghum"}, inplace=True
+)
+
 # add additional training data
 other_training = gpd.read_file("./data/other_training.gpkg").to_crs(lu.crs)
 other_training["Field_size"] = 20
 
 
-lu_complete = lu[["lc_name", "Field_size", "geometry"]].overlay(
+lu_complete = lu[["lc_name", "Field_size", "Quality", "geometry"]].overlay(
     other_training[["lc_name", "Field_size", "geometry"]], how="union"
 )
 lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"])
@@ -161,6 +166,8 @@ lu_complete["Field_size"] = lu_complete["Field_size_1"].fillna(
 
 # drop two missing values
 lu_complete.dropna(subset=["lc_name"], inplace=True)
+# fill missing quality for other training data
+lu_complete["Quality"].fillna("OK", inplace=True)
 
 
 # The labels are string names, so here we convert them to integers
@@ -180,6 +187,9 @@ lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), a
 images = sorted(glob("./data/**/annual_features/**/**.tif"))
 # remove dropbox case conflict images
 images = [item for item in images if "(Case Conflict)" not in item]
+
+# drop medium and low quality sites
+lu_complete[lu_complete.Quality.str.contains("OK")]
 
 
 # %%
@@ -609,7 +619,7 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     groups = df.id.values
 
 X = pipeline_scale.fit_transform(X)
-
+# %%
 
 #  Create optuna classifier study
 
@@ -635,9 +645,14 @@ study = optuna.create_study(
 # Optimize the objective function
 study.optimize(
     lambda trial: classifier_objective(
-        trial, X, y, groups=groups, classifier_override="RandomForest"
+        trial,
+        X,
+        y,
+        groups=groups,
+        classifier_override=["LGBM", "RandomForest"],
+        weights=df.Field_size,
     ),
-    n_trials=75,
+    n_trials=150,
     n_jobs=12,
 )
 
@@ -695,7 +710,7 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 
 # get optimal parameters
 pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
-pipeline_performance
+print(pipeline_performance)
 
 # get important image paths
 # select_images = get_selected_ranked_images(
@@ -729,12 +744,86 @@ with gw.open(select_images, nodata=9999, stack_dim="band") as src:
     X = df[range(1, len(select_images) + 1)]
     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
     groups = df.id.values
+    weights = df.Field_size
 
 
-X = pipeline_scale_clean.fit_transform(X)
+X = pipeline_scale.fit_transform(X)
 
+# %%
+# generate confusion matrix out of sample
+conf_matrix_list_of_arrays = []
+list_balanced_accuracy = []
+list_kappa = []
+# skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
+    # for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
 
-# generate confusion matrix
+    pipeline_performance.fit(
+        X_train, y_train, classifier__sample_weight=weights[train_index]
+    )
+    y_pred = pipeline_performance.predict(X_test)
+
+    # get performance metrics
+    balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+    list_balanced_accuracy.append(balanced_accuracy)
+
+    kappa_accuracy = cohen_kappa_score(y_test, y_pred)
+    list_kappa.append(kappa_accuracy)
+
+    # Get the class names from the label encoder
+    class_names = pipeline_performance[
+        "classifier"
+    ].classes_  # le.inverse_transform(pipeline_performance["classifier"].classes_)
+
+    # Create the confusion matrix with class names as row and column index
+    conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)
+    conf_matrix_list_of_arrays.append(conf_matrix)
+
+conf_matrix_list_of_arrays
+
+# get aggregate confusion matrix
+agg_conf_matrix = np.sum(conf_matrix_list_of_arrays, axis=0)
+balanced_accuracy = np.array(list_balanced_accuracy).mean()
+kappa_accuracy = np.array(list_kappa).mean()
+
+# Calculate the row-wise sums
+row_sums = agg_conf_matrix.sum(axis=1, keepdims=True)
+
+# Convert counts to percentages by row
+conf_matrix_percent = agg_conf_matrix / row_sums
+
+# Get the class names
+class_names = le.inverse_transform(pipeline_performance["classifier"].classes_)
+# Create a heatmap using seaborn
+plt.figure(figsize=(10, 8))
+
+sns.heatmap(
+    conf_matrix_percent,
+    annot=True,
+    cmap="Blues",
+    fmt=".0%",
+    xticklabels=class_names,
+    yticklabels=class_names,
+)
+
+# Set labels and title
+plt.xlabel("Predicted")
+plt.ylabel("True")
+# plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
+plt.title(f"Out of Sample Mean Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
+plt.savefig(
+    f"outputs/final_class_perfomance_rf_kbest_{select_how_many}.png",
+    bbox_inches="tight",
+)
+
+# Show the plot
+plt.show()
+
+# %%
+# generate in sample confusion matrix
 conf_matrix_list_of_arrays = []
 list_balanced_accuracy = []
 list_kappa = []
@@ -795,7 +884,7 @@ sns.heatmap(
 plt.xlabel("Predicted")
 plt.ylabel("True")
 # plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
-plt.title(f"RF Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
+plt.title(f"Out of Sample Mean Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
 plt.savefig(
     f"outputs/final_class_perfomance_rf_kbest_{select_how_many}.png",
     bbox_inches="tight",

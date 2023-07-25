@@ -94,8 +94,9 @@ lu = gpd.read_file("./data/training_cleaned.geojson")
 
 
 # get buffer size based on field size
+# large fields are defines as 400m x 400m
 lu.Field_size.replace(
-    {"small": 10, "medium": 20, "large": 30, np.nan: 10}, inplace=True
+    {"small": 10, "medium": 20, "large": 100, np.nan: 10}, inplace=True
 )
 
 
@@ -198,6 +199,8 @@ lu_complete[lu_complete.Quality.str.contains("OK")]
 ########################################################
 # uses select_how_many from top of script
 
+study_postfix = "_Large"
+
 target_string = next((string for string in images if "EVI" in string), None)
 with gw.config.update(ref_image=target_string):
     with gw.open(images, nodata=9999, stack_dim="band") as src:
@@ -210,7 +213,7 @@ with gw.config.update(ref_image=target_string):
 
 X = pipeline_scale_clean.fit_transform(X)
 
-
+# %%
 #   Create optuna classifier study
 
 # Create an SQLite connection
@@ -224,14 +227,16 @@ try:
     study = optuna.load_study(
         study_name="model_selection_feature_selection", storage=storage
     )
-    optuna.delete_study(study_name="model_selection_feature_selection", storage=storage)
+    optuna.delete_study(
+        study_name=f"model_selection_feature_selection{study_postfix}", storage=storage
+    )
 except:
     pass
 
 # create new study
 study = optuna.create_study(
     storage=storage,
-    study_name="model_selection_feature_selection",
+    study_name=f"model_selection_feature_selection{study_postfix}",
     direction="maximize",
 )
 
@@ -239,7 +244,7 @@ study = optuna.create_study(
 # Optimize the objective function
 study.optimize(
     lambda trial: classifier_objective(
-        trial, X, y, classifier_override="LGBM", groups=groups
+        trial, X, y, classifier_override=["LGBM"], groups=groups
     ),
     n_trials=100,
     n_jobs=3,
@@ -260,9 +265,9 @@ for key, value in trial.params.items():
     print("    {}: {}".format(key, value))
 
 # write params to csv
-pd.DataFrame(study.trials_dataframe()).to_csv(
-    "models/optuna_study_model_selection_model_selection_feature_selection.csv"
-)
+# pd.DataFrame(study.trials_dataframe()).to_csv(
+#     "models/optuna_study_model_selection_model_selection_feature_selection_large.csv"
+# )
 
 
 #  Save results
@@ -270,7 +275,7 @@ conn = sqlite3.connect("models/study.db")
 
 study = optuna.load_study(
     storage="sqlite:///models/study.db",
-    study_name="model_selection_feature_selection",
+    study_name=f"model_selection_feature_selection{study_postfix}",
 )
 
 

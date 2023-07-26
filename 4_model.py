@@ -878,20 +878,53 @@ plt.show()
 
 # %%
 ##################################################################
-# Write out final mode
+# Write out final model
 ##################################################################
 # # %%
 
 # %% Create a prediction stack
+select_images = glob("./outputs/selected_images_10m/*.tif")
+pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
 
+# %%
+# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+#     # src = pipeline_scale.fit_transform(src)
+
+#     # src.gw.save(
+#     #     "outputs/pred_stack.tif",
+#     #     compress="lzw",
+#     #     overwrite=True,  # bigtiff=True
+#     # )
+#     src.gw.to_raster(
+#         "outputs/pred_stack.tif", compress="lzw", overwrite=True, bigtiff=True
+#     )
+
+
+# %%
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-    src = pipeline_scale_clean.fit_transform(src)
+    # fit a model to get Xy used to train model
+    df = gw.extract(src, lu_poly, verbose=1)
+    y = df["lc"]
+    X = df[range(1, len(select_images) + 1)]
+    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+    groups = df.id.values
+    weights = df.Field_size
 
-    src.gw.save(
-        "outputs/pred_stack.tif",
-        compress="lzw",
-        overwrite=True,  # bigtiff=True
+# %%
+
+skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
+    # for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+
+    pipeline_performance.fit(
+        X_train, y_train, classifier__sample_weight=weights[train_index]
     )
+
+
+# %%
+pipeline_performance.fit(X, y, classifier__sample_weight=weights)
 
 
 # %%
@@ -907,85 +940,89 @@ def user_func(w, block, model):
 
 gw.apply(
     "outputs/pred_stack.tif",
-    f"outputs/final_model_rf{len(select_images)}.tif",
+    f"outputs/final_model_lgbm{len(select_images)}_allX.tif",
     user_func,
     args=(pipeline_performance,),
     n_jobs=16,
     count=1,
+    overwrite=True,
+    scheduler="threads",  # might need to use threads with LGBM since its multithreaded
 )
 
 
 ###############################################
-# %% Compare to unsupervised
 
-files = glob("./outputs/*kmean*.tif")
-with gw.open(
-    files,
-    nodata=9999,
-    stack_dim="band",
-) as src:
-    # fit a model to get Xy used to train model
-    X = gw.extract(src, lu_complete)
 
-    y = lu_complete["lc"]
+# # %% Compare to unsupervised
 
-for i in range(0, len(files)):
-    print(files[i])
+# files = glob("./outputs/*kmean*.tif")
+# with gw.open(
+#     files,
+#     nodata=9999,
+#     stack_dim="band",
+# ) as src:
+#     # fit a model to get Xy used to train model
+#     X = gw.extract(src, lu_complete)
 
-    y_hat = X[i + 1]
-    y_hat = np.reshape(y_hat, (-1, 1))  # Reshape to (742, 1)
-    # Create an instance of RandomForestClassifier
-    rf_classifier = RandomForestClassifier()
+#     y = lu_complete["lc"]
 
-    # Fit the classifier to your training data
-    rf_classifier.fit(y_hat, y)
+# for i in range(0, len(files)):
+#     print(files[i])
 
-    # Predict the labels for your training data
-    y_pred = rf_classifier.predict(y_hat)
+#     y_hat = X[i + 1]
+#     y_hat = np.reshape(y_hat, (-1, 1))  # Reshape to (742, 1)
+#     # Create an instance of RandomForestClassifier
+#     rf_classifier = RandomForestClassifier()
 
-    # Calculate the balanced accuracy score for the training data
-    print(files[i])
-    print(f"Kapa accuracy: {cohen_kappa_score(y, y_pred)}")
+#     # Fit the classifier to your training data
+#     rf_classifier.fit(y_hat, y)
 
-    conf_matrix = confusion_matrix(
-        y,
-        y_pred,  # labels=le.inverse_transform(rf_classifier.classes_)
-    )
+#     # Predict the labels for your training data
+#     y_pred = rf_classifier.predict(y_hat)
 
-    # Calculate the row-wise sums
-    row_sums = conf_matrix.sum(axis=1, keepdims=True)
+#     # Calculate the balanced accuracy score for the training data
+#     print(files[i])
+#     print(f"Kapa accuracy: {cohen_kappa_score(y, y_pred)}")
 
-    # Convert counts to percentages by row
-    conf_matrix_percent = conf_matrix / row_sums
+#     conf_matrix = confusion_matrix(
+#         y,
+#         y_pred,  # labels=le.inverse_transform(rf_classifier.classes_)
+#     )
 
-    # Get the class names
-    class_names = le.inverse_transform(rf_classifier.classes_)
+#     # Calculate the row-wise sums
+#     row_sums = conf_matrix.sum(axis=1, keepdims=True)
 
-    # Create a heatmap using seaborn
-    plt.figure(figsize=(10, 8))
+#     # Convert counts to percentages by row
+#     conf_matrix_percent = conf_matrix / row_sums
 
-    sns.heatmap(
-        conf_matrix_percent,
-        annot=True,
-        cmap="Blues",
-        fmt=".0%",
-        xticklabels=class_names,
-        yticklabels=class_names,
-    )
+#     # Get the class names
+#     class_names = le.inverse_transform(rf_classifier.classes_)
 
-    # Set labels and title
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.title(
-        f"Confusion Matrix Kmean: {files[i]} \n Kappa Accuracy = {round(cohen_kappa_score(y, y_pred),3)}"
-    )
-    plt.savefig(
-        f"outputs/final_class_perfomance_{os.path.basename(files[i])}.png",
-        bbox_inches="tight",
-    )
+#     # Create a heatmap using seaborn
+#     plt.figure(figsize=(10, 8))
 
-    # Show the plot
-    plt.show()
+#     sns.heatmap(
+#         conf_matrix_percent,
+#         annot=True,
+#         cmap="Blues",
+#         fmt=".0%",
+#         xticklabels=class_names,
+#         yticklabels=class_names,
+#     )
+
+#     # Set labels and title
+#     plt.xlabel("Predicted")
+#     plt.ylabel("True")
+#     plt.title(
+#         f"Confusion Matrix Kmean: {files[i]} \n Kappa Accuracy = {round(cohen_kappa_score(y, y_pred),3)}"
+#     )
+#     plt.savefig(
+#         f"outputs/final_class_perfomance_{os.path.basename(files[i])}.png",
+#         bbox_inches="tight",
+#     )
+
+#     # Show the plot
+#     plt.show()
 
 # %%
 

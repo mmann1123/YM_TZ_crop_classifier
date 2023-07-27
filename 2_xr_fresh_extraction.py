@@ -49,7 +49,7 @@ for band_name in ["hue"]:  # "B11", "B12" "B2", "B5", "B6", "EVI",
         "abs_energy": [{}],
         "mean_abs_change": [{}],
         "variance_larger_than_standard_deviation": [{}],
-        "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
+        # NOT USEFUL "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
         "symmetry_looking": [{}],
         "sum_values": [{}],
         "autocorr": [

@@ -96,7 +96,7 @@ lu = gpd.read_file("./data/training_cleaned.geojson")
 # get buffer size based on field size
 # large fields are defines as 400m x 400m
 lu.Field_size.replace(
-    {"small": 10, "medium": 20, "large": 100, np.nan: 10}, inplace=True
+    {"small": 10, "medium": 25, "large": 50, np.nan: 10}, inplace=True
 )
 
 
@@ -174,7 +174,15 @@ lu_complete["Quality"].fillna("OK", inplace=True)
 # The labels are string names, so here we convert them to integers
 le = LabelEncoder()
 lu_complete["lc"] = le.fit_transform(lu_complete["lc_name"])
-print(lu_complete["lc"].unique())
+print(lu_complete["lc_name"].unique())
+print(le.fit_transform(lu_complete["lc"].unique()))
+
+pd.DataFrame(
+    {
+        "code": lu_complete["lc_name"].unique(),
+        "name": le.fit_transform(lu_complete["lc"].unique()),
+    }
+)
 
 # buffer points based on filed size
 lu_poly = lu_complete.copy()
@@ -924,10 +932,6 @@ for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
 
 
 # %%
-pipeline_performance.fit(X, y, classifier__sample_weight=weights)
-
-
-# %%
 # predict to stack
 def user_func(w, block, model):
     pred_shape = list(block.shape)
@@ -940,7 +944,7 @@ def user_func(w, block, model):
 
 gw.apply(
     "outputs/pred_stack.tif",
-    f"outputs/final_model_lgbm{len(select_images)}_allX.tif",
+    f"outputs/final_model_lgbm{len(select_images)}.tif",
     user_func,
     args=(pipeline_performance,),
     n_jobs=16,
@@ -949,7 +953,25 @@ gw.apply(
     scheduler="threads",  # might need to use threads with LGBM since its multithreaded
 )
 
+# %% Validate distribution of pixels
+import matplotlib.pyplot as plt
 
+# # Create a NumPy array with some random values
+# data = np.random.randn(1000)
+
+# # Plot the histogram
+# plt.hist(data, bins=30, edgecolor='black')
+# plt.xlabel('Value')
+# plt.ylabel('Frequency')
+# plt.title('Histogram of Values')
+# plt.show()
+with gw.open(
+    f"outputs/final_model_lgbm{len(select_images)}.tif", nodata=9999, stack_dim="band"
+) as src:
+    plt.hist(src.values.ravel(), bins=30, edgecolor="black")
+
+
+# %%
 ###############################################
 
 

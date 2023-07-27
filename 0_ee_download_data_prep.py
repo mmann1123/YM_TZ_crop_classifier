@@ -200,8 +200,8 @@ CLOUD_FILTER = 75
 
 # %% MONTHLY COMPOSITES
 
-for year in list(range(2022, 2024)):
-    for month in list(range(1, 13, 1)):
+for year in list(range(2023, 2024)):
+    for month in list(range(1, 8, 1)):
         print("year ", str(year), " month ", str(month))
         dt = pendulum.datetime(year, month, 1)
 
@@ -222,6 +222,7 @@ for year in list(range(2022, 2024)):
             .clip(site)
         )
         # print(s2_sr.getInfo())
+
         hue = s2_sr.select("hue").multiply(1000)
 
         hue = hue.unmask(9999)

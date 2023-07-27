@@ -432,6 +432,3 @@ plt.show()
 #     df_filtered.groupby(["Secondary_land_cover"])["Secondary_land_cover"].count()
 #     / df["Secondary_land_cover"].count()
 # )
-
-
-# %%

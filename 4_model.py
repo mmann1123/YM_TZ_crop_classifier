@@ -174,15 +174,15 @@ lu_complete["Quality"].fillna("OK", inplace=True)
 # The labels are string names, so here we convert them to integers
 le = LabelEncoder()
 lu_complete["lc"] = le.fit_transform(lu_complete["lc_name"])
-print(lu_complete["lc_name"].unique())
-print(le.fit_transform(lu_complete["lc"].unique()))
+# print(lu_complete["lc_name"].unique())
+# print(le.fit_transform(lu_complete["lc"].unique()))
 
-pd.DataFrame(
-    {
-        "code": lu_complete["lc_name"].unique(),
-        "name": le.fit_transform(lu_complete["lc"].unique()),
-    }
-)
+# pd.DataFrame(
+#     {
+#         "code": lu_complete["lc_name"].unique(),
+#         "name": le.fit_transform(lu_complete["lc"].unique()),
+#     }
+# )
 
 # buffer points based on filed size
 lu_poly = lu_complete.copy()
@@ -895,17 +895,10 @@ select_images = glob("./outputs/selected_images_10m/*.tif")
 pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
 
 # %%
-# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-#     # src = pipeline_scale.fit_transform(src)
-
-#     # src.gw.save(
-#     #     "outputs/pred_stack.tif",
-#     #     compress="lzw",
-#     #     overwrite=True,  # bigtiff=True
-#     # )
-#     src.gw.to_raster(
-#         "outputs/pred_stack.tif", compress="lzw", overwrite=True, bigtiff=True
-#     )
+with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+    src.gw.to_raster(
+        "outputs/pred_stack.tif", compress="lzw", overwrite=True, bigtiff=True
+    )
 
 
 # %%
@@ -950,7 +943,7 @@ gw.apply(
     n_jobs=16,
     count=1,
     overwrite=True,
-    scheduler="threads",  # might need to use threads with LGBM since its multithreaded
+    scheduler="threads",  #  LGBM needs threads since its multithreaded
 )
 
 # %% Validate distribution of pixels
@@ -969,7 +962,46 @@ with gw.open(
     f"outputs/final_model_lgbm{len(select_images)}.tif", nodata=9999, stack_dim="band"
 ) as src:
     plt.hist(src.values.ravel(), bins=30, edgecolor="black")
+# %%
+data_values = src.values.ravel()
+pixels = pd.DataFrame({"values": data_values.astype(np.uint8)})
+pred = pd.DataFrame(
+    {
+        "percent": (pixels.groupby("values").size() / len(data_values))
+        .sort_values(ascending=False)
+        .values,
+        "model": "prediction",
+    },
+    index=(pixels.groupby("values").size()).sort_values(ascending=False).index,
+)
+actual = pd.DataFrame(
+    {
+        "percent": lu_poly.lc.value_counts(normalize=True)
+        .sort_values(ascending=False)
+        .values,
+        "model": "training data",
+    },
+    index=(lu_poly.lc.value_counts(normalize=True).sort_values(ascending=False)).index,
+)
+pred.reset_index(inplace=True)
+pred.columns = ["lc", "percent", "model"]
+actual.reset_index(inplace=True)
 
+
+print(pred)
+print(actual)
+
+pred_actual = pd.concat([pred, actual], axis=0)
+pred_actual["lc"] = le.inverse_transform(pred_actual["lc"])
+
+ax = sns.barplot(data=pred_actual, x="lc", y="percent", hue="model")
+ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+ax.set_ylabel("Percent of Pixels/Training Points")
+ax.set_ylabel("Land Use Class")
+
+plt.savefig("outputs/final_model_lgbm_distribution.png", dpi=300, bbox_inches="tight")
+
+# %%
 
 # %%
 ###############################################

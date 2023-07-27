@@ -232,11 +232,13 @@ for year in list(range(2022, 2024)):
 
         img_name = "S2_SR_hue" + "_M_" + str(year) + "_" + str(month).zfill(2)
         export_config = {
-            "scale": 10,
-            "maxPixels": 5000000000,
+            "scale": scale,
+            "maxPixels": 9000000000,
             "driveFolder": folder,
             "region": site,
             "crs": crs,
         }
         task = ee.batch.Export.image(hue, img_name, export_config)
         task.start()
+
+# %%

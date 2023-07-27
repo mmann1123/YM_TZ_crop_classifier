@@ -52,10 +52,10 @@ for band_name in ["hue"]:  # "B11", "B12" "B2", "B5", "B6", "EVI",
         # NOT USEFUL "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
         "symmetry_looking": [{}],
         "sum_values": [{}],
-        "autocorr": [
-            {"lag": 1},
-            {"lag": 2},
-        ],  #  not possible in 2023{"lag": 4}],
+        # didn't get selected "autocorr": [
+        # {"lag": 1},
+        # {"lag": 2},
+        # ],  #  not possible in 2023{"lag": 4}],
         "ts_complexity_cid_ce": [{}],
         "mean_change": [{}],  #  FIX  DONT HAVE
         "mean_second_derivative_central": [{}],
@@ -67,13 +67,13 @@ for band_name in ["hue"]:  # "B11", "B12" "B2", "B5", "B6", "EVI",
         "kurtosis": [{}],
         "absolute_sum_of_changes": [{}],
         "longest_strike_below_mean": [{}],
-        "longest_strike_above_mean": [{}],
-        "count_above_mean": [{}],
+        # not selected "longest_strike_above_mean": [{}],
+        # not selected "count_above_mean": [{}],
         "count_below_mean": [{}],
-        "doy_of_maximum_first": [
-            {"band": band_name}
-        ],  # figure out how to remove arg for band
-        "doy_of_minimum_first": [{"band": band_name}],
+        # not selected "doy_of_maximum_first": [
+        #     {"band": band_name}
+        # ],  # figure out how to remove arg for band
+        # "doy_of_minimum_first": [{"band": band_name}],
         "ratio_value_number_to_time_series_length": [{}],
         "quantile": [{"q": 0.05}, {"q": 0.95}],
         "maximum": [{}],

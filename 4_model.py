@@ -409,6 +409,7 @@ plt.savefig(f"outputs/max_shaps_importance_{select_how_many}.png", bbox_inches="
 # to "./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
 
 
+# NOTE I don't think this is working properly check
 extract_top_from_shaps(
     shaps_list=mean_shaps,
     column_names=X_columns,
@@ -486,6 +487,9 @@ pd.DataFrame({f"top{select_how_many}names": kbest_images}).to_csv(
 
 # Trying other method
 # https://stackoverflow.com/questions/29294983/how-to-calculate-correlation-between-all-columns-and-remove-highly-correlated-on
+
+# NOTE THIS MIGHT NOT BE WORKING PROPERLY CHECK
+
 select_images = list(
     set(
         list(

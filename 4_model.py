@@ -947,22 +947,15 @@ gw.apply(
 )
 
 # %% Validate distribution of pixels
-import matplotlib.pyplot as plt
 
-# # Create a NumPy array with some random values
-# data = np.random.randn(1000)
+select_images = glob("./outputs/selected_images_10m/*.tif")
 
-# # Plot the histogram
-# plt.hist(data, bins=30, edgecolor='black')
-# plt.xlabel('Value')
-# plt.ylabel('Frequency')
-# plt.title('Histogram of Values')
-# plt.show()
+
 with gw.open(
     f"outputs/final_model_lgbm{len(select_images)}.tif", nodata=9999, stack_dim="band"
 ) as src:
     plt.hist(src.values.ravel(), bins=30, edgecolor="black")
-# %%
+
 data_values = src.values.ravel()
 pixels = pd.DataFrame({"values": data_values.astype(np.uint8)})
 pred = pd.DataFrame(
@@ -970,7 +963,7 @@ pred = pd.DataFrame(
         "percent": (pixels.groupby("values").size() / len(data_values))
         .sort_values(ascending=False)
         .values,
-        "model": "prediction",
+        "Model": "prediction",
     },
     index=(pixels.groupby("values").size()).sort_values(ascending=False).index,
 )
@@ -979,28 +972,28 @@ actual = pd.DataFrame(
         "percent": lu_poly.lc.value_counts(normalize=True)
         .sort_values(ascending=False)
         .values,
-        "model": "training data",
+        "Model": "training data",
     },
     index=(lu_poly.lc.value_counts(normalize=True).sort_values(ascending=False)).index,
 )
 pred.reset_index(inplace=True)
-pred.columns = ["lc", "percent", "model"]
+pred.columns = ["lc", "percent", "Model"]
 actual.reset_index(inplace=True)
 
 
 print(pred)
 print(actual)
-
+# %%
 pred_actual = pd.concat([pred, actual], axis=0)
 pred_actual["lc"] = le.inverse_transform(pred_actual["lc"])
 
-ax = sns.barplot(data=pred_actual, x="lc", y="percent", hue="model")
+ax = sns.barplot(data=pred_actual, x="lc", y="percent", hue="Model")
 ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
 ax.set_ylabel("Percent of Pixels/Training Points")
-ax.set_ylabel("Land Use Class")
+ax.set_xlabel("Land Use Class")
 
 plt.savefig("outputs/final_model_lgbm_distribution.png", dpi=300, bbox_inches="tight")
-
+plt.show()
 # %%
 
 # %%

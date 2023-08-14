@@ -5,17 +5,19 @@ import geowombat as gw
 import os, sys
 
 sys.path.append("/home/mmann1123/Documents/github/xr_fresh/")
-from xr_fresh.feature_calculators import *
-from xr_fresh.backends import Cluster
-from xr_fresh.extractors import extract_features
+# from xr_fresh.feature_calculators import *
+# from xr_fresh.backends import Cluster
+# from xr_fresh.extractors import extract_features
 from glob import glob
 from datetime import datetime
 import matplotlib.pyplot as plt
-from xr_fresh.utils import *
+
+# from xr_fresh.utils import *
 import logging
 import xarray as xr
 from numpy import where
-from xr_fresh import feature_calculators
+
+# from xr_fresh import feature_calculators
 from itertools import chain
 from geowombat.backends import concat as gw_concat
 
@@ -25,9 +27,9 @@ from pathlib import Path
 import time
 import re
 
-# start cluster
-cluster = Cluster()
-cluster.start_large_object()
+# # start cluster
+# cluster = Cluster()
+# cluster.start_large_object()
 
 missing_data = 9999
 
@@ -68,6 +70,12 @@ complete_f = {
     "linear_time_trend": [{"param": "all"}],
 }
 
+sys.path.append("/home/mmann1123/Documents/github/xr_fresh")
+
+import xr_fresh as xf
+
+from xr_fresh.feature_calculator_series import doy_of_maximum, abs_energy, maximum, mean
+
 
 # %%
 for band_name in ["B12"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
@@ -99,50 +107,141 @@ for band_name in ["B12"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
         print(dates)
 
-        # add data notes
-        Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
-        with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
-            the_file.write(
-                "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
-            )
-            the_file.write(str(datetime.now()))
+        # # add data notes
+        # Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
+        # with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
+        #     the_file.write(
+        #         "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
+        #     )
+        #     the_file.write(str(datetime.now()))
 
-        # open xarray lazy
-        with gw.open(
+        with gw.series(
             a_grid,
-            band_names=[band_name],
             nodata=missing_data,
-            time_names=dates,
-        ) as ds:
-            ds = ds.chunk(
-                {"time": -1, "band": 1, "y": 350, "x": 350}
-            )  # rechunk to time
-            ds = ds.gw.mask_nodata()
-            print(ds)
+        ) as src:
+            print(src)
+            src.apply(
+                func=xf.feature_calculator_series.doy_of_maximum(dates),
+                outfile=f"/home/mmann1123/Downloads/{band_name}_{grid}_abs_energy.tif",
+                num_workers=5,
+                bands=1,
+            )
 
-            # generate features current March - Aug ( Msimu growing season)
+# %%
+# %%
+# # open xarray lazy
+# with gw.open(
+#     a_grid,
+#     band_names=[band_name],
+#     nodata=missing_data,
+#     time_names=dates,
+# ) as ds:
+#     ds = ds.chunk(
+#         {"time": -1, "band": 1, "y": 350, "x": 350}
+#     )  # rechunk to time
+#     ds = ds.gw.mask_nodata()
+#     print(ds)
 
-            for year in [2023]:
-                year = str(year)
-                print(year)
-                ds_year = ds.sel(time=slice(year + "-03-01", year + "-07-01"))
-                print("interpolating")
-                ds_year = ds_year.interpolate_na(dim="time", limit=4)
+#     # generate features current March - Aug ( Msimu growing season)
 
-                # make output folder
-                outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
-                os.makedirs(outpath, exist_ok=True)
+#     for year in [2023]:
+#         year = str(year)
+#         print(year)
+#         ds_year = ds.sel(time=slice(year + "-03-01", year + "-07-01"))
+#         print("interpolating")
+#         ds_year = ds_year.interpolate_na(dim="time", limit=4)
 
-                # extract growing season year month day
-                features = extract_features(
-                    xr_data=ds_year,
-                    feature_dict=complete_f,
-                    band=band_name,
-                    na_rm=True,
-                    persist=True,
-                    filepath=outpath,
-                    postfix="_mar_aug_" + year,
-                )
+#         # make output folder
+#         outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
+#         os.makedirs(outpath, exist_ok=True)
+
+#         # extract growing season year month day
+#         features = extract_features(
+#             xr_data=ds_year,
+#             feature_dict=complete_f,
+#             band=band_name,
+#             na_rm=True,
+#             persist=True,
+#             filepath=outpath,
+#             postfix="_mar_aug_" + year,
+#         )
+
+# # %%
+
+# # %%
+# for band_name in ["B12"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
+#     files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_TZ_data/{band_name}"
+#     file_glob = f"{files}/*.tif"
+
+#     f_list = sorted(glob(file_glob))
+#     f_list
+
+#     # Get unique grid codes
+#     pattern = r"(?<=-)\d+-\d+(?=\.tif)"
+#     unique_grids = list(
+#         set(
+#             [
+#                 re.search(pattern, file_path).group()
+#                 for file_path in f_list
+#                 if re.search(pattern, file_path)
+#             ]
+#         )
+#     )
+
+#     # Print the unique codes
+#     for grid in unique_grids:
+#         print("working on grid", grid)
+#         a_grid = sorted([f for f in f_list if grid in f])
+#         print(a_grid)
+#         # get dates
+#         strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-{grid}.tif"
+#         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
+#         print(dates)
+
+#         # add data notes
+#         Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
+#         with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
+#             the_file.write(
+#                 "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
+#             )
+#             the_file.write(str(datetime.now()))
+
+#         # open xarray lazy
+#         with gw.open(
+#             a_grid,
+#             band_names=[band_name],
+#             nodata=missing_data,
+#             time_names=dates,
+#         ) as ds:
+#             ds = ds.chunk(
+#                 {"time": -1, "band": 1, "y": 350, "x": 350}
+#             )  # rechunk to time
+#             ds = ds.gw.mask_nodata()
+#             print(ds)
+
+#             # generate features current March - Aug ( Msimu growing season)
+
+#             for year in [2023]:
+#                 year = str(year)
+#                 print(year)
+#                 ds_year = ds.sel(time=slice(year + "-03-01", year + "-07-01"))
+#                 print("interpolating")
+#                 ds_year = ds_year.interpolate_na(dim="time", limit=4)
+
+#                 # make output folder
+#                 outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
+#                 os.makedirs(outpath, exist_ok=True)
+
+#                 # extract growing season year month day
+#                 features = extract_features(
+#                     xr_data=ds_year,
+#                     feature_dict=complete_f,
+#                     band=band_name,
+#                     na_rm=True,
+#                     persist=True,
+#                     filepath=outpath,
+#                     postfix="_mar_aug_" + year,
+#                 )
 
 # # %%
 

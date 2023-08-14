@@ -19,7 +19,7 @@ os.chdir(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
 )
 # Read the CSV file
-df = pd.read_csv("../kobo_field_collections/TZ_ground_truth_cleaned_mm.csv")
+df = pd.read_csv("../kobo_field_collections/TZ_ground_truth_cleaned_ls.csv")
 df = df.reset_index()
 df_filtered = df.dropna(subset=["Picture_of_the_field_or_feature_URL", "primar"])
 df_filtered = df_filtered[
@@ -28,7 +28,7 @@ df_filtered = df_filtered[
         "Picture_of_the_field_or_feature_URL",
         "primar",
         "Secondary_land_cover",
-        "Quality",
+        "Quality_Drop_Low",
     ]
 ]
 df_filtered
@@ -53,6 +53,7 @@ df_filtered["Secondary_land_cover"].replace(
     },
     inplace=True,
 )
+
 
 import seaborn as sns
 
@@ -164,5 +165,3 @@ plt.xticks(
 plt.tight_layout()
 plt.subplots_adjust(hspace=0.1)  # Reduce space between y-axis ticks
 plt.show()
-
-# %%

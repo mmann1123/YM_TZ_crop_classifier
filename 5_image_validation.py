@@ -17,7 +17,7 @@ os.chdir(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
 )
 # Read the CSV file
-df = pd.read_csv("../kobo_field_collections/TZ_ground_truth_cleaned_mm.csv")
+df = pd.read_csv("../kobo_field_collections/TZ_ground_truth_cleaned_ls.csv")
 df = df.reset_index()
 df_filtered = df.dropna(subset=["Picture_of_the_field_or_feature_URL", "primar"])
 df_filtered = df_filtered[
@@ -433,5 +433,91 @@ plt.show()
 #     / df["Secondary_land_cover"].count()
 # )
 
+
+# %%
+
+# %%
+# create subset file for validation
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import os
+import urllib
+import PIL
+import geopandas as gpd
+
+
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
+)
+# Read the CSV file
+df = pd.read_csv("../kobo_field_collections/TZ_ground_truth_cleaned_ls.csv")
+df_filtered = df.dropna(subset=["Picture_of_the_field_or_feature_URL", "primar"])
+df_filtered = gpd.GeoDataFrame(
+    df_filtered,
+    geometry=gpd.points_from_xy(
+        x=df_filtered._field_center_longitude, y=df_filtered._field_center_latitude
+    ),
+    crs="EPSG:4326",
+)
+
+df_filtered = df_filtered[
+    [
+        "Picture_of_the_field_or_feature_URL",
+        "primar",
+        "Secondary_land_cover",
+        "Field_size",
+        "Quality_Drop_Low",
+        "Lisa Notes",
+        "geometry",
+    ]
+]
+
+
+keep = [
+    "rice",
+    "maize",
+    "cassava",
+    "sunflower",
+    "sorghum",
+    "cotton",
+    "soybeans",
+    "millet",
+]
+drop = [
+    "Don't know",
+    "Other (later, specify in optional notes)",
+    "vegetables",
+    "other",
+    "speciality_crops",
+    "eggplant",
+    "okra ",
+    "tree_crops",
+    "other_grain",
+]
+
+# apply keep/drop
+df_filtered.drop(df_filtered[df_filtered["primar"].isin(drop)].index, inplace=True)
+df_filtered.drop(
+    df_filtered[df_filtered["Quality_Drop_Low"].isin(["D", "L"])].index, inplace=True
+)
+df_filtered["PleaseValidate"] = ""
+df_filtered.reset_index(inplace=True, drop=True)
+df_filtered.reset_index(inplace=True)
+
+# %% break into 2 files
+
+
+df_filtered.iloc[: len(df_filtered) // 2].to_file(
+    f"../kobo_field_collections/TZ_ground_truth_cleaned_ls_p1.geojson",
+    driver="GeoJSON",
+)
+
+df_filtered.iloc[len(df_filtered) // 2 :].to_file(
+    f"../kobo_field_collections/TZ_ground_truth_cleaned_ls_p2.geojson",
+    driver="GeoJSON",
+)
 
 # %%

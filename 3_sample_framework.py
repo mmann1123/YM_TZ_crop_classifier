@@ -16,7 +16,7 @@ os.chdir(
 )
 crs = "EPSG:32736"
 
-points = pd.read_csv(r"kobo_field_collections/TZ_ground_truth_cleaned_mm.csv")
+points = pd.read_csv(r"kobo_field_collections/TZ_ground_truth_cleaned_ls.csv")
 
 points = gpd.GeoDataFrame(
     points,
@@ -45,7 +45,7 @@ import geopandas as gpd
 bbox = gpd.read_file(
     r"./Land_Cover/data/bounds.gpkg",
 )
-points = gpd.read_file(r"./kobo_field_collections/TZ_ground_truth_cleaned.gpkg")
+points = gpd.read_file(r"./kobo_field_collections/TZ_ground_truth_cleaned_ls.gpkg")
 print(points.shape)
 points.head()
 

@@ -147,8 +147,8 @@ CLOUD_FILTER = 75
 
 # %% MONTHLY COMPOSITES
 
-for year in list(range(2023, 2024)):
-    for month in list(range(1, 8, 1)):
+for year in list(range(2023, 2024))[0:1]:
+    for month in list(range(1, 8, 1))[0:1]:
         print("year ", str(year), " month ", str(month))
         dt = pendulum.datetime(year, month, 1)
 
@@ -158,20 +158,19 @@ for year in list(range(2023, 2024)):
             dt.end_of("month").strftime(r"%Y-%m-%d"),
             CLOUD_FILTER=CLOUD_FILTER,
         )
-        for band, scale in zip(bands, scales):
+        for band, scale in zip(bands[0:1], scales[0:1]):
             s2_sr = (
                 collection.map(add_cld_shdw_mask)
                 .map(apply_cld_shdw_mask)
                 .select(band)
                 .median()
-                .multiply(10000)
+                # .multiply(10000)
                 .clip(site)
                 .unmask(9999)
             )
             s2_sr = geetools.batch.utils.convertDataType("int16")(s2_sr)
 
             # # export clipped result in Tiff
-
             img_name = "S2_SR_" + band + "_M_" + str(year) + "_" + str(month).zfill(2)
             export_config = {
                 "scale": scale,
@@ -179,6 +178,9 @@ for year in list(range(2023, 2024)):
                 "driveFolder": folder,
                 "region": site,
                 "crs": crs,
+                "formatOptions": {
+                    "cloudOptimized": True,  # Enable cloud-optimized GeoTIFF (COG)
+                },
             }
             task = ee.batch.Export.image(s2_sr, img_name, export_config)
             task.start()

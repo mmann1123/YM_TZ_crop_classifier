@@ -1,7 +1,7 @@
 import ee
 
-CLD_PRB_THRESH = 80
-NIR_DRK_THRESH = 1
+CLD_PRB_THRESH = 50
+NIR_DRK_THRESH = 0.15
 CLD_PRJ_DIST = 2
 BUFFER = 90
 SCALE = 10
@@ -110,8 +110,9 @@ def get_s2_sr_cld_col(aoi, start_date, end_date, product="S2_SR", CLOUD_FILTER=3
     )
 
 
-
-def get_s2A_SR_sr_cld_col(aoi, start_date, end_date, product="S2_SR_HARMONIZED", CLOUD_FILTER=30):
+def get_s2A_SR_sr_cld_col(
+    aoi, start_date, end_date, product="S2_SR_HARMONIZED", CLOUD_FILTER=30
+):
     # Import and filter S2 SR.
     s2_sr_col = (
         ee.ImageCollection("COPERNICUS/" + product)
@@ -139,7 +140,6 @@ def get_s2A_SR_sr_cld_col(aoi, start_date, end_date, product="S2_SR_HARMONIZED",
             }
         )
     )
-
 
 
 def apply_cld_shdw_mask(img):

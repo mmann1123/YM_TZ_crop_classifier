@@ -37,13 +37,15 @@ site = ee.Geometry.Polygon(
     [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]]],
 )
 
+# set missing value
+mask_value = 0
+
 
 # Set parameters
 bands = ["B2", "B3", "B4", "B8"]
 scale = 10
 # date_pattern = "mm_dd_yyyy"  # dd: day, MMM: month (JAN), y: year
 folder = "Tanzania_Fields"
-out_dir = os.path.expanduser("~/Downloads")
 
 # extra = dict(sat="Sen_TOA")
 CLOUD_FILTER = 75
@@ -67,15 +69,9 @@ os.chdir(
     r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_TZ_data"
 )
 
-# fishnet = geemap.fishnet(
-#     data=site,
-#     rows=15,
-#     cols=15,
-#     delta=0,
-# )
 
 for year in list(range(2023, 2024)):
-    for month in list(range(1, 8, 1))[-1:]:
+    for month in list(range(1, 8, 1)):
         print("year ", str(year), " month ", str(month))
         dt = pendulum.datetime(year, month, 1)
 
@@ -95,7 +91,7 @@ for year in list(range(2023, 2024)):
             .median()
             .multiply(10000)
             .clip(site)
-            .unmask(9999)
+            .unmask(mask_value)
         )
         s2_sr = geetools.batch.utils.convertDataType("int16")(s2_sr)
         # eprint(s2_sr)
@@ -113,23 +109,6 @@ for year in list(range(2023, 2024)):
         task = ee.batch.Export.image(s2_sr, img_name, export_config)
         task.start()
 
-    # geemap.download_ee_image_tiles(
-    #     image=s2_sr,
-    #     features=fishnet,
-    #     out_dir=os.getcwd(),
-    #     prefix=img_name,
-    #     crs=crs,
-    #     scale=scale,
-    #     resampling="near",
-    #     dtype="int16",
-    #     overwrite=True,
-    #     max_tile_size=None,
-    #     max_tile_dim=None,
-    #     shape=None,
-    #     scale_offset=False,
-    #     unmask_value=9999,
-    # )
-
 
 ############################################################################################################
 # %% SWIR and Red Edge
@@ -142,13 +121,13 @@ folder = "Tanzania_Fields"
 
 
 # extra = dict(sat="Sen_TOA")
-CLOUD_FILTER = 75
+CLOUD_FILTER = 65
 
 
 # %% MONTHLY COMPOSITES
 
-for year in list(range(2023, 2024))[0:1]:
-    for month in list(range(1, 8, 1))[0:1]:
+for year in list(range(2023, 2024)):
+    for month in list(range(1, 9, 1)):
         print("year ", str(year), " month ", str(month))
         dt = pendulum.datetime(year, month, 1)
 
@@ -158,15 +137,14 @@ for year in list(range(2023, 2024))[0:1]:
             dt.end_of("month").strftime(r"%Y-%m-%d"),
             CLOUD_FILTER=CLOUD_FILTER,
         )
-        for band, scale in zip(bands[0:1], scales[0:1]):
+        for band, scale in zip(bands, scales):
             s2_sr = (
                 collection.map(add_cld_shdw_mask)
                 .map(apply_cld_shdw_mask)
                 .select(band)
                 .median()
-                # .multiply(10000)
                 .clip(site)
-                .unmask(9999)
+                .unmask(mask_value)
             )
             s2_sr = geetools.batch.utils.convertDataType("int16")(s2_sr)
 
@@ -178,9 +156,6 @@ for year in list(range(2023, 2024))[0:1]:
                 "driveFolder": folder,
                 "region": site,
                 "crs": crs,
-                "formatOptions": {
-                    "cloudOptimized": True,  # Enable cloud-optimized GeoTIFF (COG)
-                },
             }
             task = ee.batch.Export.image(s2_sr, img_name, export_config)
             task.start()
@@ -200,7 +175,7 @@ folder = "Tanzania_Fields"
 CLOUD_FILTER = 75
 
 
-# %% MONTHLY COMPOSITES
+# %% HUE MONTHLY COMPOSITES
 
 for year in list(range(2023, 2024)):
     for month in list(range(1, 8, 1)):
@@ -227,7 +202,7 @@ for year in list(range(2023, 2024)):
 
         hue = s2_sr.select("hue").multiply(1000)
 
-        hue = hue.unmask(9999)
+        hue = hue.unmask(mask_value)
 
         hue = geetools.batch.utils.convertDataType("uint16")(hue)
 

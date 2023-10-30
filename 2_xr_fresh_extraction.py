@@ -27,11 +27,8 @@ from pathlib import Path
 import time
 import re
 
-# # start cluster
-# cluster = Cluster()
-# cluster.start_large_object()
 
-missing_data = 9999
+missing_data = 0
 
 
 complete_f = {
@@ -74,12 +71,18 @@ sys.path.append("/home/mmann1123/Documents/github/xr_fresh")
 
 import xr_fresh as xf
 
-from xr_fresh.feature_calculator_series import doy_of_maximum, abs_energy, maximum, mean
+from xr_fresh.feature_calculator_series import *
+from xr_fresh.interpolate_series import interpolate_nan
 
+os.chdir(
+    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data"
+)
 
 # %%
-for band_name in ["B12"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
-    files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_TZ_data/{band_name}"
+
+
+for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
+    files = f"./{band_name}"
     file_glob = f"{files}/*.tif"
 
     f_list = sorted(glob(file_glob))
@@ -97,6 +100,19 @@ for band_name in ["B12"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
         )
     )
 
+    # # add data notes
+    try:
+        # os.mkdir(f"{os.getcwd}/interpolated/{band_name}", parents=False)
+        Path(f"{files}/interpolated").mkdir(parents=True)
+    except FileExistsError:
+        print(f"The directory already exists. Skipping.")
+
+    with open(f"{files}/interpolated/0_notes.txt", "a") as the_file:
+        the_file.write(
+            "Gererated by  github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
+        )
+        the_file.write(str(datetime.now()))
+
     # Print the unique codes
     for grid in unique_grids:
         print("working on grid", grid)
@@ -107,25 +123,19 @@ for band_name in ["B12"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
         print(dates)
 
-        # # add data notes
-        # Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
-        # with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
-        #     the_file.write(
-        #         "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
-        #     )
-        #     the_file.write(str(datetime.now()))
-
-        with gw.series(
-            a_grid,
-            nodata=missing_data,
-        ) as src:
-            print(src)
+        print(f"working on {band_name} {grid}")
+        with gw.series(a_grid, window_size=[640, 640]) as src:
             src.apply(
-                func=xf.feature_calculator_series.doy_of_maximum(dates),
-                outfile=f"/home/mmann1123/Downloads/{band_name}_{grid}_abs_energy.tif",
-                num_workers=5,
+                func=interpolate_nan(
+                    missing_value=missing_data,
+                    count=len(src.filenames),
+                    dates=dates,
+                ),
+                outfile=f"./{band_name}/interpolated/S2_SR_interpolated_{grid}_{dates[0].strftime('%Y_%m')}_{dates[-1].strftime('%Y_%m')}.tif",
+                num_workers=src.nchunks,
                 bands=1,
             )
+
 
 # %%
 # %%

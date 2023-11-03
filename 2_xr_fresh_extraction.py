@@ -12,10 +12,9 @@ from glob import glob
 from datetime import datetime
 import matplotlib.pyplot as plt
 
-# from xr_fresh.utils import *
 import logging
 import xarray as xr
-from numpy import where
+from xr_fresh.feature_calculator_series import *
 
 # from xr_fresh import feature_calculators
 from itertools import chain
@@ -86,6 +85,84 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
     file_glob = f"{files}/*.tif"
 
     f_list = sorted(glob(file_glob))
+    print(f_list)
+
+    # Get unique grid codes
+    pattern = r"(?<=-)\d+-\d+(?=\.tif)"
+    unique_grids = list(
+        set(
+            [
+                re.search(pattern, file_path).group()
+                for file_path in f_list
+                if re.search(pattern, file_path)
+            ]
+        )
+    )
+
+    # # add data notes
+    try:
+        # os.mkdir(f"{os.getcwd}/interpolated/{band_name}", parents=False)
+        Path(f"{os.getcwd()}/interpolated").mkdir(parents=True)
+    except FileExistsError:
+        print(f"The directory already exists. Skipping.")
+
+    with open(f"{os.getcwd()}/interpolated/0_notes.txt", "a") as the_file:
+        the_file.write(
+            "Gererated by  github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
+        )
+        the_file.write(str(datetime.now()))
+
+    # Print the unique codes
+    for grid in unique_grids:
+        print("working on grid", grid)
+        a_grid = sorted([f for f in f_list if grid in f])[0:3]
+        print(a_grid)
+        # get dates
+        strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-{grid}.tif"
+        dates = [datetime.strptime(string, strp_glob) for string in a_grid]
+        print(dates)
+
+        print(f"working on {band_name} {grid}")
+        with gw.series(
+            a_grid,
+            transfer_lib="numpy",
+            window_size=[512, 512],  # 512 worked
+        ) as src:
+            src.apply(
+                func=interpolate_nan(
+                    interp_type="linear",
+                    missing_value=missing_data,
+                    count=len(src.filenames),
+                ),
+                outfile=os.path.join(
+                    os.getcwd(),
+                    "interpolated",
+                    f"S2_SR_linear_interp_{band_name}_{grid}.tif",
+                ),
+                num_workers=10,  # src.nchunks,
+                bands=1,
+                kwargs={"BIGTIFF": "YES"},
+            )
+
+
+# %%
+import jax.numpy as jnp
+
+
+class TemporalMean(gw.TimeModule):
+    def __init__(self):
+        super(TemporalMean, self).__init__()
+
+    def calculate(self, array):
+        print(array.shape)
+        return jnp.mean(array, axis=0).squeeze()
+
+
+for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][1:2]:
+    files = f"./{band_name}"
+    file_glob = f"{files}/*.tif"
+
+    f_list = sorted(glob(file_glob))
     f_list
 
     # Get unique grid codes
@@ -114,9 +191,9 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
         the_file.write(str(datetime.now()))
 
     # Print the unique codes
-    for grid in unique_grids:
+    for grid in unique_grids[-1:]:
         print("working on grid", grid)
-        a_grid = sorted([f for f in f_list if grid in f])
+        a_grid = sorted([f for f in f_list if grid in f])[0:3]
         print(a_grid)
         # get dates
         strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-{grid}.tif"
@@ -124,20 +201,19 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
         print(dates)
 
         print(f"working on {band_name} {grid}")
-        with gw.series(a_grid, window_size=[640, 640]) as src:
+        with gw.series(
+            a_grid,
+            window_size=[512, 512],  # transfer_lib="numpy"
+        ) as src:  # ,
             src.apply(
-                func=interpolate_nan(
-                    missing_value=missing_data,
-                    count=len(src.filenames),
-                    dates=dates,
-                ),
-                outfile=f"./{band_name}/interpolated/S2_SR_interpolated_{grid}_{dates[0].strftime('%Y_%m')}_{dates[-1].strftime('%Y_%m')}.tif",
-                num_workers=src.nchunks,
+                func=mean(),
+                outfile=f"/home/mmann1123/Downloads/S2_SR_max.tif",
+                num_workers=1,  # src.nchunks,
                 bands=1,
+                kwargs={"BIGTIFF": "YES"},
             )
 
 
-# %%
 # %%
 # # open xarray lazy
 # with gw.open(

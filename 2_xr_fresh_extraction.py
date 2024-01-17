@@ -147,12 +147,12 @@ for band_name in [
         # Define the two new bounding boxes
         bounds1 = (total_bounds[0], total_bounds[1], mid_x, total_bounds[3])
         bounds2 = (mid_x, total_bounds[1], total_bounds[2], total_bounds[3])
-        for bound in [bounds1, bounds2]:
+        for count, bound in zip(["1", "2"], [bounds1, bounds2]):
             print(f"working on {band_name} {grid} {bound}")
             with gw.series(
                 a_grid,
                 transfer_lib="numpy",
-                window_size=[128, 128],
+                window_size=[512, 512],
                 bounds=bound,
             ) as src:
                 src.apply(
@@ -161,10 +161,7 @@ for band_name in [
                         missing_value=missing_data,
                         count=len(src.filenames),
                     ),
-                    outfile=out_file.split("-")[0]
-                    + "-"
-                    + f"{random.randint(0, 9999999999):010d}"
-                    + ".tif",
+                    outfile=f"{out_file.split('.tif')[0]}-part{count}.tif",
                     num_workers=1,  # src.nchunks,
                     bands=1,
                     kwargs={"BIGTIFF": "YES"},

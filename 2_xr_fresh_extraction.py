@@ -3,6 +3,7 @@
 import xarray as xr
 import geowombat as gw
 import os, sys
+import random
 
 sys.path.append("/home/mmann1123/Documents/github/xr_fresh/")
 # from xr_fresh.feature_calculators import *
@@ -77,10 +78,11 @@ os.chdir(
     r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data"
 )
 
-# %%
+# %% INTERPOLATE MISSING VALUES
 
-
-for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
+for band_name in [
+    "B2",
+]:  # "B2" not working ["B12", "B11", "B2", "B6", "EVI", "hue"]
     files = f"./{band_name}"
     file_glob = f"{files}/*.tif"
 
@@ -115,18 +117,65 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
     # Print the unique codes
     for grid in unique_grids:
         print("working on grid", grid)
-        a_grid = sorted([f for f in f_list if grid in f])[0:3]
+        a_grid = sorted([f for f in f_list if grid in f])
         print(a_grid)
         # get dates
         strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-{grid}.tif"
         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
         print(dates)
 
+    out_file = os.path.join(
+        os.getcwd(),
+        "interpolated",
+        f"S2_SR_linear_interp_{band_name}_{grid}.tif",
+    )
+    try:
+        # file size to gigabytes
+        file_size_gb = os.path.getsize(out_file) / (1024 * 1024 * 1024)
+    except FileNotFoundError:
+        file_size_gb = 0
+    # check if file exists
+    if os.path.isfile(out_file) and file_size_gb > 1:
+        print(f"file exists: {out_file}")
+        continue
+    # handle B2 memory error by splitting into two
+    elif (band_name == "B2") & (os.path.getsize(a_grid[0]) > 3):
+        with gw.open(a_grid[0]) as test:
+            total_bounds = test.gw.bounds
+            mid_x = (total_bounds[0] + total_bounds[2]) / 2
+
+        # Define the two new bounding boxes
+        bounds1 = (total_bounds[0], total_bounds[1], mid_x, total_bounds[3])
+        bounds2 = (mid_x, total_bounds[1], total_bounds[2], total_bounds[3])
+        for bound in [bounds1, bounds2]:
+            print(f"working on {band_name} {grid} {bound}")
+            with gw.series(
+                a_grid,
+                transfer_lib="numpy",
+                window_size=[128, 128],
+                bounds=bound,
+            ) as src:
+                src.apply(
+                    func=interpolate_nan(
+                        interp_type="linear",
+                        missing_value=missing_data,
+                        count=len(src.filenames),
+                    ),
+                    outfile=out_file.split("-")[0]
+                    + "-"
+                    + f"{random.randint(0, 9999999999):010d}"
+                    + ".tif",
+                    num_workers=1,  # src.nchunks,
+                    bands=1,
+                    kwargs={"BIGTIFF": "YES"},
+                )
+            del src
+    else:
         print(f"working on {band_name} {grid}")
         with gw.series(
             a_grid,
             transfer_lib="numpy",
-            window_size=[512, 512],  # 512 worked
+            window_size=[128, 128],  # 512
         ) as src:
             src.apply(
                 func=interpolate_nan(
@@ -134,28 +183,14 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
                     missing_value=missing_data,
                     count=len(src.filenames),
                 ),
-                outfile=os.path.join(
-                    os.getcwd(),
-                    "interpolated",
-                    f"S2_SR_linear_interp_{band_name}_{grid}.tif",
-                ),
-                num_workers=10,  # src.nchunks,
+                outfile=out_file,
+                num_workers=1,  # src.nchunks,
                 bands=1,
                 kwargs={"BIGTIFF": "YES"},
             )
-
+        del src
 
 # %%
-import jax.numpy as jnp
-
-
-class TemporalMean(gw.TimeModule):
-    def __init__(self):
-        super(TemporalMean, self).__init__()
-
-    def calculate(self, array):
-        print(array.shape)
-        return jnp.mean(array, axis=0).squeeze()
 
 
 for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][1:2]:

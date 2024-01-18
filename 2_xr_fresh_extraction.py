@@ -124,36 +124,57 @@ for band_name in [
         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
         print(dates)
 
-    out_file = os.path.join(
-        os.getcwd(),
-        "interpolated",
-        f"S2_SR_linear_interp_{band_name}_{grid}.tif",
-    )
-    try:
-        # file size to gigabytes
-        file_size_gb = os.path.getsize(out_file) / (1024 * 1024 * 1024)
-    except FileNotFoundError:
-        file_size_gb = 0
-    # check if file exists
-    if os.path.isfile(out_file) and file_size_gb > 1:
-        print(f"file exists: {out_file}")
-        continue
-    # handle B2 memory error by splitting into two
-    elif (band_name == "B2") & (os.path.getsize(a_grid[0]) > 3):
-        with gw.open(a_grid[0]) as test:
-            total_bounds = test.gw.bounds
-            mid_x = (total_bounds[0] + total_bounds[2]) / 2
+        out_file = os.path.join(
+            os.getcwd(),
+            "interpolated",
+            f"S2_SR_linear_interp_{band_name}_{grid}.tif",
+        )
+        file_size_gb = lambda x: os.path.getsize(x) / (1024 * 1024 * 1024)
 
-        # Define the two new bounding boxes
-        bounds1 = (total_bounds[0], total_bounds[1], mid_x, total_bounds[3])
-        bounds2 = (mid_x, total_bounds[1], total_bounds[2], total_bounds[3])
-        for count, bound in zip(["1", "2"], [bounds1, bounds2]):
-            print(f"working on {band_name} {grid} {bound}")
+        try:
+            # file size to gigabytes
+            a_file_size_gb = file_size_gb(out_file)
+        except FileNotFoundError:
+            a_file_size_gb = 0
+        # check if file exists
+        if os.path.isfile(out_file) and a_file_size_gb > 1:
+            print(f"file exists: {out_file}")
+            continue
+        # handle B2 memory error by splitting into two
+        elif (band_name == "B2") & (file_size_gb(a_grid[0]) > 3):
+            with gw.open(a_grid[0]) as test:
+                total_bounds = test.gw.bounds
+                mid_x = (total_bounds[0] + total_bounds[2]) / 2
+
+            # Define the two new bounding boxes
+            bounds1 = (total_bounds[0], total_bounds[1], mid_x, total_bounds[3])
+            bounds2 = (mid_x, total_bounds[1], total_bounds[2], total_bounds[3])
+            for count, bound in zip(["1", "2"], [bounds1, bounds2]):
+                print(f"working on {band_name} {grid} {bound}")
+                with gw.series(
+                    a_grid,
+                    transfer_lib="numpy",
+                    window_size=[512, 512],
+                    bounds=bound,
+                ) as src:
+                    src.apply(
+                        func=interpolate_nan(
+                            interp_type="linear",
+                            missing_value=missing_data,
+                            count=len(src.filenames),
+                        ),
+                        outfile=f"{out_file.split('.tif')[0]}-part{count}.tif",
+                        num_workers=1,  # src.nchunks,
+                        bands=1,
+                        kwargs={"BIGTIFF": "YES"},
+                    )
+                del src
+        else:
+            print(f"working on {band_name} {grid}")
             with gw.series(
                 a_grid,
                 transfer_lib="numpy",
-                window_size=[512, 512],
-                bounds=bound,
+                window_size=[128, 128],  # 512
             ) as src:
                 src.apply(
                     func=interpolate_nan(
@@ -161,31 +182,12 @@ for band_name in [
                         missing_value=missing_data,
                         count=len(src.filenames),
                     ),
-                    outfile=f"{out_file.split('.tif')[0]}-part{count}.tif",
+                    outfile=out_file,
                     num_workers=1,  # src.nchunks,
                     bands=1,
                     kwargs={"BIGTIFF": "YES"},
                 )
             del src
-    else:
-        print(f"working on {band_name} {grid}")
-        with gw.series(
-            a_grid,
-            transfer_lib="numpy",
-            window_size=[128, 128],  # 512
-        ) as src:
-            src.apply(
-                func=interpolate_nan(
-                    interp_type="linear",
-                    missing_value=missing_data,
-                    count=len(src.filenames),
-                ),
-                outfile=out_file,
-                num_workers=1,  # src.nchunks,
-                bands=1,
-                kwargs={"BIGTIFF": "YES"},
-            )
-        del src
 
 # %%
 

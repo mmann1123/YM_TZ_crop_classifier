@@ -31,42 +31,6 @@ import re
 missing_data = 0
 
 
-complete_f = {
-    "minimum": [{}],
-    "abs_energy": [{}],
-    "mean_abs_change": [{}],
-    "variance_larger_than_standard_deviation": [{}],
-    # NOT USEFUL "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
-    "symmetry_looking": [{}],
-    "sum_values": [{}],
-    # didn't get selected "autocorr": [
-    # {"lag": 1},
-    # {"lag": 2},
-    # ],  #  not possible in 2023{"lag": 4}],
-    "ts_complexity_cid_ce": [{}],
-    "mean_change": [{}],  #  FIX  DONT HAVE
-    "mean_second_derivative_central": [{}],
-    "median": [{}],
-    "mean": [{}],
-    "standard_deviation": [{}],
-    "variance": [{}],
-    "skewness": [{}],
-    "kurtosis": [{}],
-    "absolute_sum_of_changes": [{}],
-    "longest_strike_below_mean": [{}],
-    # not selected "longest_strike_above_mean": [{}],
-    # not selected "count_above_mean": [{}],
-    "count_below_mean": [{}],
-    # not selected "doy_of_maximum_first": [
-    #     {"band": band_name}
-    # ],  # figure out how to remove arg for band
-    # "doy_of_minimum_first": [{"band": band_name}],
-    "ratio_value_number_to_time_series_length": [{}],
-    "quantile": [{"q": 0.05}, {"q": 0.95}],
-    "maximum": [{}],
-    "linear_time_trend": [{"param": "all"}],
-}
-
 sys.path.append("/home/mmann1123/Documents/github/xr_fresh")
 
 import xr_fresh as xf
@@ -80,9 +44,7 @@ os.chdir(
 
 # %% INTERPOLATE MISSING VALUES
 
-for band_name in [
-    "B2",
-]:  # "B2" not working ["B12", "B11", "B2", "B6", "EVI", "hue"]
+for band_name in ["EVI"]:  # "B2", "B12", "B11", "B2", "B6", , "hue"
     files = f"./{band_name}"
     file_glob = f"{files}/*.tif"
 
@@ -106,7 +68,7 @@ for band_name in [
         # os.mkdir(f"{os.getcwd}/interpolated/{band_name}", parents=False)
         Path(f"{os.getcwd()}/interpolated").mkdir(parents=True)
     except FileExistsError:
-        print(f"The directory already exists. Skipping.")
+        print(f"The interpolation directory already exists. Skipping.")
 
     with open(f"{os.getcwd()}/interpolated/0_notes.txt", "a") as the_file:
         the_file.write(
@@ -122,7 +84,7 @@ for band_name in [
         # get dates
         strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-{grid}.tif"
         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
-        print(dates)
+        print([i.strftime("%Y-%m-%d") for i in dates])
 
         out_file = os.path.join(
             os.getcwd(),
@@ -141,7 +103,8 @@ for band_name in [
             print(f"file exists: {out_file}")
             continue
         # handle B2 memory error by splitting into two
-        elif (band_name == "B2") & (file_size_gb(a_grid[0]) > 3):
+        elif (band_name in ["B2", "EVI"]) & (file_size_gb(a_grid[0]) > 2.5):
+            print("splitting file, size is ", file_size_gb(a_grid[0]), " GB")
             with gw.open(a_grid[0]) as test:
                 total_bounds = test.gw.bounds
                 mid_x = (total_bounds[0] + total_bounds[2]) / 2
@@ -174,7 +137,7 @@ for band_name in [
             with gw.series(
                 a_grid,
                 transfer_lib="numpy",
-                window_size=[128, 128],  # 512
+                window_size=[512, 512],  # 512, 128 not working for B2
             ) as src:
                 src.apply(
                     func=interpolate_nan(
@@ -190,9 +153,153 @@ for band_name in [
             del src
 
 # %%
+# convert multiband images to single band
+from glob import glob
+import os
+import re
+import geowombat as gw
+from numpy import int16
+
+os.chdir(
+    r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/interpolated"
+)
+for band_name in ["EVI"]:  # "B2", "B12", "B11", "B2", "B6", "hue",
+    file_glob = f"S2_SR_linear_interp_{band_name}*.tif"
+
+    f_list = sorted(glob(file_glob))
+    print(f_list)
+
+    # Get unique grid codes
+    pattern = r"interp_*_(.+?)\.tif"
+
+    unique_grids = list(
+        set(
+            [
+                re.search(pattern, file_path).group(1)
+                for file_path in f_list
+                if re.search(pattern, file_path)
+            ]
+        )
+    )
+    times = [
+        "2023-01",
+        "2023-02",
+        "2023-03",
+        "2023-04",
+        "2023-05",
+        "2023-06",
+        "2023-07",
+        "2023-08",
+    ]
+
+    for stack, grid in zip(f_list, unique_grids):
+        with gw.open(stack) as src:
+            for i in range(len(src)):
+                print(grid, i)
+                # display(src[i])
+                gw.save(
+                    src[i].astype(int16),
+                    compress="LZW",
+                    filename=f"../interpolated_monthly/S2_SR_{band_name}_M_{times[i]}-{grid}.tif",
+                    num_workers=12,
+                )
+
+# %%
+from xr_fresh.feature_calculator_series import *
+from xr_fresh.feature_calculator_series import function_mapping
+import geowombat as gw
+from glob import glob
+
+function_mapping
+# %%
+test_list = {
+    # "quantile": [{"q": 0.5}, {"q": 0.95}],
+    # "minimum": [{}],
+    "maximum": [{}],
+}
+
+function_mapping
+
+files = glob(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/interpolated_monthly/S2_SR_EVI_M_*EVI_0000046592-0000093184*.tif"
+)
+
+with gw.open(files) as src2:
+    display(src2)
 
 
-for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][1:2]:
+# %%
+
+# Loop through the dictionary and apply functions
+with gw.series(
+    files, window_size=[512, 512], time_names=[str(i) for i in range(8)]
+) as src:
+    for func_name, param_list in test_list.items():
+        for params in param_list:
+            func_class = function_mapping.get(func_name)
+            if func_class:
+                func_instance = func_class(**params)  # Instantiate with parameters
+                if params.get("q") is not None:
+                    print(f"Instantiated {func_name} with q = {params['q']}")
+                else:
+                    print
+
+                # get value if not empty
+                if len(list(params.keys())) > 0:
+                    key_names = list(params.keys())[0]
+                    value_names = list(params.values())[0]
+                else:
+                    key_names = ""
+                    value_names = ""
+                outfile = f"/home/mmann1123/Downloads/{func_name}_{key_names}_{value_names}.tif"
+                print(f"Creating: {outfile}")
+                src.apply(
+                    func=func_instance,
+                    outfile=outfile,
+                    num_workers=8,  # Adjust as needed
+                    bands=1,
+                    kwargs={"BIGTIFF": "YES"},
+                )
+
+
+# %%
+complete_times_series_list = {
+    "minimum": [{}],
+    "quantile": [{"q": 0.05}, {"q": 0.95}],
+    "abs_energy": [{}],
+    "mean_abs_change": [{}],
+    "variance_larger_than_standard_deviation": [{}],
+    # NOT USEFUL "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
+    "symmetry_looking": [{}],
+    "sum_values": [{}],
+    # didn't get selected "autocorr": [
+    # {"lag": 1},
+    # {"lag": 2},
+    # ],  #  not possible in 2023{"lag": 4}],
+    "ts_complexity_cid_ce": [{}],
+    "mean_change": [{}],  #  FIX  DONT HAVE
+    "mean_second_derivative_central": [{}],
+    "median": [{}],
+    "mean": [{}],
+    "standard_deviation": [{}],
+    "variance": [{}],
+    "skewness": [{}],
+    "kurtosis": [{}],
+    "absolute_sum_of_changes": [{}],
+    "longest_strike_below_mean": [{}],
+    # not selected "longest_strike_above_mean": [{}],
+    # not selected "count_above_mean": [{}],
+    "count_below_mean": [{}],
+    # not selected "doy_of_maximum_first": [
+    #     {"band": band_name}
+    # ],  # figure out how to remove arg for band
+    # "doy_of_minimum_first": [{"band": band_name}],
+    "ratio_value_number_to_time_series_length": [{}],
+    "maximum": [{}],
+    "linear_time_trend": [{"param": "all"}],
+}
+
+for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][0:1]:
     files = f"./{band_name}"
     file_glob = f"{files}/*.tif"
 
@@ -216,7 +323,7 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][1:2]:
         # os.mkdir(f"{os.getcwd}/interpolated/{band_name}", parents=False)
         Path(f"{files}/interpolated").mkdir(parents=True)
     except FileExistsError:
-        print(f"The directory already exists. Skipping.")
+        print(f"The interpolation directory already exists. Skipping.")
 
     with open(f"{files}/interpolated/0_notes.txt", "a") as the_file:
         the_file.write(
@@ -225,7 +332,7 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][1:2]:
         the_file.write(str(datetime.now()))
 
     # Print the unique codes
-    for grid in unique_grids[-1:]:
+    for grid in unique_grids:
         print("working on grid", grid)
         a_grid = sorted([f for f in f_list if grid in f])[0:3]
         print(a_grid)
@@ -234,6 +341,15 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][1:2]:
         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
         print(dates)
 
+        # get value if not empty
+        if len(list(params.keys())) > 0:
+            key_names = list(params.keys())[0]
+            value_names = list(params.values())[0]
+        else:
+            key_names = ""
+            value_names = ""
+        outfile = f"/home/mmann1123/Downloads/{func_name}_{key_names}_{value_names}.tif"
+
         print(f"working on {band_name} {grid}")
         with gw.series(
             a_grid,
@@ -241,7 +357,7 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][1:2]:
         ) as src:  # ,
             src.apply(
                 func=mean(),
-                outfile=f"/home/mmann1123/Downloads/S2_SR_max.tif",
+                outfile=outfile,
                 num_workers=1,  # src.nchunks,
                 bands=1,
                 kwargs={"BIGTIFF": "YES"},

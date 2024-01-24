@@ -205,13 +205,13 @@ for band_name in ["EVI"]:  # "B2", "B12", "B11", "B2", "B6", "hue",
                 )
 
 # %%
+
 from xr_fresh.feature_calculator_series import *
 from xr_fresh.feature_calculator_series import function_mapping
 import geowombat as gw
 from glob import glob
 
-function_mapping
-# %%
+
 test_list = {
     # "quantile": [{"q": 0.5}, {"q": 0.95}],
     # "minimum": [{}],
@@ -261,57 +261,68 @@ with gw.series(
                     kwargs={"BIGTIFF": "YES"},
                 )
 
+########################################################
+# %% FEATURE EXTRACTION
+from pathlib import Path
+from xr_fresh.feature_calculator_series import *
+from xr_fresh.feature_calculator_series import function_mapping
+import geowombat as gw
+from glob import glob
+from datetime import datetime
+import re
+import os
 
-# %%
 complete_times_series_list = {
-    "minimum": [{}],
-    "quantile": [{"q": 0.05}, {"q": 0.95}],
     "abs_energy": [{}],
+    "absolute_sum_of_changes": [{}],
+    "autocorr": [{"lag": 1}, {"lag": 2}, {"lag": 3}],
+    "count_above_mean": [{}],
+    "count_below_mean": [{}],
+    "doy_of_maximum": [{}],
+    "doy_of_minimum": [{}],
+    "kurtosis": [{}],
+    "large_standard_deviation": [{}],
+    "longest_strike_above_mean": [{}],
+    "longest_strike_below_mean": [{}],
+    "maximum": [{}],
+    "mean": [{}],
     "mean_abs_change": [{}],
-    "variance_larger_than_standard_deviation": [{}],
-    # NOT USEFUL "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}, {"r": 3}],
-    "symmetry_looking": [{}],
-    "sum_values": [{}],
-    # didn't get selected "autocorr": [
-    # {"lag": 1},
-    # {"lag": 2},
-    # ],  #  not possible in 2023{"lag": 4}],
-    "ts_complexity_cid_ce": [{}],
-    "mean_change": [{}],  #  FIX  DONT HAVE
+    "mean_change": [{}],
     "mean_second_derivative_central": [{}],
     "median": [{}],
-    "mean": [{}],
-    "standard_deviation": [{}],
-    "variance": [{}],
-    "skewness": [{}],
-    "kurtosis": [{}],
-    "absolute_sum_of_changes": [{}],
-    "longest_strike_below_mean": [{}],
-    # not selected "longest_strike_above_mean": [{}],
-    # not selected "count_above_mean": [{}],
-    "count_below_mean": [{}],
-    # not selected "doy_of_maximum_first": [
-    #     {"band": band_name}
-    # ],  # figure out how to remove arg for band
-    # "doy_of_minimum_first": [{"band": band_name}],
+    "minimum": [{}],
+    "ols_slope_intercept": [{"returns": "intercept"}, {"returns": "slope"}],
+    "quantile": [{"q": 0.05}, {"q": 0.95}],
+    "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}],
     "ratio_value_number_to_time_series_length": [{}],
-    "maximum": [{}],
-    "linear_time_trend": [{"param": "all"}],
+    "skewness": [{}],
+    "standard_deviation": [{}],
+    "sum": [{}],
+    "symmetry_looking": [{}],
+    "ts_complexity_cid_ce": [{}],
+    "variance": [{}],
+    "variance_larger_than_standard_deviation": [{}],
 }
 
+
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/interpolated_monthly"
+)
+
 for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][0:1]:
-    files = f"./{band_name}"
-    file_glob = f"{files}/*.tif"
+    file_glob = f"*{band_name}*.tif"
 
     f_list = sorted(glob(file_glob))
     f_list
 
     # Get unique grid codes
-    pattern = r"(?<=-)\d+-\d+(?=\.tif)"
+    pattern = (
+        r"S2_SR_[A-Za-z0-9]+_M_[0-9]{4}-[0-9]{2}-[A-Za-z0-9]+_([0-9]+-[0-9]+)\.tif"
+    )
     unique_grids = list(
         set(
             [
-                re.search(pattern, file_path).group()
+                re.search(pattern, file_path).group(1)
                 for file_path in f_list
                 if re.search(pattern, file_path)
             ]
@@ -321,11 +332,11 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][0:1]:
     # # add data notes
     try:
         # os.mkdir(f"{os.getcwd}/interpolated/{band_name}", parents=False)
-        Path(f"{files}/interpolated").mkdir(parents=True)
+        Path(f"features").mkdir(parents=True)
     except FileExistsError:
         print(f"The interpolation directory already exists. Skipping.")
 
-    with open(f"{files}/interpolated/0_notes.txt", "a") as the_file:
+    with open(f"features/0_notes.txt", "a") as the_file:
         the_file.write(
             "Gererated by  github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
         )
@@ -334,244 +345,50 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][0:1]:
     # Print the unique codes
     for grid in unique_grids:
         print("working on grid", grid)
-        a_grid = sorted([f for f in f_list if grid in f])[0:3]
+        a_grid = sorted([f for f in f_list if grid in f])
         print(a_grid)
         # get dates
-        strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-{grid}.tif"
+        strp_glob = f"S2_SR_{band_name}_M_%Y-%m-{band_name}_{grid}.tif"
         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
         print(dates)
 
-        # get value if not empty
-        if len(list(params.keys())) > 0:
-            key_names = list(params.keys())[0]
-            value_names = list(params.values())[0]
-        else:
-            key_names = ""
-            value_names = ""
-        outfile = f"/home/mmann1123/Downloads/{func_name}_{key_names}_{value_names}.tif"
+        # update doy with dates
+        complete_times_series_list["doy_of_maximum_first"] = [{"dates": dates}]
+        complete_times_series_list["doy_of_maximum_last"] = [{"dates": dates}]
 
         print(f"working on {band_name} {grid}")
         with gw.series(
             a_grid,
             window_size=[512, 512],  # transfer_lib="numpy"
-        ) as src:  # ,
-            src.apply(
-                func=mean(),
-                outfile=outfile,
-                num_workers=1,  # src.nchunks,
-                bands=1,
-                kwargs={"BIGTIFF": "YES"},
-            )
+        ) as src:
+            for func_name, param_list in complete_times_series_list.items():
+                for params in param_list:
+                    # instantiate function
+                    func_class = function_mapping.get(func_name)
+                    if func_class:
+                        func_instance = func_class(
+                            **params
+                        )  # Instantiate with parameters
+                        if len(params) > 0:
+                            print(f"Instantiated {func_name} with  {params}")
+                        else:
+                            print(f"Instantiated {func_name} ")
 
+                    # create output file name
+                    if len(list(params.keys())) > 0:
+                        key_names = list(params.keys())[0]
+                        value_names = list(params.values())[0]
+                        outfile = f"/home/mmann1123/Downloads/{band_name}_{func_name}_{key_names}_{value_names}.tif"
+                    else:
+                        outfile = (
+                            f"/home/mmann1123/Downloads/{band_name}_{func_name}.tif"
+                        )
 
-# %%
-# # open xarray lazy
-# with gw.open(
-#     a_grid,
-#     band_names=[band_name],
-#     nodata=missing_data,
-#     time_names=dates,
-# ) as ds:
-#     ds = ds.chunk(
-#         {"time": -1, "band": 1, "y": 350, "x": 350}
-#     )  # rechunk to time
-#     ds = ds.gw.mask_nodata()
-#     print(ds)
-
-#     # generate features current March - Aug ( Msimu growing season)
-
-#     for year in [2023]:
-#         year = str(year)
-#         print(year)
-#         ds_year = ds.sel(time=slice(year + "-03-01", year + "-07-01"))
-#         print("interpolating")
-#         ds_year = ds_year.interpolate_na(dim="time", limit=4)
-
-#         # make output folder
-#         outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
-#         os.makedirs(outpath, exist_ok=True)
-
-#         # extract growing season year month day
-#         features = extract_features(
-#             xr_data=ds_year,
-#             feature_dict=complete_f,
-#             band=band_name,
-#             na_rm=True,
-#             persist=True,
-#             filepath=outpath,
-#             postfix="_mar_aug_" + year,
-#         )
-
-# # %%
-
-# # %%
-# for band_name in ["B12"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
-#     files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_TZ_data/{band_name}"
-#     file_glob = f"{files}/*.tif"
-
-#     f_list = sorted(glob(file_glob))
-#     f_list
-
-#     # Get unique grid codes
-#     pattern = r"(?<=-)\d+-\d+(?=\.tif)"
-#     unique_grids = list(
-#         set(
-#             [
-#                 re.search(pattern, file_path).group()
-#                 for file_path in f_list
-#                 if re.search(pattern, file_path)
-#             ]
-#         )
-#     )
-
-#     # Print the unique codes
-#     for grid in unique_grids:
-#         print("working on grid", grid)
-#         a_grid = sorted([f for f in f_list if grid in f])
-#         print(a_grid)
-#         # get dates
-#         strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-{grid}.tif"
-#         dates = [datetime.strptime(string, strp_glob) for string in a_grid]
-#         print(dates)
-
-#         # add data notes
-#         Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
-#         with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
-#             the_file.write(
-#                 "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
-#             )
-#             the_file.write(str(datetime.now()))
-
-#         # open xarray lazy
-#         with gw.open(
-#             a_grid,
-#             band_names=[band_name],
-#             nodata=missing_data,
-#             time_names=dates,
-#         ) as ds:
-#             ds = ds.chunk(
-#                 {"time": -1, "band": 1, "y": 350, "x": 350}
-#             )  # rechunk to time
-#             ds = ds.gw.mask_nodata()
-#             print(ds)
-
-#             # generate features current March - Aug ( Msimu growing season)
-
-#             for year in [2023]:
-#                 year = str(year)
-#                 print(year)
-#                 ds_year = ds.sel(time=slice(year + "-03-01", year + "-07-01"))
-#                 print("interpolating")
-#                 ds_year = ds_year.interpolate_na(dim="time", limit=4)
-
-#                 # make output folder
-#                 outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
-#                 os.makedirs(outpath, exist_ok=True)
-
-#                 # extract growing season year month day
-#                 features = extract_features(
-#                     xr_data=ds_year,
-#                     feature_dict=complete_f,
-#                     band=band_name,
-#                     na_rm=True,
-#                     persist=True,
-#                     filepath=outpath,
-#                     postfix="_mar_aug_" + year,
-#                 )
-
-# # %%
-
-# for band_name in ["hue"]:  # "B11", "B12" "B2",  "B6", "EVI", 'hue'
-#     files = f"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_TZ_data/{band_name}"
-#     file_glob = f"{files}/*.tif"
-#     strp_glob = f"{files}/S2_SR_{band_name}_M_%Y_%m-*.tif"
-
-#     f_list = sorted(glob(file_glob))
-#     print(f_list)
-
-#     dates = sorted(datetime.strptime(string, strp_glob) for string in f_list)
-#     print(dates)
-
-#     # add data notes
-#     Path(f"{files}/annual_features").mkdir(parents=False, exist_ok=True)
-#     with open(f"{files}/annual_features/0_notes.txt", "a") as the_file:
-#         the_file.write(
-#             "Gererated by /home/mmann1123/Documents/github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
-#         )
-#         the_file.write(str(datetime.now()))
-
-#     # open xarray lazy
-#     with gw.open(
-#         sorted(glob(file_glob)),
-#         band_names=[band_name],
-#         time_names=dates,
-#         nodata=missing_data,
-#     ) as ds:
-#         ds = ds.chunk({"time": -1, "band": 1, "y": 350, "x": 350})  # rechunk to time
-#         ds = ds.gw.mask_nodata()
-#         # ds.attrs["nodatavals"] = (0,)
-#         print(ds)
-
-#         # generate features current March - Aug ( Msimu growing season)
-
-#         for year in [2023]:
-#             year = str(year)
-#             print(year)
-#             ds_year = ds.sel(time=slice(year + "-03-01", year + "-06-01"))
-#             print("interpolating")
-#             ds_year = ds_year.interpolate_na(dim="time", limit=3)
-
-#             # make output folder
-#             outpath = os.path.join(files, "annual_features/Mar_Aug_S2")
-#             os.makedirs(outpath, exist_ok=True)
-
-#             # extract growing season year month day
-#             features = extract_features(
-#                 xr_data=ds_year,
-#                 feature_dict=complete_f,
-#                 band=band_name,
-#                 na_rm=True,
-#                 persist=True,
-#                 filepath=outpath,
-#                 postfix="_mar_aug_" + year,
-#             )
-
-# # generate features previous Sep - current March ( Masika growing season)
-
-# for year in [2023]:
-#     previous_year = str(year - 1)
-#     year = str(year)
-#     print(year)
-#     ds_year = ds.sel(time=slice(previous_year + "-08-01", year + "-03-01"))
-#     print("interpolating")
-#     ds_year = ds_year.interpolate_na(dim="time", limit=5)
-
-#     # make output folder
-#     outpath = os.path.join(files, "annual_features/Sep_Mar_S2")
-#     os.makedirs(outpath, exist_ok=True)
-
-#     # extract growing season year month day
-#     features = extract_features(
-#         xr_data=ds_year,
-#         feature_dict=complete_f,
-#         band=band_name,
-#         na_rm=True,
-#         persist=True,
-#         filepath=outpath,
-#         postfix="_sep_mar_" + year,
-#     )
-# %% change name for quantiles to remove . from name
-from glob import glob
-import os
-
-os.chdir(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover"
-)
-files = glob("./data/**/annual_features/**/*_quantile_*.tif")
-
-# for files update name to remove 0.05 and 0.95 with 0_05  from file name
-for file in files:
-    new_file = file.replace("0.95", "0_95")
-    new_file = new_file.replace("0.05", "0_05")
-    os.rename(file, new_file)
-# %%
+                    src.apply(
+                        func=func_instance,
+                        outfile=outfile,
+                        num_workers=8,
+                        processes=False,
+                        bands=1,
+                        kwargs={"BIGTIFF": "YES"},
+                    )

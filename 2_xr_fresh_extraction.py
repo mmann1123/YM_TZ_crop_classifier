@@ -262,7 +262,9 @@ with gw.series(
                 )
 
 ########################################################
-# %% FEATURE EXTRACTION
+# %% FEATURE EXTRACTION USING SERIES
+########################################################
+
 from pathlib import Path
 from xr_fresh.feature_calculator_series import *
 from xr_fresh.feature_calculator_series import function_mapping
@@ -271,6 +273,20 @@ from glob import glob
 from datetime import datetime
 import re
 import os
+import numpy as np
+import logging
+
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/interpolated_monthly"
+)
+
+# Set up logging
+logging.basicConfig(
+    filename="../features/error_log.log",
+    level=logging.ERROR,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+)
+
 
 complete_times_series_list = {
     "abs_energy": [{}],
@@ -282,8 +298,8 @@ complete_times_series_list = {
     "doy_of_minimum": [{}],
     "kurtosis": [{}],
     "large_standard_deviation": [{}],
-    "longest_strike_above_mean": [{}],
-    "longest_strike_below_mean": [{}],
+    # # # "longest_strike_above_mean": [{}],  # not working with jax GPU ram issue
+    # # # "longest_strike_below_mean": [{}],  # not working with jax GPU ram issue
     "maximum": [{}],
     "mean": [{}],
     "mean_abs_change": [{}],
@@ -291,10 +307,13 @@ complete_times_series_list = {
     "mean_second_derivative_central": [{}],
     "median": [{}],
     "minimum": [{}],
-    "ols_slope_intercept": [{"returns": "intercept"}, {"returns": "slope"}],
+    # "ols_slope_intercept": [
+    #     {"returns": "intercept"},
+    #     {"returns": "slope"},
+    #     {"returns": "rsquared"},
+    # ],  # not working
     "quantile": [{"q": 0.05}, {"q": 0.95}],
     "ratio_beyond_r_sigma": [{"r": 1}, {"r": 2}],
-    "ratio_value_number_to_time_series_length": [{}],
     "skewness": [{}],
     "standard_deviation": [{}],
     "sum": [{}],
@@ -305,15 +324,10 @@ complete_times_series_list = {
 }
 
 
-os.chdir(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/interpolated_monthly"
-)
-
-for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][0:1]:
-    file_glob = f"*{band_name}*.tif"
+for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][-2:]:
+    file_glob = f"**/*{band_name}*.tif"
 
     f_list = sorted(glob(file_glob))
-    f_list
 
     # Get unique grid codes
     pattern = (
@@ -331,36 +345,46 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][0:1]:
 
     # # add data notes
     try:
-        # os.mkdir(f"{os.getcwd}/interpolated/{band_name}", parents=False)
-        Path(f"features").mkdir(parents=True)
+        Path(f".//features").mkdir(parents=True)
     except FileExistsError:
         print(f"The interpolation directory already exists. Skipping.")
 
-    with open(f"features/0_notes.txt", "a") as the_file:
+    with open(f".//features/0_notes.txt", "a") as the_file:
         the_file.write(
             "Gererated by  github/YM_TZ_crop_classifier/2_xr_fresh_extraction.py \t"
         )
         the_file.write(str(datetime.now()))
 
-    # Print the unique codes
+    # iterate across grids
     for grid in unique_grids:
         print("working on grid", grid)
         a_grid = sorted([f for f in f_list if grid in f])
         print(a_grid)
-        # get dates
-        strp_glob = f"S2_SR_{band_name}_M_%Y-%m-{band_name}_{grid}.tif"
-        dates = [datetime.strptime(string, strp_glob) for string in a_grid]
-        print(dates)
+
+        try:
+            # get dates
+            date_pattern = r"S2_SR_[A-Za-z0-9]+_M_(\d{4}-\d{2})-[A-Za-z0-9]+_.*\.tif"
+            dates = [
+                datetime.strptime(re.search(date_pattern, filename).group(1), "%Y-%m")
+                for filename in a_grid
+                if re.search(date_pattern, filename)
+            ]
+        except Exception as e:
+            logging.error(f"Error parsing name from grid {grid}: {e}")
+            print(f"Error parsing name from grid {grid}: {e}")
+            continue
 
         # update doy with dates
-        complete_times_series_list["doy_of_maximum_first"] = [{"dates": dates}]
-        complete_times_series_list["doy_of_maximum_last"] = [{"dates": dates}]
+        complete_times_series_list["doy_of_maximum"] = [{"dates": dates}]
+        complete_times_series_list["doy_of_minimum"] = [{"dates": dates}]
 
         print(f"working on {band_name} {grid}")
         with gw.series(
             a_grid,
             window_size=[512, 512],  # transfer_lib="numpy"
+            nodata=np.nan,
         ) as src:
+            # iterate across functions
             for func_name, param_list in complete_times_series_list.items():
                 for params in param_list:
                     # instantiate function
@@ -378,17 +402,26 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][0:1]:
                     if len(list(params.keys())) > 0:
                         key_names = list(params.keys())[0]
                         value_names = list(params.values())[0]
-                        outfile = f"/home/mmann1123/Downloads/{band_name}_{func_name}_{key_names}_{value_names}.tif"
+                        outfile = f"../features/{band_name}_{func_name}_{key_names}_{value_names}_{grid}.tif"
+                        # avoid issue with all dates
+                        if func_name in ["doy_of_maximum", "doy_of_minimum"]:
+                            outfile = f"../features/{band_name}_{func_name}_{key_names}_{grid}.tif"
                     else:
-                        outfile = (
-                            f"/home/mmann1123/Downloads/{band_name}_{func_name}.tif"
+                        outfile = f"../features/{band_name}_{func_name}_{grid}.tif"
+                    # extract features
+                    try:
+                        src.apply(
+                            func=func_instance,
+                            outfile=outfile,
+                            num_workers=3,
+                            processes=False,
+                            bands=1,
+                            kwargs={"BIGTIFF": "YES", "compress": "LZW"},
                         )
+                    except Exception as e:
+                        logging.error(
+                            f"Error extracting features from {band_name} {func_name} {grid}: {e}"
+                        )
+                        continue
 
-                    src.apply(
-                        func=func_instance,
-                        outfile=outfile,
-                        num_workers=8,
-                        processes=False,
-                        bands=1,
-                        kwargs={"BIGTIFF": "YES"},
-                    )
+# %%

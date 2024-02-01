@@ -1,3 +1,109 @@
+# %%
+
+# extract features to points
+import geowombat as gw
+from geowombat.core.parallel import ParallelTask
+from geowombat.data import l8_224078_20200518_points, l8_224078_20200518
+import geopandas as gpd
+import rasterio as rio
+import ray
+from ray.util import ActorPool
+from glob import glob
+import os
+import numpy as np
+import numpy as np
+import pandas as pd
+import re
+
+# import other necessary modules...
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/features/"
+)
+
+poly = r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_final_cleaned_lisa.geojson"
+
+poly
+# %%
+
+
+@ray.remote
+class Actor(object):
+    def __init__(self, aoi_id=None, id_column=None, band_names=None):
+        self.aoi_id = aoi_id
+        self.id_column = id_column
+        self.band_names = band_names
+
+    # While the names can differ, these three arguments are required.
+    # For ``ParallelTask``, the callable function within an ``Actor`` must be named exec_task.
+    def exec_task(self, data_block_id, data_slice, window_id):
+        data_block = data_block_id[data_slice]
+        left, bottom, right, top = data_block.gw.bounds
+        aoi_sub = self.aoi_id.cx[left:right, bottom:top]
+
+        if aoi_sub.empty:
+            return aoi_sub
+
+        # Return a GeoDataFrame for each actor
+        return gw.extract(
+            data_block, aoi_sub, id_column=self.id_column, band_names=self.band_names
+        )
+
+
+for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
+    with rio.Env(GDAL_CACHEMAX=256 * 1e6) as env:
+        file_glob = f"{band_name}/{band_name}*.tif"
+        f_list = sorted(glob(file_glob))
+
+        # Get unique grid codes
+        unique_grids = list(
+            set([re.search(r"(\d+-\d+)", filename).group(1) for filename in f_list])
+        )
+        ray.init(num_cpus=3)
+        df_id = ray.put(gpd.read_file(poly).to_crs("EPSG:32736"))
+
+        # iterate across grids
+        for grid in unique_grids:
+            print("working on grid", grid)
+            a_grid = sorted([f for f in f_list if grid in f])
+
+            band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
+
+            with gw.open(
+                a_grid, band_names=band_names, stack_dim="band", chunks=32
+            ) as src:
+
+                # Setup the pool of actors, one for each resource available to ``ray``.
+                actor_pool = ActorPool(
+                    [
+                        Actor.remote(
+                            aoi_id=df_id, id_column="id", band_names=band_names
+                        )
+                        for n in range(0, int(ray.cluster_resources()["CPU"]))
+                    ]
+                )
+
+                # Setup the task object
+                pt = ParallelTask(
+                    src,
+                    row_chunks=4096,
+                    col_chunks=4096,
+                    scheduler="ray",
+                    n_chunks=1000,
+                )
+                results = pt.map(actor_pool)
+
+            del df_id, actor_pool
+            results2 = [df.reset_index(drop=True) for df in results if len(df) > 0]
+            result = pd.concat(results2, ignore_index=True, axis=0)
+            # result = pd.DataFrame(result.drop(columns="geometry"))
+            result.to_parquet(
+                f"./{band_name}_{grid}.parquet",
+                engine="auto",
+                compression="snappy",
+            )
+        ray.shutdown()
+
+
 # %% generate hexagonal grid for testing training sample purposes
 import math
 import geopandas as gpd

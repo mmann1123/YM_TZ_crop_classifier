@@ -265,6 +265,9 @@ with gw.series(
 # %% FEATURE EXTRACTION USING SERIES
 ########################################################
 
+# problem with B2 000000000-00000000 is overwritten by part 1
+
+
 from pathlib import Path
 from xr_fresh.feature_calculator_series import *
 from xr_fresh.feature_calculator_series import function_mapping
@@ -324,16 +327,15 @@ complete_times_series_list = {
 }
 
 
-for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][-2:]:
+for band_name in ["B12", "B11", "hue", "B6", "EVI", "B2"][-1:]:
     file_glob = f"**/*{band_name}*.tif"
 
     f_list = sorted(glob(file_glob))
 
     # Get unique grid codes
-    pattern = (
-        r"S2_SR_[A-Za-z0-9]+_M_[0-9]{4}-[0-9]{2}-[A-Za-z0-9]+_([0-9]+-[0-9]+)\.tif"
-    )
-    unique_grids = list(
+    pattern = r"S2_SR_[A-Za-z0-9]+_M_[0-9]{4}-[0-9]{2}-[A-Za-z0-9]+_([0-9]+-[0-9]+(?:-part[12])?)\.tif"
+
+    unique_grids = sorted(
         set(
             [
                 re.search(pattern, file_path).group(1)
@@ -357,8 +359,8 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][-2:]:
 
     # iterate across grids
     for grid in unique_grids:
-        print("working on grid", grid)
-        a_grid = sorted([f for f in f_list if grid in f])
+        print("working on band", band_name, " grid ", grid)
+        a_grid = sorted([f for f in f_list if grid + ".tif" in f])
         print(a_grid)
 
         try:
@@ -402,12 +404,12 @@ for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"][-2:]:
                     if len(list(params.keys())) > 0:
                         key_names = list(params.keys())[0]
                         value_names = list(params.values())[0]
-                        outfile = f"../features/{band_name}_{func_name}_{key_names}_{value_names}_{grid}.tif"
+                        outfile = f"../features/{band_name}/{band_name}_{func_name}_{key_names}_{value_names}_{grid}.tif"
                         # avoid issue with all dates
                         if func_name in ["doy_of_maximum", "doy_of_minimum"]:
-                            outfile = f"../features/{band_name}_{func_name}_{key_names}_{grid}.tif"
+                            outfile = f"../features/{band_name}/{band_name}_{func_name}_{key_names}_{grid}.tif"
                     else:
-                        outfile = f"../features/{band_name}_{func_name}_{grid}.tif"
+                        outfile = f"../features/{band_name}/{band_name}_{func_name}_{grid}.tif"
                     # extract features
                     try:
                         src.apply(

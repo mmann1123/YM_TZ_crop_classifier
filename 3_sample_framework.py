@@ -3,7 +3,6 @@
 # extract features to points
 import geowombat as gw
 from geowombat.core.parallel import ParallelTask
-from geowombat.data import l8_224078_20200518_points, l8_224078_20200518
 import geopandas as gpd
 import rasterio as rio
 import ray
@@ -14,11 +13,21 @@ import numpy as np
 import numpy as np
 import pandas as pd
 import re
+import logging
+from shapely.geometry import box
 
 
 os.chdir(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/features/"
 )
+
+# Set up logging
+logging.basicConfig(
+    filename="../extracted_features/error_log_3_sample_framework.log",
+    level=logging.ERROR,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+)
+
 
 ###### Clean and prepare the land use data
 lu = r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/combined_data_reviewed_xy_LC_RPN_Final.shp"
@@ -95,7 +104,14 @@ class Actor(object):
         )
 
 
-for band_name in ["B12", "B11", "hue", "B6", "EVI", "B2"][-2:]:
+for band_name in [
+    "B12",
+    "B11",
+    "hue",
+    "B6",
+    "EVI",
+    "B2",
+]:
     with rio.Env(GDAL_CACHEMAX=256 * 1e6) as env:
         file_glob = f"{band_name}/{band_name}*.tif"
         f_list = sorted(glob(file_glob))
@@ -124,66 +140,77 @@ for band_name in ["B12", "B11", "hue", "B6", "EVI", "B2"][-2:]:
                 max(1, int(total_file_GB(a_grid) // 8 * 16)),
                 "chunks",
             )
-            bounds = []
-            shapes = []
-            for i in a_grid:
-                with gw.open(
-                    i,
-                ) as src:
-                    bounds.append(src.gw.bounds)
-                    shapes.append(src.shape)
 
-                band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
-                ray.init(num_cpus=3)
-                df_id = ray.put(lu)
+            with gw.open(
+                a_grid[0],
+            ) as test:
+                # check for overlap
+                if any(lu.intersects(box(*test.gw.bounds))):
 
-                with gw.config.update(ref_image=a_grid[0]):
-                    with gw.open(
-                        a_grid,
-                        band_names=band_names,
-                        stack_dim="band",
-                        chunks=max(1, int(total_file_GB(a_grid) // 8 * 16)),
-                    ) as src:
+                    band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
 
-                        # Setup the pool of actors, one for each resource available to ``ray``.
-                        actor_pool = ActorPool(
-                            [
-                                Actor.remote(
-                                    aoi_id=df_id, id_column="id", band_names=band_names
-                                )
-                                for n in range(0, int(ray.cluster_resources()["CPU"]))
-                            ]
+                    # constrain mem use for largest files
+                    if band_name in ["EVI", "B12"]:
+                        ray.init(num_cpus=1)
+                    else:
+                        ray.init(num_cpus=3)
+                    df_id = ray.put(lu)
+
+                    with gw.config.update(ref_image=a_grid[0]):
+                        with gw.open(
+                            a_grid,
+                            band_names=band_names,
+                            stack_dim="band",
+                            chunks=max(1, int(total_file_GB(a_grid) // 8 * 16)),
+                        ) as src:
+
+                            # Setup the pool of actors, one for each resource available to ``ray``.
+                            actor_pool = ActorPool(
+                                [
+                                    Actor.remote(
+                                        aoi_id=df_id,
+                                        id_column="id",
+                                        band_names=band_names,
+                                    )
+                                    for n in range(
+                                        0, int(ray.cluster_resources()["CPU"])
+                                    )
+                                ]
+                            )
+
+                            # Setup the task object
+                            pt = ParallelTask(
+                                src,
+                                row_chunks=4096,
+                                col_chunks=4096,
+                                scheduler="ray",
+                                n_chunks=1000,
+                            )
+                            results = pt.map(actor_pool)
+
+                    del df_id, actor_pool
+                    ray.shutdown()
+
+                    results2 = [
+                        df.reset_index(drop=True) for df in results if len(df) > 0
+                    ]
+
+                    # ValueError: No objects to concatenate
+
+                    try:
+                        result = pd.concat(results2, ignore_index=True, axis=0)
+                        print("writing:", f"./{band_name}_{grid}.parquet")
+                        result.to_parquet(
+                            f"../extracted_features/{band_name}_{grid}.parquet",
+                            engine="auto",
+                            compression="snappy",
                         )
-
-                        # Setup the task object
-                        pt = ParallelTask(
-                            src,
-                            row_chunks=4096,
-                            col_chunks=4096,
-                            scheduler="ray",
-                            n_chunks=1000,
-                        )
-                        results = pt.map(actor_pool)
-
-                del df_id, actor_pool
-                ray.shutdown()
-
-                results2 = [df.reset_index(drop=True) for df in results if len(df) > 0]
-
-                # ValueError: No objects to concatenate
-
-                try:
-                    result = pd.concat(results2, ignore_index=True, axis=0)
-                    print("writing:", f"./{band_name}_{grid}.parquet")
-                    result.to_parquet(
-                        f"./{band_name}_{grid}.parquet",
-                        engine="auto",
-                        compression="snappy",
-                    )
-                except ValueError:
+                    except ValueError:
+                        print("Processed no data for", grid)
+                        continue
+                else:
                     print("No data for", grid)
                     continue
-
 
 # %% generate hexagonal grid for testing training sample purposes
 import math

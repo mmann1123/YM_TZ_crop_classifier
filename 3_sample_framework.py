@@ -15,15 +15,61 @@ import numpy as np
 import pandas as pd
 import re
 
-# import other necessary modules...
+
 os.chdir(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/features/"
 )
 
-poly = r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/TZ_final_cleaned_lisa.geojson"
+###### Clean and prepare the land use data
+lu = r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/combined_data_reviewed_xy_LC_RPN_Final.shp"
+lu = gpd.read_file(lu).to_crs("EPSG:32736")
+lu["lc_name"] = lu["primar"]
+lu["Quality"] = lu["Quality_Dr"]
 
-poly
+other_training = r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/other_training.gpkg"
+other_training = gpd.read_file(other_training).to_crs("EPSG:32736")
+other_training["Field_size"] = 25
+
+
+lu_complete = lu[["lc_name", "Field_size", "Quality", "geometry"]].overlay(
+    other_training[["lc_name", "Field_size", "geometry"]], how="union"
+)
+
+lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"])
+lu_complete["Field_size"] = lu_complete["Field_size_1"].fillna(
+    lu_complete["Field_size_2"]
+)
+# drop two missing values
+lu_complete.dropna(subset=["lc_name"], inplace=True)
+# fill missing quality for other training data
+lu_complete["Quality"].fillna("OK", inplace=True)
+# drop duplicate columns
+lu_complete = lu_complete[["lc_name", "Field_size", "Quality", "geometry"]]
+
+# drop Field_size valuse not in 'Small', 'Medium', 'Large'
+lu_complete = lu_complete[lu_complete["Field_size"].isin(["Small", "Medium", "Large"])]
+
+
+# buffer points based on filed size
+lu_poly = lu_complete.copy()
+
+# get buffer size based on field size
+# large fields are defines as 400m x 400m
+lu_poly.Field_size.replace(
+    {"Small": 10, "Medium": 25, "Large": 75, np.nan: 10}, inplace=True
+)
+
+lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
+
+
 # %%
+
+
+def total_file_GB(file_list):
+    total_size = sum(
+        os.path.getsize(path) for path in file_list if os.path.exists(path)
+    )
+    return round(total_size / 1e9, 2)
 
 
 @ray.remote
@@ -49,59 +95,94 @@ class Actor(object):
         )
 
 
-for band_name in ["B12", "B11", "B2", "B6", "EVI", "hue"]:
+for band_name in ["B12", "B11", "hue", "B6", "EVI", "B2"][-2:]:
     with rio.Env(GDAL_CACHEMAX=256 * 1e6) as env:
         file_glob = f"{band_name}/{band_name}*.tif"
         f_list = sorted(glob(file_glob))
 
         # Get unique grid codes
-        unique_grids = list(
-            set([re.search(r"(\d+-\d+)", filename).group(1) for filename in f_list])
+        unique_grids = sorted(
+            list(
+                set(
+                    [
+                        re.search(r"(\d+-\d+(?:-part[12])?)\.tif", filename).group(1)
+                        for filename in f_list
+                    ]
+                )
+            )
         )
-        ray.init(num_cpus=3)
-        df_id = ray.put(gpd.read_file(poly).to_crs("EPSG:32736"))
 
         # iterate across grids
         for grid in unique_grids:
-            print("working on grid", grid)
+            print(f"working on band: {band_name} grid: {grid}")
             a_grid = sorted([f for f in f_list if grid in f])
-
-            band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
-
-            with gw.open(
-                a_grid, band_names=band_names, stack_dim="band", chunks=32
-            ) as src:
-
-                # Setup the pool of actors, one for each resource available to ``ray``.
-                actor_pool = ActorPool(
-                    [
-                        Actor.remote(
-                            aoi_id=df_id, id_column="id", band_names=band_names
-                        )
-                        for n in range(0, int(ray.cluster_resources()["CPU"]))
-                    ]
-                )
-
-                # Setup the task object
-                pt = ParallelTask(
-                    src,
-                    row_chunks=4096,
-                    col_chunks=4096,
-                    scheduler="ray",
-                    n_chunks=1000,
-                )
-                results = pt.map(actor_pool)
-
-            del df_id, actor_pool
-            results2 = [df.reset_index(drop=True) for df in results if len(df) > 0]
-            result = pd.concat(results2, ignore_index=True, axis=0)
-            # result = pd.DataFrame(result.drop(columns="geometry"))
-            result.to_parquet(
-                f"./{band_name}_{grid}.parquet",
-                engine="auto",
-                compression="snappy",
+            print(
+                "total file size:",
+                total_file_GB(a_grid),
+                "GB",
+                " assigning to ",
+                max(1, int(total_file_GB(a_grid) // 8 * 16)),
+                "chunks",
             )
-        ray.shutdown()
+            bounds = []
+            shapes = []
+            for i in a_grid:
+                with gw.open(
+                    i,
+                ) as src:
+                    bounds.append(src.gw.bounds)
+                    shapes.append(src.shape)
+
+                band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
+                ray.init(num_cpus=3)
+                df_id = ray.put(lu)
+
+                with gw.config.update(ref_image=a_grid[0]):
+                    with gw.open(
+                        a_grid,
+                        band_names=band_names,
+                        stack_dim="band",
+                        chunks=max(1, int(total_file_GB(a_grid) // 8 * 16)),
+                    ) as src:
+
+                        # Setup the pool of actors, one for each resource available to ``ray``.
+                        actor_pool = ActorPool(
+                            [
+                                Actor.remote(
+                                    aoi_id=df_id, id_column="id", band_names=band_names
+                                )
+                                for n in range(0, int(ray.cluster_resources()["CPU"]))
+                            ]
+                        )
+
+                        # Setup the task object
+                        pt = ParallelTask(
+                            src,
+                            row_chunks=4096,
+                            col_chunks=4096,
+                            scheduler="ray",
+                            n_chunks=1000,
+                        )
+                        results = pt.map(actor_pool)
+
+                del df_id, actor_pool
+                ray.shutdown()
+
+                results2 = [df.reset_index(drop=True) for df in results if len(df) > 0]
+
+                # ValueError: No objects to concatenate
+
+                try:
+                    result = pd.concat(results2, ignore_index=True, axis=0)
+                    print("writing:", f"./{band_name}_{grid}.parquet")
+                    result.to_parquet(
+                        f"./{band_name}_{grid}.parquet",
+                        engine="auto",
+                        compression="snappy",
+                    )
+                except ValueError:
+                    print("No data for", grid)
+                    continue
 
 
 # %% generate hexagonal grid for testing training sample purposes

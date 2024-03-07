@@ -105,10 +105,10 @@ class Actor(object):
 
 
 for band_name in [
-    "B12",
-    "B11",
-    "hue",
-    "B6",
+    # "B12",
+    # "B11",
+    # "hue",
+    # "B6",
     "EVI",
     "B2",
 ]:
@@ -137,7 +137,7 @@ for band_name in [
                 total_file_GB(a_grid),
                 "GB",
                 " assigning to ",
-                max(1, int(total_file_GB(a_grid) // 8 * 16)),
+                max(96, int(total_file_GB(a_grid) // 8 * 16)),
                 "chunks",
             )
 

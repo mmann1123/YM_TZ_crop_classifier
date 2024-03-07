@@ -15,7 +15,7 @@ import pandas as pd
 import re
 import logging
 from shapely.geometry import box
-
+import json
 
 os.chdir(
     "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/features/"
@@ -68,7 +68,8 @@ lu_poly.Field_size.replace(
     {"Small": 10, "Medium": 25, "Large": 75, np.nan: 10}, inplace=True
 )
 
-lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
+# lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
+# lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(5), axis=1)
 
 
 # %%
@@ -81,7 +82,7 @@ def total_file_GB(file_list):
     return round(total_size / 1e9, 2)
 
 
-@ray.remote
+@ray.remote(max_restarts=3, max_task_retries=3)
 class Actor(object):
     def __init__(self, aoi_id=None, id_column=None, band_names=None):
         self.aoi_id = aoi_id
@@ -100,15 +101,23 @@ class Actor(object):
 
         # Return a GeoDataFrame for each actor
         return gw.extract(
-            data_block, aoi_sub, id_column=self.id_column, band_names=self.band_names
+            data_block,
+            aoi_sub,
+            id_column=self.id_column,
+            band_names=self.band_names,
+            verbose=10,
+            use_client=False,
+            n_threads=1,
+            n_jobs=1,
+            n_workers=1,
         )
 
 
 for band_name in [
-    # "B12",
-    # "B11",
-    # "hue",
-    # "B6",
+    "B12",
+    "B11",
+    "hue",
+    "B6",
     "EVI",
     "B2",
 ]:
@@ -145,72 +154,82 @@ for band_name in [
                 a_grid[0],
             ) as test:
                 # check for overlap
-                if any(lu.intersects(box(*test.gw.bounds))):
+                overlaps = any(lu_poly.intersects(box(*test.gw.bounds)))
+            if overlaps:
 
-                    band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
+                band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
 
-                    # constrain mem use for largest files
-                    if band_name in ["EVI", "B12"]:
-                        ray.init(num_cpus=1)
-                    else:
-                        ray.init(num_cpus=3)
-                    df_id = ray.put(lu)
-
-                    with gw.config.update(ref_image=a_grid[0]):
-                        with gw.open(
-                            a_grid,
-                            band_names=band_names,
-                            stack_dim="band",
-                            chunks=max(1, int(total_file_GB(a_grid) // 8 * 16)),
-                        ) as src:
-
-                            # Setup the pool of actors, one for each resource available to ``ray``.
-                            actor_pool = ActorPool(
-                                [
-                                    Actor.remote(
-                                        aoi_id=df_id,
-                                        id_column="id",
-                                        band_names=band_names,
-                                    )
-                                    for n in range(
-                                        0, int(ray.cluster_resources()["CPU"])
-                                    )
-                                ]
-                            )
-
-                            # Setup the task object
-                            pt = ParallelTask(
-                                src,
-                                row_chunks=4096,
-                                col_chunks=4096,
-                                scheduler="ray",
-                                n_chunks=1000,
-                            )
-                            results = pt.map(actor_pool)
-
-                    del df_id, actor_pool
-                    ray.shutdown()
-
-                    results2 = [
-                        df.reset_index(drop=True) for df in results if len(df) > 0
-                    ]
-
-                    # ValueError: No objects to concatenate
-
-                    try:
-                        result = pd.concat(results2, ignore_index=True, axis=0)
-                        print("writing:", f"./{band_name}_{grid}.parquet")
-                        result.to_parquet(
-                            f"../extracted_features/{band_name}_{grid}.parquet",
-                            engine="auto",
-                            compression="snappy",
+                with gw.config.update(ref_image=a_grid[0]):
+                    with gw.open(
+                        a_grid[0:10],
+                        band_names=band_names[0:10],
+                        stack_dim="band",
+                        chunks=max(16 * 9, int(total_file_GB(a_grid) // 8 * 16)),
+                    ) as src:
+                        # Initialize Ray
+                        ray.init(
+                            num_cpus=3,
+                            object_store_memory=100
+                            * 1024
+                            * 1024,  # Limit the object store memory to 75MB.
+                            _system_config={
+                                "automatic_object_spilling_enabled": True,  # Enable automatic spilling to disk.
+                                "object_spilling_config": json.dumps(
+                                    {
+                                        "type": "filesystem",
+                                        "params": {"directory_path": "/tmp/ray/spill"},
+                                    }
+                                ),
+                            },
                         )
-                    except ValueError:
-                        print("Processed no data for", grid)
-                        continue
-                else:
-                    print("No data for", grid)
+                        print(ray.cluster_resources())
+                        df_id = ray.put(lu_poly)
+
+                        print(src.gw.col_chunks, src.gw.row_chunks)
+                        # Setup the pool of actors, one for each resource available to ``ray``.
+                        actor_pool = ActorPool(
+                            [
+                                Actor.remote(
+                                    aoi_id=df_id,
+                                    id_column="id",
+                                    band_names=band_names,
+                                )
+                                for n in range(0, int(ray.cluster_resources()["CPU"]))
+                            ]
+                        )
+
+                        # Setup the task object
+                        pt = ParallelTask(
+                            src,
+                            row_chunks=4096,  # src.gw.row_chunks,  # keep chunk size small
+                            col_chunks=4096,  # src.gw.col_chunks,
+                            scheduler="ray",
+                            n_chunks=1000,
+                        )
+                        results = pt.map(actor_pool)
+
+                del df_id, actor_pool
+                ray.shutdown()
+                print("Ray is shutdown", ~ray.is_initialized())
+
+                results2 = [df.reset_index(drop=True) for df in results if len(df) > 0]
+
+                # ValueError: No objects to concatenate
+
+                try:
+                    result = pd.concat(results2, ignore_index=True, axis=0)
+                    print("writing:", f"./{band_name}_{grid}.parquet")
+                    result.to_parquet(
+                        f"../extracted_features/{band_name}_{grid}_0_10.parquet",
+                        engine="auto",
+                        compression="snappy",
+                    )
+                except ValueError:
+                    print("Processed no data for", grid)
                     continue
+            else:
+                print("No data for", grid)
+                continue
 
 # %% generate hexagonal grid for testing training sample purposes
 import math

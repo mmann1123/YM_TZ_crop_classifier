@@ -156,6 +156,7 @@ for band_name in [
         for grid in unique_grids:
             print(f"working on band: {band_name} grid: {grid}")
             a_grid = sorted([f for f in f_list if grid + ".tif" in f])
+            print(len(a_grid), "files")
             print(
                 "total file size:",
                 total_file_GB(a_grid),
@@ -170,6 +171,8 @@ for band_name in [
             ) as test:
                 # check for overlap
                 overlaps = any(lu_poly.intersects(box(*test.gw.bounds)))
+            print("overlaps:", overlaps)
+            continue
             if overlaps:
 
                 band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]

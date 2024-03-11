@@ -32,7 +32,7 @@ def clean_column_names(column_name):
 for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
     print(f"working on {band} ")
     parq = glob(f"{band}*_point_sample.parquet")
-
+    print(parq)
     if len(parq) > 1:
         data = []
         for file in parq:
@@ -46,7 +46,9 @@ for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
         ]
 
         # concatenate the dataframes adding new rows and matching columns
-        merged_data = reduce(lambda x, y: pd.concat([x, y], axis=0), cleaned_dfs)
+        merged_data = reduce(
+            lambda x, y: pd.concat([x, y], axis=0, ignore_index=True), cleaned_dfs
+        )
 
         merged_data.drop(columns=["geometry"], inplace=True)
         merged_data.rename(columns={"sample_id": "field_id"}, inplace=True)

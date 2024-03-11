@@ -14,8 +14,9 @@ for file in parq:
     inner = pd.read_parquet(file)
     print(inner.shape)
     print(inner.columns)
-# %%
+
 import re
+from functools import reduce
 
 
 def clean_column_names(column_name):
@@ -26,49 +27,36 @@ def clean_column_names(column_name):
     return cleaned_name
 
 
-data = []
-for file in parq:
-    inner = pd.read_parquet(file)
-    data.append(inner)
+# consolidate the data by band
+# PROBLEM: B2 HAS MISSING DATA IN 0000000-00000000-PART2
+for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
+    print(f"working on {band} ")
+    parq = glob(f"{band}*_point_sample.parquet")
 
-cleaned_dfs = [
-    df.rename(columns={col: clean_column_names(col) for col in df.columns})
-    for df in data
-]
-from functools import reduce
+    if len(parq) > 1:
+        data = []
+        for file in parq:
+            inner = pd.read_parquet(file)
+            inner["file"] = file
+            data.append(inner)
 
+        cleaned_dfs = [
+            df.rename(columns={col: clean_column_names(col) for col in df.columns})
+            for df in data
+        ]
 
-def merge_or_append(left, right):
-    try:
-        return pd.merge(
-            left,
-            right,
-            on=[
-                "lc_name",
-                "Field_size",
-                "Quality",
-                "sample",
-                "sample_id",
-                "geometry",
-                "id",
-            ],
-            how="outer",
-        )
-    except:
-        return pd.concat([left, right], axis=1)
+        # concatenate the dataframes adding new rows and matching columns
+        merged_data = reduce(lambda x, y: pd.concat([x, y], axis=0), cleaned_dfs)
 
-
-merged_data = reduce(
-    lambda left, right: merge_or_append(
-        left,
-        right,
-    ),
-    cleaned_dfs,
-)
-merged_data.drop(columns=["geometry"], inplace=True)
-merged_data
-# %%
-
+        merged_data.drop(columns=["geometry"], inplace=True)
+        merged_data.rename(columns={"sample_id": "field_id"}, inplace=True)
+        # merged_data.sort_values(by=["id"], inplace=True)
+        merged_data.to_csv(f"./merged_data/{band}_merged_data_sample_points.csv")
+    else:
+        merged_data = pd.read_parquet(parq)
+        merged_data.drop(columns=["geometry"], inplace=True)
+        merged_data.rename(columns={"sample_id": "field_id"}, inplace=True)
+        merged_data.to_csv(f"./merged_data/{band}_merged_data_sample_points.csv")
 
 # %%
 # change directory first

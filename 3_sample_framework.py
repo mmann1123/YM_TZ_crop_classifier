@@ -129,11 +129,11 @@ class Actor(object):
 
 
 for band_name in [
-    "B12",
-    "B11",
-    "hue",
-    "B6",
-    "EVI",
+    # "B12",
+    # "B11",
+    # "hue",
+    # "B6",
+    # "EVI",
     "B2",
 ]:
     with rio.Env(GDAL_CACHEMAX=256 * 1e6) as env:
@@ -155,7 +155,7 @@ for band_name in [
         # iterate across grids
         for grid in unique_grids:
             print(f"working on band: {band_name} grid: {grid}")
-            a_grid = sorted([f for f in f_list if grid in f])
+            a_grid = sorted([f for f in f_list if grid + ".tif" in f])
             print(
                 "total file size:",
                 total_file_GB(a_grid),

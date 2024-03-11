@@ -1,7 +1,74 @@
 # %% env:crop_class
+# import other necessary modules...
+from glob import glob
+import dask.dataframe as dd
+import pandas as pd
 
 
-# NOTE: ADD REGIONAL DUMMY
+os.chdir(
+    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/"
+)
+
+parq = glob("*_point_sample.parquet")
+for file in parq:
+    inner = pd.read_parquet(file)
+    print(inner.shape)
+    print(inner.columns)
+# %%
+import re
+
+
+def clean_column_names(column_name):
+    # Regular expression to match the pattern and remove it
+    # This regex captures the start of the string, followed by any characters until the last occurrence
+    # of underscore followed by the digits-digits pattern, optionally followed by -part and digits
+    cleaned_name = re.sub(r"(.+?)_\d{10}-\d{10}(-part\d+)?", r"\1", column_name)
+    return cleaned_name
+
+
+data = []
+for file in parq:
+    inner = pd.read_parquet(file)
+    data.append(inner)
+
+cleaned_dfs = [
+    df.rename(columns={col: clean_column_names(col) for col in df.columns})
+    for df in data
+]
+from functools import reduce
+
+
+def merge_or_append(left, right):
+    try:
+        return pd.merge(
+            left,
+            right,
+            on=[
+                "lc_name",
+                "Field_size",
+                "Quality",
+                "sample",
+                "sample_id",
+                "geometry",
+                "id",
+            ],
+            how="outer",
+        )
+    except:
+        return pd.concat([left, right], axis=1)
+
+
+merged_data = reduce(
+    lambda left, right: merge_or_append(
+        left,
+        right,
+    ),
+    cleaned_dfs,
+)
+merged_data.drop(columns=["geometry"], inplace=True)
+merged_data
+# %%
+
 
 # %%
 # change directory first
@@ -176,6 +243,15 @@ lu_complete["Quality"].fillna("OK", inplace=True)
 le = LabelEncoder()
 lu_complete["lc"] = le.fit_transform(lu_complete["lc_name"])
 print(lu_complete["lc"].unique())
+
+# create csv of label names and numbers
+pd.DataFrame(
+    {
+        "lc": lu_complete["lc"].unique(),
+        "lc_name": le.inverse_transform(lu_complete["lc"].unique()),
+    }
+).sort_values("lc").to_csv("./outputs/label_names.csv", index=False)
+
 
 # buffer points based on filed size
 lu_poly = lu_complete.copy()

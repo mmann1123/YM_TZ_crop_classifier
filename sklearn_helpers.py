@@ -5,7 +5,7 @@ from sklearn.svm import SVC
 from lightgbm import LGBMClassifier
 import sqlite3
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import balanced_accuracy_score, matthews_corrcoef
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
@@ -16,6 +16,7 @@ from sklearn.model_selection import (
 )
 import numpy as np
 from glob import glob
+from sklearn.metrics import get_scorer_names
 
 
 def remove_list_from_list(main_list, remove_containing):
@@ -24,46 +25,120 @@ def remove_list_from_list(main_list, remove_containing):
     return main_list
 
 
-def remove_collinear_features(x, threshold, out_df="./outputs/collinear_features.csv"):
+# def remove_collinear_features(x, threshold, out_df="./outputs/collinear_features.csv"):
+#     """
+#     Objective:
+#         Remove collinear features in a dataframe with a correlation coefficient
+#         greater than the threshold. Removing collinear features can help a model
+#         to generalize and improves the interpretability of the model.
+
+#     Inputs:
+#         x: features dataframe
+#         threshold: features with correlations greater than this value are removed
+
+#     Output:
+#         dataframe that contains only the non-highly-collinear features
+#     """
+
+#     # Calculate the correlation matrix
+#     corr_matrix = x.corr()
+#     iters = range(len(corr_matrix.columns) - 1)
+#     drop_cols = []
+
+#     # Iterate through the correlation matrix and compare correlations
+#     for i in iters:
+#         for j in range(i + 1):
+#             item = corr_matrix.iloc[j : (j + 1), (i + 1) : (i + 2)]
+#             col = item.columns
+#             row = item.index
+#             val = abs(item.values)
+
+#             # If correlation exceeds the threshold
+#             if val >= threshold:
+#                 # Print the correlated features and the correlation value
+#                 print(col.values[0], "|", row.values[0], "|", round(val[0][0], 2))
+#                 drop_cols.append(col.values[0])
+
+#     # Drop one of each pair of correlated columns
+#     drops = set(drop_cols)
+#     print("Dropping", drops, "columns")
+#     pd.DataFrame({"highcorrelation": list(drops)}).to_csv(out_df, index=False)
+#     x = x.drop(columns=drops)
+
+#     return x
+
+
+def remove_collinear_features(
+    x, threshold=0.95, out_df="./outputs/collinear_features_recalculated.csv"
+):
     """
     Objective:
         Remove collinear features in a dataframe with a correlation coefficient
-        greater than the threshold. Removing collinear features can help a model
-        to generalize and improves the interpretability of the model.
+        greater than the threshold, recalculating the correlation matrix and
+        re-evaluating collinearity after each drop. This iterative approach
+        ensures that the final set of features is not influenced by the initial
+        order of the features in the dataset.
 
     Inputs:
         x: features dataframe
         threshold: features with correlations greater than this value are removed
+        out_df: path to save the CSV file listing the dropped features
 
     Output:
         dataframe that contains only the non-highly-collinear features
     """
 
-    # Calculate the correlation matrix
-    corr_matrix = x.corr()
-    iters = range(len(corr_matrix.columns) - 1)
+    # Initialize a list to keep track of columns to drop
     drop_cols = []
+    count = 0
+    # Flag to keep track of whether to continue dropping columns
+    continue_dropping = True
 
-    # Iterate through the correlation matrix and compare correlations
-    for i in iters:
-        for j in range(i + 1):
-            item = corr_matrix.iloc[j : (j + 1), (i + 1) : (i + 2)]
-            col = item.columns
-            row = item.index
-            val = abs(item.values)
+    while continue_dropping:
+        # Calculate the correlation matrix
+        corr_matrix = (
+            x.corr().abs()
+        )  # Use absolute value to consider both positive and negative correlations
+        continue_dropping = False  # Reset flag for this iteration
 
-            # If correlation exceeds the threshold
-            if val >= threshold:
-                # Print the correlated features and the correlation value
-                print(col.values[0], "|", row.values[0], "|", round(val[0][0], 2))
-                drop_cols.append(col.values[0])
+        # Iterate over the upper triangle of the correlation matrix
+        for i in range(len(corr_matrix.columns) - 1):
+            for j in range(i + 1, len(corr_matrix.columns)):
+                # If correlation exceeds the threshold
+                if corr_matrix.iloc[i, j] >= threshold:
+                    # Identify the column to drop (preferentially the one not already in drop_cols list)
+                    col_to_drop = (
+                        corr_matrix.columns[j]
+                        if corr_matrix.columns[i] not in drop_cols
+                        else corr_matrix.columns[i]
+                    )
 
-    # Drop one of each pair of correlated columns
-    drops = set(drop_cols)
-    print("Dropping", drops, "columns")
-    pd.DataFrame({"highcorrelation": list(drops)}).to_csv(out_df, index=False)
-    x = x.drop(columns=drops)
+                    # If the column is not already marked for dropping
+                    if col_to_drop not in drop_cols:
+                        drop_cols.append(col_to_drop)
+                        continue_dropping = (
+                            True  # Set flag to re-evaluate after dropping
+                        )
 
+                        # Break to recalculate correlation matrix after dropping this column
+                        break
+
+            if continue_dropping:
+                break  # Break the outer loop as well to recalculate the correlation matrix
+        try:
+            print("Dropping", drop_cols[count])
+            count += 1
+        except:
+            print("done")
+        # Drop marked columns from dataframe
+        x = x.drop(
+            columns=drop_cols, errors="ignore"
+        )  # errors='ignore' allows it to continue even if a column is not found
+
+    # Output the list of dropped columns to a CSV file
+    pd.DataFrame({"highcorrelation": drop_cols}).to_csv(out_df, index=False)
+
+    print("Dropped columns:", drop_cols)
     return x
 
 
@@ -73,10 +148,24 @@ def extract_top_from_shaps(
     select_how_many=10,
     remove_containing=None,
     file_prefix="mean",
-    data_dir="/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/data",
+    data_dir_tif_glob=None,
+    out_path="./top10_features.csv",
 ):
-    vals = np.abs(shaps_list).mean(axis=0)
+    """_summary_
 
+    Args:
+        shaps_list (_type_): _description_
+        column_names (_type_): _description_
+        select_how_many (int, optional): _description_. Defaults to 10.
+        remove_containing (_type_, optional): _description_. Defaults to None.
+        file_prefix (str, optional): _description_. Defaults to "mean".
+        data_dir_tif_glob (str, optional): String glob to folder holding images . Defaults to None.
+        out_path (str, optional): Location to write top features. Defaults to "./top10_features.csv".
+    Returns:
+        _type_: _description_
+    """
+
+    vals = np.abs(shaps_list).mean(axis=0)
     feature_importance = pd.DataFrame(
         list(zip(column_names, sum(vals))),
         columns=["col_name", "feature_importance_vals"],
@@ -84,8 +173,7 @@ def extract_top_from_shaps(
     feature_importance.sort_values(
         by=["feature_importance_vals"], ascending=False, inplace=True
     )
-    feature_importance.head(20)
-    #
+
     # top unique col_names or until there are no more feature importance dataframes
     top_col_names = feature_importance[0:select_how_many]
     top_col_names.reset_index(inplace=True, drop=True)
@@ -93,11 +181,12 @@ def extract_top_from_shaps(
         columns={"col_name": f"top{select_how_many}names"}, inplace=True
     )
     # add paths
-    print("adding paths from directory", data_dir)
-    top_col_names[f"top{select_how_many}names"] = [
-        glob(f"./data/**/annual_features/**/*{x}.tif")[0]
-        for x in top_col_names[f"top{select_how_many}names"]
-    ]
+    if data_dir_tif_glob is not None:
+        print("adding paths from directory", data_dir_tif_glob)
+        top_col_names[f"top{select_how_many}names"] = [
+            glob(f"./data/**/annual_features/**/*{x}.tif")[0]
+            for x in top_col_names[f"top{select_how_many}names"]
+        ]
 
     # NOTE: removing kurtosis and mean change b.c picking up on overpass timing.
     if remove_containing:
@@ -108,9 +197,7 @@ def extract_top_from_shaps(
     # out = out[~out["top25"].str.contains("kurtosis")]
     # out = out[~out["top25"].str.contains("mean_change")]
 
-    top_col_names.to_csv(
-        f"./outputs/selected_images_{file_prefix}_{select_how_many}.csv", index=False
-    )
+    top_col_names.to_csv(out_path, index=False)
     print(top_col_names)
     return top_col_names
 
@@ -188,14 +275,36 @@ def isolate_classifier_dict(sorted_trials, desired_classifier):
 
 
 def best_classifier_pipe(
-    db_loc="models/study.db", study_name="model_selection", desired_classifier=None
+    db_loc="study.db", study_name="model_selection", desired_classifier=None
 ):
-    # Load the study
-    study = optuna.load_study(
-        storage=f"sqlite:///{db_loc}",
-        study_name=study_name,
-    )
 
+    # Load the study
+    try:
+        conn = sqlite3.connect(db_loc)
+        study = optuna.load_study(
+            storage=f"sqlite:///{db_loc}",
+            study_name=study_name,
+        )
+        conn.close()
+    except:
+        # # list available studies
+        # conn = sqlite3.connect(db_loc)
+        # c = conn.cursor()
+        # c.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        # # print(c.fetchall())
+        # studies = c.fetchall()
+        # conn.close()
+        conn = sqlite3.connect(db_loc)
+
+        storage = f"sqlite:///{db_loc}"
+
+        # Retrieve all study summaries from the specified storage
+        study_summaries = optuna.study.get_all_study_summaries(storage=storage)
+        conn.close()
+
+        # Extract and print all study names
+        study_names = [summary.study_name for summary in study_summaries]
+        raise ValueError(f"Study not found. Available studies: {study_names}")
     # Get the DataFrame of all trials
     trials_df = study.trials_dataframe()
 
@@ -244,12 +353,44 @@ def get_selected_ranked_images(
 
 # %%
 def classifier_objective(
-    trial, X, y, classifier_override=None, groups=None, weights=None
+    trial,
+    X,
+    y,
+    classifier_override=None,
+    groups=None,
+    weights=None,
+    scoring="balanced_accuracy",
+    n_splits=5,
 ):
-    # Define the algorithm for optimization.
+    # import scoring function
+    from sklearn.metrics import (
+        balanced_accuracy_score,
+        cohen_kappa_score,
+        roc_auc_score,
+        matthews_corrcoef,
+    )
 
+    scoring_map = {
+        "balanced_accuracy": balanced_accuracy_score,
+        "balanced": balanced_accuracy_score,
+        "kappa": cohen_kappa_score,
+        "roc_auc": roc_auc_score,
+        "matthews_corrcoef": matthews_corrcoef,
+    }
+    if scoring in ["balanced_accuracy", "kappa", "roc_auc", "matthews_corrcoef"]:
+        scoring_name = scoring
+
+        scoring = scoring_map[scoring]
+    else:
+        raise ValueError(
+            '"balanced_accuracy", "balanced", "kappa", "roc_auc","matthews_corrcoef" '
+        )
+    # Define the algorithm for optimization.
     # check for valid override values
-    classifier_override = list(classifier_override)
+    if isinstance(classifier_override, str):
+        classifier_override = list([classifier_override])
+    else:
+        pass
     if all([x in [None, "SVC", "RandomForest", "LGBM"] for x in classifier_override]):
         pass
     else:
@@ -313,18 +454,17 @@ def classifier_objective(
         )
     # Perform cross-validation
     params = {}
-    if weights is not None:
-        params["sample_weight"] = weights
 
     if groups is not None:
         gss = StratifiedGroupKFold(
-            n_splits=5,
+            n_splits=n_splits,
             shuffle=True,
             random_state=42,
         )
         print(gss)
 
-        try:
+        if weights is not None:
+            params["sample_weight"] = weights
             # Try to use sample weights if provided
             scores = []
             for train_index, val_index in gss.split(X, y, groups):
@@ -341,19 +481,34 @@ def classifier_objective(
                 y_pred = classifier_obj.predict(X_val)
 
                 # Calculate the evaluation metric (e.g., balanced accuracy)
-                score = balanced_accuracy_score(y_val, y_pred)
+
+                score = scoring(y_val, y_pred)
                 scores.append(score)
             scores = np.array(scores)
-        except:
+        else:
             # if can't use sample weights
-            scores = cross_val_score(
-                classifier_obj, X, y, groups=groups, cv=gss, scoring="balanced_accuracy"
-            )
+            # scores = cross_val_score(
+            #     classifier_obj, X, y, groups=groups, cv=gss, scoring=scoring_name
+            # )
+            # Try to use sample weights if provided
+            scores = []
+            for train_index, val_index in gss.split(X, y, groups):
+                X_train, X_val = X[train_index], X[val_index]
+                y_train, y_val = y[train_index], y[val_index]
+
+                # Fit the classifier on the training data
+                classifier_obj.fit(X_train, y_train)
+
+                # Predict the labels for the validation set
+                y_pred = classifier_obj.predict(X_val)
+
+                # Calculate the evaluation metric (e.g., balanced accuracy)
+                score = scoring(y_val, y_pred)
+                scores.append(score)
+            scores = np.array(scores)
     else:
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        scores = cross_val_score(
-            classifier_obj, X, y, cv=skf, scoring="balanced_accuracy"
-        )
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+        scores = cross_val_score(classifier_obj, X, y, cv=skf, scoring=scoring_name)
 
     return scores.mean()  # Return the average balanced accuracy across folds
 

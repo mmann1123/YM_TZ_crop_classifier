@@ -79,39 +79,62 @@ lu_complete = lu_complete[["lc_name", "Field_size", "Quality", "geometry"]]
 # drop Field_size valuse not in 'Small', 'Medium', 'Large'
 # not working some data missing# lu_complete = lu_complete[lu_complete["Field_size"].isin(["Small", "Medium", "Large"])]
 
-# buffer points based on filed size
-lu_poly = lu_complete.copy()
 
 # get buffer size based on field size
-# large fields are defines as 400m x 400m
-lu_poly.Field_size.replace(
+# large fields are defines as 400m x 400m  NOTE: THESE DON'T SEEM RIGHT, FIELDS ARE TOO LARGE
+lu_complete.Field_size.replace(
     {
-        "Small": 10,
-        "Medium": 25,
-        "Large": 75,
+        "Small": 5,
+        "Medium": 10,
+        "Large": 20,
         np.nan: 10,
-        "small": 10,
-        "medium": 25,
-        "large": 75,
-        "none": 10,
-        "poor": 10,
-        "no_stress": 10,
-        "heat_damage": 10,
+        "small": 5,
+        "medium": 10,
+        "large": 20,
+        "none": 5,
+        "poor": 5,
+        "no_stress": 5,
+        "heat_damage": 5,
     },
     inplace=True,
 )
 
-# add addtional samples
+
+# PROBLEM - THIS DOESN'T RETAIN THE ORIGINAL POINTS
+# buffer points based on filed size
+lu_poly = lu_complete.copy()
 lu_poly = lu_poly[lu_poly.is_valid]
 lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
 lu_poly["sample"] = (lu_poly.Field_size // 5).astype(int)
 
-lu_poly["geometry"] = lu_poly["geometry"].sample_points(lu_poly["sample"])
-lu_poly["sample_id"] = range(0, len(lu_poly))
-lu_poly = lu_poly.explode(ignore_index=True).copy()
-
+# sample points
+lu_points_sample = lu_poly.copy()
+lu_points_sample["geometry"] = lu_points_sample["geometry"].sample_points(
+    lu_poly["sample"]
+)
+lu_points_sample["sample_id"] = range(0, len(lu_points_sample))
+lu_points_sample["sample_id"] = lu_points_sample["sample_id"] + 1
+lu_points_sample = lu_points_sample.explode(ignore_index=True).copy()
+# %%
+# merge in the original points
+lu_complete["sample_id"] = 0
+lu_complete["sample"] = 0
+out = pd.concat(
+    [
+        lu_complete[
+            ["lc_name", "Field_size", "Quality", "sample", "sample_id", "geometry"]
+        ],
+        lu_points_sample[
+            ["lc_name", "Field_size", "Quality", "sample", "sample_id", "geometry"]
+        ],
+    ],
+    ignore_index=True,
+)
+# %%
+out.to_file("../extracted_features/lu_complete.geojson", driver="GeoJSON")
 
 # %%
+lu_poly = out.copy()
 
 
 def total_file_GB(file_list):

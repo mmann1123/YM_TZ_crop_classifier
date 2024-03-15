@@ -20,7 +20,7 @@ import cProfile
 
 
 os.chdir(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/features/"
+    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/features/"
 )
 
 # Set up logging
@@ -31,25 +31,46 @@ logging.basicConfig(
 )
 
 ###### Clean and prepare the land use data
-lu = r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/combined_data_reviewed_xy_LC_RPN_Final.shp"
+lu = r"/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/combined_data_reviewed_xy_LC_RPN_Final.shp"
 lu = gpd.read_file(lu).to_crs("EPSG:32736")
 lu["lc_name"] = lu["primar"]
 lu["Quality"] = lu["Quality_Dr"]
-
-other_training = r"/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/other_training.gpkg"
+lu["lc_name"].replace(
+    {
+        "water_body": "water",
+    },
+    inplace=True,
+)
+other_training = r"/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/other_training.gpkg"
 other_training = gpd.read_file(other_training).to_crs("EPSG:32736")
 other_training["Field_size"] = 25
 
-lu_complete = lu[["lc_name", "Field_size", "Quality", "geometry"]].overlay(
-    other_training[["lc_name", "Field_size", "geometry"]], how="union"
-)
+more_training = r"/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/exported_classified_points.geojson"
+more_training = gpd.read_file(more_training).to_crs("EPSG:32736")
+more_training["lc_name"] = more_training["landCover"]
+more_training["Field_size"] = 5
+more_training.loc[more_training["lc_name"] == "water", "Field_size"] = 15
+more_training.loc[more_training["lc_name"] == "forest", "Field_size"] = 10
+more_training.loc[more_training["lc_name"] == "shrub", "Field_size"] = 10
 
-lu_complete["lc_name"] = lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"])
-lu_complete["Field_size"] = lu_complete["Field_size_1"].fillna(
-    lu_complete["Field_size_2"]
+lu_complete = (
+    lu[["lc_name", "Field_size", "Quality", "geometry"]]
+    .overlay(other_training[["lc_name", "Field_size", "geometry"]], how="union")
+    .overlay(more_training[["lc_name", "Field_size", "geometry"]], how="union")
 )
-# drop two missing values
+# fill in missing values from other training data
+lu_complete["lc_name_1"].fillna(lu_complete["lc_name_2"], inplace=True)
+lu_complete["lc_name"].fillna(lu_complete["lc_name_1"], inplace=True)
+lu_complete["lc_name"].value_counts(dropna=True)
+
+lu_complete["Field_size_1"].fillna(lu_complete["Field_size_2"])
+lu_complete["Field_size"].fillna(lu_complete["Field_size_1"], inplace=True)
+lu_complete["Field_size"].value_counts(dropna=True)
+
+# count missing values
+lu_complete.isna().sum()
 lu_complete.dropna(subset=["lc_name"], inplace=True)
+
 # fill missing quality for other training data
 lu_complete["Quality"].fillna("OK", inplace=True)
 # drop duplicate columns
@@ -86,6 +107,8 @@ lu_poly["sample"] = (lu_poly.Field_size // 5).astype(int)
 lu_poly["geometry"] = lu_poly["geometry"].sample_points(lu_poly["sample"])
 lu_poly["sample_id"] = range(0, len(lu_poly))
 lu_poly = lu_poly.explode(ignore_index=True).copy()
+
+
 # %%
 
 
@@ -129,11 +152,11 @@ class Actor(object):
 
 
 for band_name in [
-    # "B12",
-    # "B11",
-    # "hue",
-    # "B6",
-    # "EVI",
+    "B12",
+    "B11",
+    "hue",
+    "B6",
+    "EVI",
     "B2",
 ]:
     with rio.Env(GDAL_CACHEMAX=256 * 1e6) as env:
@@ -172,7 +195,7 @@ for band_name in [
                 # check for overlap
                 overlaps = any(lu_poly.intersects(box(*test.gw.bounds)))
             print("overlaps:", overlaps)
-            continue
+
             if overlaps:
 
                 band_names = [os.path.basename(i).split(".ti")[0] for i in a_grid]
@@ -240,7 +263,7 @@ for band_name in [
                     result = pd.concat(results2, ignore_index=True, axis=0)
                     print("writing:", f"./{band_name}_{grid}_point_sample.parquet")
                     result.to_parquet(
-                        f"../extracted_features/{band_name}_{grid}_point_sample.parquet",
+                        f"../extracted_features/{band_name}_{grid}_point_sample_new.parquet",
                         engine="auto",
                         compression="snappy",
                     )

@@ -100,6 +100,8 @@ lu_poly.Field_size.replace(
     },
     inplace=True,
 )
+
+# add addtional samples
 lu_poly = lu_poly[lu_poly.is_valid]
 lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
 lu_poly["sample"] = (lu_poly.Field_size // 5).astype(int)

@@ -17,6 +17,7 @@ import logging
 from shapely.geometry import box
 import json
 import cProfile
+from shapely import wkb
 
 
 os.chdir(
@@ -286,6 +287,10 @@ for band_name in [
 
                 try:
                     result = pd.concat(results2, ignore_index=True, axis=0)
+                    result["geometry"] = result["geometry"].apply(
+                        lambda x: wkb.dumps(x, hex=True)
+                    )
+
                     print("writing:", f"./{band_name}_{grid}_point_sample.parquet")
                     result.to_parquet(
                         f"../extracted_features/{band_name}_{grid}_point_sample_new.parquet",

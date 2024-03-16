@@ -4,12 +4,13 @@ from glob import glob
 import dask.dataframe as dd
 import pandas as pd
 import os
+from shapely import wkb
 
 os.chdir(
     "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/"
 )
 
-parq = glob("*_point_sample.parquet")
+parq = glob("*_point_sample_new.parquet")
 for file in parq:
     inner = pd.read_parquet(file)
     print(inner.shape)
@@ -28,10 +29,9 @@ def clean_column_names(column_name):
     return cleaned_name
 
 
-clean_column_names("B12_abs_energy_0000000000-0000046592-part2")
 # %%
-# consolidate the data by band
-# PROBLEM: B2 HAS MISSING DATA IN 0000000-00000000-PART2
+# consolidate parquet files  data by band
+
 for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
     print(f"working on {band} ")
     parq = glob(f"{band}*_point_sample.parquet")
@@ -40,6 +40,10 @@ for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
         data = []
         for file in parq:
             inner = pd.read_parquet(file)
+            # Convert WKB back to geometry
+            inner["geometry"] = inner["geometry"].apply(
+                lambda x: wkb.loads(x, hex=True)
+            )
             inner["file"] = file
             data.append(inner)
 
@@ -76,12 +80,12 @@ for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
 
         print(merged_data.shape)
         merged_data.to_csv(
-            f"./merged_data/{band}_merged_data_sample_points.csv", index=False
+            f"./merged_data/{band}_merged_data_sample_points_new.csv", index=False
         )
 
 # %% join all data together
 
-band_csv = glob("./merged_data/*_merged_data_sample_points.csv")
+band_csv = glob("./merged_data/*_merged_data_sample_points_new.csv")
 band_csv
 
 for i, file in enumerate(band_csv):
@@ -107,7 +111,7 @@ print(data.shape)
 
 data.reset_index(inplace=True, drop=True)
 data.head()
-data.to_csv("./merged_data/all_bands_merged.csv", index=False)
+data.to_csv("./merged_data/all_bands_merged_new.csv", index=False)
 
 # %% drop outliers
 from sklearn.ensemble import IsolationForest
@@ -148,128 +152,197 @@ outlier_index = list(set(outlier_index))
 # Remove the outliers from the dataframe
 data.drop(index=outlier_index, inplace=True)
 data.reset_index(inplace=True, drop=True)
-data.to_csv("./merged_data/all_bands_merged_no_outliers.csv", index=False)
+data.to_csv("./merged_data/all_bands_merged_no_outliers_new.csv", index=False)
 
 
-# %%
-from sklearn.cluster import KMeans
+# %% find low quality observations
+
 from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.preprocessing import StandardScaler
+
 from sklearn.preprocessing import LabelEncoder
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+from sklearn.pipeline import Pipeline
+
 
 keep = [
-    "cassava",
-    "maize",
     "rice",
-    "cotton",
-    "sorghum",
-    "millet",
-    "soybeans",
+    "maize",
+    "cassava",
+    # "vegetables",
     "sunflower",
-    # "other_grain",
-    "fallow_barren",
+    "sorghum",
     "urban",
     "forest",
-    "peanuts",
-    "forest_shrubland",
+    "shrub",
+    "tidal",
+    # "other",
+    "cotton",
     "water",
+    "fallow_barren",
+    "forest_shrubland",
+    # "speciality_crops",
+    # "okra ",
+    # "eggplant",
+    # "soybeans",
+    # "tree_crops",
+    "millet",
+    # "other_grain",
+]
+drop = [
+    "Don't know",
+    "Other (later, specify in optional notes)",
+    "water_body",
+    "large_building",
+    "could be maize.",
+    "no",
+    "don_t_know",
 ]
 
-# replace missing lc with other
+# apply keep/drop
+data.drop(data[data["lc_name"].isin(drop)].index, inplace=True)
 data.loc[data["lc_name"].isin(keep) == False, "lc_name"] = "Other"
+data.reset_index(drop=True, inplace=True)
+
+# %%
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import LabelEncoder
+import pandas as pd
+import ray
 
 
-# Create a dictionary to store key names for each target_value
-result_dict = {}
+@ray.remote
+def train_predict(train_index, test_index, X, y, count):
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.pipeline import Pipeline
 
-
-for state in range(0, 30):
-    print("round", state, "of 30")
-    # Initialize a LabelEncoder
-    le = LabelEncoder()
-
-    # Initialize a pipeline with a variance thresholding, data imputation, standard scaling, and K-means steps
+    # Define the model pipeline
     pipeline = Pipeline(
         [
-            # ("variance_threshold", VarianceThreshold()),
-            ("imputer", SimpleImputer(strategy="mean")),
-            ("scaler", StandardScaler()),
-            (
-                "kmeans",
-                KMeans(
-                    n_clusters=int(len(data["lc_name"].unique())),
-                    random_state=state,
-                ),
-            ),
+            ("classifier", RandomForestClassifier(random_state=42)),
         ]
     )
 
-    # Fit the pipeline on your training data
-    Xtrans = pipeline.fit_transform(data.values[:, 6:])
-    Xtrans.shape
+    # Split the data
+    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+    y_train, y_test = y[train_index], y[test_index]
 
-    # recode y values to integers
-    y = le.fit_transform(data["lc_name"])
+    # Fit the model
+    pipeline.fit(X_train, y_train)
 
-    cluster_labels = pipeline["kmeans"].labels_
-    class_labels = np.unique(y)
-    class_names = le.inverse_transform(class_labels)
+    # Predict
+    y_test_pred = pipeline.predict(X_test)
 
-    # Create a dictionary to store the mapping of original class labels to cluster labels
-    class_to_cluster = {}
-
-    # Iterate through each original class and find the corresponding cluster label
-    for class_label in class_labels:
-        cluster_label = np.argmax(np.bincount(cluster_labels[y == class_label]))
-        class_to_cluster[le.inverse_transform([class_label])[0]] = cluster_label
-    class_to_cluster
-
-    # Iterate through unique target_values
-    for key, target_value in class_to_cluster.items():
-        # Collect key names with the same target_value
-        if state > 0:
-            temp_dict = {}
-            temp_dict[key] = [
-                key for key, value in class_to_cluster.items() if value == target_value
-            ]
-            result_dict[key] = result_dict[key] + temp_dict[key]
-        else:
-            result_dict[key] = [
-                key for key, value in class_to_cluster.items() if value == target_value
-            ]
-print(result_dict)
+    # Return the index of the test set and the predictions
+    return test_index, y_test_pred, count
 
 
-# %%  VISUALIZE
+# Assuming 'data' is your DataFrame
+# Prepare your dataset
+X = data.drop(["lc_name", "Field_size", "Quality", "sample", "field_id", "id"], axis=1)
+y = data["lc_name"].values
 
-# Convert the dictionary to a pandas DataFrame
-data2 = []
-for key, values in result_dict.items():
-    data2.extend([(key, value) for value in values])
-df = pd.DataFrame(data2, columns=["Key", "Value"])
+# Encode the target variable
+label_encoder = LabelEncoder()
+y = label_encoder.fit_transform(y)
 
-# Create a FacetGrid with histograms
-g = sns.FacetGrid(df, col="Key")
-g.map(sns.histplot, "Value", bins=len(set(df["Value"])), kde=False)
+n_splits = 5
+n_rounds = 10
+predicted_labels = pd.DataFrame(
+    index=data.index, columns=[f"round_{i}" for i in range(n_splits * n_rounds)]
+)
 
-# Set labels and title
-g.set_axis_labels("Value", "Count")
-g.fig.suptitle("Value Counts by Key")
-g.set_xticklabels(rotation=90)
+# Collect futures in a list
+futures = []
 
-# Adjust the spacing between subplots
-g.tight_layout()
+for i in range(n_rounds):
+    print(f"round {i} of {n_rounds}")
 
-# Display the plot
-plt.show()
+    gss = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=i)
 
-# save
-g.savefig("../outputs/cluster_reassignment_outliers_removed.png")
+    for j, (train_index, test_index) in enumerate(gss.split(X, y)):
+        # Submit tasks to Ray
+        future = train_predict.remote(train_index, test_index, X, y, i * n_splits + j)
+        futures.append(future)
+
+# Wait for all tasks to complete and collect results
+results = ray.get(futures)
+
+# Store the predictions
+for test_index, y_test_pred, count in results:
+    predicted_labels.iloc[test_index, count] = y_test_pred
+    print(f"Completed round {count}")
+
+# Add actual labels
+predicted_labels["actual"] = y
+
+
+# %%
+df = predicted_labels.copy()
+percent_match = []
+# Initialize a list to store the percentages
+percentages = []
+
+# Iterate over the round columns
+for i, row in df.iterrows():
+    # Compare each 'round_i' column with the 'actual' column, considering only non-NaN entries
+    match = row[:-1].eq(row["actual"]) & row[:-1].notna()
+    # Calculate the percentage of non-NaN values that match the 'actual' value
+    percentage = match.sum() / row[:-1].notna().sum() * 100
+    # find modal value
+    modal = row[:-1].mode()
+    modal = label_encoder.inverse_transform(modal.astype(int))
+    percent_match.append((data.loc[i, "id"], modal[0], percentage))
+
+# Convert the list of tuples to a DataFrame for nicer display
+percentages_df = pd.DataFrame(
+    percent_match, columns=["id", "modal_pred", "Matching Percentage"]
+)
+
+print(percentages_df)
+# %%
+
+import geopandas as gpd
+
+points = gpd.read_file(
+    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/lu_complete.geojson"
+)
+# parquet files need to retain the geometry column
+# out = pd.merge(data, percentages_df, on="id", how="left")
+out.to_file(
+    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/lu_poly_added_uncertainty.geojson",
+    driver="GeoJSON",
+)
+# %% for each lc_name create a histogram of matching percentages
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Create a figure and axis to plot on
+
+percentages_df["actual"] = data["lc_name"]
+percentages_df
+
+
+# same but create a ax axis for each land cover class and plot the histogram
+fig, axes = plt.subplots(
+    3, len(percentages_df["actual"].unique()) // 3, figsize=(15, 10), sharey=False
+)
+axes = axes.flatten()
+for i, lc_name in enumerate(percentages_df["actual"].unique()):
+    subset = percentages_df[percentages_df["actual"] == lc_name]
+    sns.histplot(
+        subset["Matching Percentage"], kde=False, label=lc_name, ax=axes[i], bins=5
+    )
+    axes[i].set_title(lc_name)
+    axes[i].set_xlim(0, 100)
+    axes[i].set_xlabel("Matching Percentage")
+    axes[i].set_ylabel("Frequency")
+    axes[i].legend()
 
 # %%

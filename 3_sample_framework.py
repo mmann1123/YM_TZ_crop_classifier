@@ -33,6 +33,7 @@ logging.basicConfig(
 
 ###### Clean and prepare the land use data
 lu = r"/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/combined_data_reviewed_xy_LC_RPN_Final.shp"
+
 lu = gpd.read_file(lu).to_crs("EPSG:32736")
 lu["lc_name"] = lu["primar"]
 lu["Quality"] = lu["Quality_Dr"]
@@ -42,6 +43,8 @@ lu["lc_name"].replace(
     },
     inplace=True,
 )
+lu = lu[lu["delete?"] != "1"]
+# %%
 other_training = r"/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/kobo_field_collections/other_training.gpkg"
 other_training = gpd.read_file(other_training).to_crs("EPSG:32736")
 other_training["Field_size"] = 25
@@ -107,15 +110,17 @@ lu_poly = lu_complete.copy()
 lu_poly = lu_poly[lu_poly.is_valid]
 lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
 lu_poly["sample"] = (lu_poly.Field_size // 5).astype(int)
-
+# %%
 # sample points
 lu_points_sample = lu_poly.copy()
 lu_points_sample["geometry"] = lu_points_sample["geometry"].sample_points(
-    lu_poly["sample"]
+    lu_poly["sample"], random_state=42
 )
 lu_points_sample["sample_id"] = range(0, len(lu_points_sample))
 lu_points_sample["sample_id"] = lu_points_sample["sample_id"] + 1
 lu_points_sample = lu_points_sample.explode(ignore_index=True).copy()
+
+
 # %%
 # merge in the original points
 lu_complete["sample_id"] = 0

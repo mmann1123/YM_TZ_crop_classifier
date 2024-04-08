@@ -11,7 +11,7 @@ import os
 from dask.distributed import Client, LocalCluster
 
 os.chdir(
-    "/home/mmann1123/extra_space/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/"
+    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/"
 )
 
 missing_data = 9999
@@ -77,7 +77,7 @@ with gw.config.update(ref_image=target_string):
         )
         print(X)
 
-# %% Calc cluster assignments
+# %% Calc cluster assignments # see 4_merge_visualize.py
 
 from sklearn.cluster import KMeans
 from sklearn.pipeline import Pipeline

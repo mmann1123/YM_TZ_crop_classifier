@@ -45,6 +45,9 @@ for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
                 lambda x: wkb.loads(x, hex=True)
             )
             inner["file"] = file
+            # get x and y from geometry in columns
+            inner["x"] = inner["geometry"].apply(lambda i: i.x)
+            inner["y"] = inner["geometry"].apply(lambda i: i.y)
             data.append(inner)
 
         cleaned_dfs = [
@@ -73,6 +76,8 @@ for band in ["B2", "B6", "B11", "B12", "EVI", "hue"]:
             columns={col: clean_column_names(col) for col in merged_data.columns},
             inplace=True,
         )
+        merged_data["x"] = inner["geometry"].apply(lambda i: i.x)
+        merged_data["y"] = inner["geometry"].apply(lambda i: i.y)
         merged_data.drop(columns=["geometry"], inplace=True)
         merged_data.rename(columns={"sample_id": "field_id"}, inplace=True)
         # drop duplicate rows
@@ -92,6 +97,7 @@ for i, file in enumerate(band_csv):
     if i == 0:
         data = pd.read_csv(file)
     else:
+        data.drop(columns=["x", "y", "geometry"], inplace=True, errors="ignore")
         data = pd.merge(
             data,
             pd.read_csv(file).drop(columns=["file"], errors="ignore"),
@@ -168,7 +174,16 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.pipeline import Pipeline
+from glob import glob
+import dask.dataframe as dd
+import pandas as pd
+import os
+from shapely import wkb
 
+os.chdir(
+    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/"
+)
+data = pd.read_csv("./merged_data/all_bands_merged_no_outliers_new.csv")
 
 keep = [
     "rice",
@@ -313,7 +328,7 @@ points = gpd.read_file(
     "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/lu_complete.geojson"
 )
 # parquet files need to retain the geometry column
-# out = pd.merge(data, percentages_df, on="id", how="left")
+out = pd.merge(data, percentages_df, on="id", how="left")
 out.to_file(
     "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/lu_poly_added_uncertainty.geojson",
     driver="GeoJSON",

@@ -509,7 +509,7 @@ X = pipeline_scale.fit_transform(X)
 
 remove_collinear_features(
     pd.DataFrame(X, columns=X_columns),
-    threshold=0.9,
+    threshold=0.95,
     out_df=f"../outputs/collinear_features_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
 )
 
@@ -547,10 +547,12 @@ high_corr = set(
     )[f"highcorrelation"].values
 )
 
-select_images -= high_corr  # remove_list_from_list(select_images, high_corr)
+low_corr_selected = (
+    set(select_images) - high_corr
+)  # remove_list_from_list(select_images, high_corr)
 print("Low Cross Corr")
-print("N:", len(select_images))
-display(select_images)
+print("N:", len(low_corr_selected))
+display(low_corr_selected)
 
 # %%
 
@@ -597,18 +599,22 @@ display(select_images)
 ########################################################
 # uses select_how_many from top of script
 
-select_images = glob("./outputs/selected_images_10m/*.tif")
+# select_images = glob("./outputs/selected_images_10m/*.tif")
 
-with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-    # fit a model to get Xy used to train model
-    df = gw.extract(src, lu_poly, verbose=1)
-    y = df["lc"]
-    X = df[range(1, len(select_images) + 1)]
-    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-    groups = df.id.values
+# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+#     # fit a model to get Xy used to train model
+#     df = gw.extract(src, lu_poly, verbose=1)
+#     y = df["lc"]
+#     X = df[range(1, len(select_images) + 1)]
+#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+#     groups = df.id.values
 
-X = pipeline_scale.fit_transform(X)
+# X = pipeline_scale.fit_transform(X)
 # %%
+
+y = data["lc"]
+
+X = data[list(select_images)].values
 
 #  Create optuna classifier study
 
@@ -621,11 +627,11 @@ storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
 # delete any existing study
 try:
     study = optuna.load_study(
-        study_name="model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        study_name=f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
         storage=storage,
     )
     optuna.delete_study(
-        study_name="model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        study_name=f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
         storage=storage,
     )
 except:
@@ -650,8 +656,8 @@ study.optimize(
         weights=data.Field_size,
         scoring="kappa",
     ),
-    n_trials=100,
-    n_jobs=12,
+    n_trials=10,
+    n_jobs=-1,
 )
 
 # Close the SQLite connection
@@ -711,7 +717,9 @@ conn.close()
 # NOTE: Performs better without kmeans included
 
 # get optimal parameters
-pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
+pipeline_performance = best_classifier_pipe(
+    "study.db", "model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
+)
 print(pipeline_performance)
 
 # get important image paths
@@ -721,45 +729,41 @@ print(pipeline_performance)
 #     select_how_many=select_how_many,
 # )
 
-select_images = glob("./outputs/selected_images_10m/*.tif")
+# select_images = glob("./outputs/selected_images_10m/*.tif")
 
-select_images = select_images
+# select_images = select_images
 
-# Get the image names
-image_names = [os.path.basename(f).split(".")[0] for f in select_images]
-select_images
-
-# %%
-# extract data
-# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-#     # fit a model to get Xy used to train model
-#     X = gw.extract(src, lu_complete)
-#     y = lu_complete["lc"]
-#     y.reset_index(drop=True, inplace=True)
-#     X = X[range(1, len(select_images) + 1)]
-#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-
-with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-    # fit a model to get Xy used to train model
-    df = gw.extract(src, lu_poly, verbose=1)
-    y = df["lc"]
-    X = df[range(1, len(select_images) + 1)]
-    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-    groups = df.id.values
-    weights = df.Field_size
+# # Get the image names
+# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
+# select_images
 
 
-X = pipeline_scale.fit_transform(X)
+# %% Create out of sample confusion matrix
 
-# %%
+# get optimal parameters
+pipeline_performance = best_classifier_pipe(
+    "study.db", "model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
+)
+print(pipeline_performance)
 # generate confusion matrix out of sample
 conf_matrix_list_of_arrays = []
 list_balanced_accuracy = []
 list_kappa = []
+weights = data.Field_size
 # skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
 skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+
+
+# Initialize global confusion matrix as a DataFrame
+class_names = np.unique(y)  # Adjust based on how you obtain class names
+
+global_conf_matrix_df = pd.DataFrame(
+    np.zeros((len(class_names), len(class_names))),
+    index=class_names,
+    columns=class_names,
+)
+
 for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
-    # for i, (train_index, test_index) in enumerate(skf.split(X, y)):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
 
@@ -768,34 +772,29 @@ for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
     )
     y_pred = pipeline_performance.predict(X_test)
 
-    # get performance metrics
-    balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
-    list_balanced_accuracy.append(balanced_accuracy)
+    # Performance metrics
+    list_balanced_accuracy.append(balanced_accuracy_score(y_test, y_pred))
+    list_kappa.append(cohen_kappa_score(y_test, y_pred))
 
-    kappa_accuracy = cohen_kappa_score(y_test, y_pred)
-    list_kappa.append(kappa_accuracy)
-
-    # Get the class names from the label encoder
-    class_names = pipeline_performance[
-        "classifier"
-    ].classes_  # le.inverse_transform(pipeline_performance["classifier"].classes_)
-
-    # Create the confusion matrix with class names as row and column index
+    # Generate confusion matrix for the current fold
     conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)
-    conf_matrix_list_of_arrays.append(conf_matrix)
+    print(conf_matrix.shape)
+    class_name_in_round = [x for x in class_names if x in np.unique(y_pred)]
+    conf_matrix_df = pd.DataFrame(conf_matrix, index=class_names, columns=class_names)
 
-conf_matrix_list_of_arrays
+    # Update the global confusion matrix
+    global_conf_matrix_df = global_conf_matrix_df.add(conf_matrix_df, fill_value=0)
 
 # get aggregate confusion matrix
-agg_conf_matrix = np.sum(conf_matrix_list_of_arrays, axis=0)
+agg_conf_matrix = global_conf_matrix_df.copy()
 balanced_accuracy = np.array(list_balanced_accuracy).mean()
 kappa_accuracy = np.array(list_kappa).mean()
 
 # Calculate the row-wise sums
-row_sums = agg_conf_matrix.sum(axis=1, keepdims=True)
+row_sums = agg_conf_matrix.sum(axis=1)
 
 # Convert counts to percentages by row
-conf_matrix_percent = agg_conf_matrix / row_sums
+conf_matrix_percent = agg_conf_matrix / row_sums.values.reshape(-1, 1)
 
 # Get the class names
 class_names = le.inverse_transform(pipeline_performance["classifier"].classes_)
@@ -817,13 +816,15 @@ plt.ylabel("True")
 # plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
 plt.title(f"Out of Sample Mean Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
 plt.savefig(
-    f"outputs/final_class_perfomance_rf_kbest_{select_how_many}.png",
+    f"../outputs/final_class_perfomance_rf_kbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
     bbox_inches="tight",
 )
 
 # Show the plot
 plt.show()
 
+
+# %%
 # # %%
 # # generate in sample confusion matrix
 

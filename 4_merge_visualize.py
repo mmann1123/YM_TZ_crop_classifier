@@ -97,6 +97,9 @@ for i, file in enumerate(band_csv):
     if i == 0:
         data = pd.read_csv(file)
     else:
+
+        # this is the problem, some
+        data = pd.read_csv(file)
         data.drop(columns=["x", "y", "geometry"], inplace=True, errors="ignore")
         data = pd.merge(
             data,
@@ -140,8 +143,8 @@ def remove_outliers(df, lc_class):
 
     # Remove outliers using Isolation Forest algorithm
     clf = IsolationForest(contamination=0.05, random_state=0)
-    clf.fit(lc_df.iloc[:, 6:])
-    outliers = clf.predict(lc_df.iloc[:, 6:])
+    clf.fit(lc_df.iloc[:, 6:].drop(columns=["x", "y"], inplace=True))
+    outliers = clf.predict(lc_df.iloc[:, 6:].drop(columns=["x", "y"], inplace=True))
 
     # Filter out the outliers from the dataframe
     lc_df = lc_df[outliers == -1]  # -1 is outlier, 1 is normal

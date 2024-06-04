@@ -10,6 +10,7 @@ from sklearn_helpers import (
     classifier_objective,
     extract_top_from_shaps,
     remove_collinear_features,
+    get_oos_confusion_matrix,
     remove_list_from_list,
 )
 import pickle
@@ -65,13 +66,9 @@ import pandas as pd
 os.chdir(
     "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/extracted_features/"
 )
-data = pd.read_csv("./merged_data/all_bands_merged_no_outliers.csv")
+data = pd.read_csv("./merged_data/all_bands_merged_no_outliers_new.csv")
 data.head()
 # %%
-
-
-# how many images will be selected for importances
-select_how_many = 15
 
 
 # remove nan and bad columns
@@ -126,8 +123,8 @@ keep = [
     # "other",
     "cotton",
     "water",
-    "fallow_barren",
-    "forest_shrubland",
+    #
+    #
     # "speciality_crops",
     # "okra ",
     # "eggplant",
@@ -144,6 +141,8 @@ drop = [
     "could be maize.",
     "no",
     "don_t_know",
+    "fallow_barren",  # only two examples
+    "forest_shrubland",  # only two examples
 ]
 
 # apply keep/drop
@@ -193,18 +192,24 @@ X_columns = X_columns[kept_features]
 
 y = data["lc"]
 
+
 #   Create optuna classifier study
 scoring = "kappa"
 n_splits = 3
-n_trials = 75
-n_jobs = 12
+n_trials = 100
+n_jobs = -1
 classifier = "LGBM"
-# %%
+
+# how many images will be selected for importances
+select_how_many = 40
+
+
+######################################## Code Start ########################################
 os.chdir(
     "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/models"
 )
-# Create an SQLite connection
-conn = sqlite3.connect("study.db")
+
+# %%
 
 # Create a study with SQLite storage
 storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
@@ -245,8 +250,16 @@ study.optimize(
     n_jobs=n_jobs,
 )
 
-# Close the SQLite connection
-conn.close()
+
+# Try to load the study from the storage
+try:
+    loaded_study = optuna.load_study(
+        study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        storage=storage,
+    )
+    print("The study was saved correctly.")
+except:
+    print("The study was not saved correctly.")
 
 print("Number of finished trials: {}".format(len(study.trials)))
 
@@ -261,14 +274,21 @@ for key, value in trial.params.items():
 
 # write params to csv
 pd.DataFrame(study.trials_dataframe()).to_csv(
-    f"../models/optuna_study_model_selection_{scoring}_{n_splits}.csv"
+    f"../models/model_selection_feature_selection_{scoring}_{n_splits}.csv"
 )
+# %%
+#  Open results after restarting kernel
+# conn = sqlite3.connect("study.db")
+storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
 
-#  Save results
-conn = sqlite3.connect("study.db")
+# check names of studies
+study_summaries = optuna.study.get_all_study_summaries(storage=storage)
+for summary in study_summaries:
+    print(summary.study_name)
 
+# grab results
 study = optuna.load_study(
-    storage="sqlite:///study.db",
+    storage=storage,
     study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
 )
 
@@ -289,6 +309,48 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 
 # Print the ranked listing of trials
 print(sorted_trials[["number", "value", "params_classifier"]])
+
+# %% Create out of sample confusion matrix
+
+
+groups = data["field_id"].values
+X = data.drop(
+    columns=[
+        "lc",
+        "lc_name",
+        "Field_size",
+        "Quality",
+        "sample",
+        "field_id",
+        "id",
+    ]
+)
+X_columns = X.columns
+X = pipeline_scale_clean.fit_transform(X)
+kept_features = pipeline_scale_clean.named_steps["variance_threshold"].get_support()
+X_columns = X_columns[kept_features]
+
+y = data["lc"]
+pipeline_performance = best_classifier_pipe(
+    "study.db",
+    f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+)
+class_names = np.unique(y)
+le2 = LabelEncoder()
+label_encoder = le2.fit(data["lc_name"])
+
+get_oos_confusion_matrix(
+    pipeline=pipeline_performance,
+    X=X,
+    y=y,
+    groups=groups,
+    class_names=class_names,
+    label_encoder=label_encoder,
+    weights=data.Field_size,
+    n_splits=5,
+    random_state=42,
+    save_path=f"../outputs/final_class_perfomance_rf_kbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
+)
 
 
 # %%
@@ -313,7 +375,7 @@ params_lgbm_dict = lgbm_pipe["classifier"].get_params()
 # %%
 
 skf = StratifiedGroupKFold(
-    n_splits=10, shuffle=True, random_state=7
+    n_splits=3, shuffle=True, random_state=7
 )  # probably could use 5 nsplits
 
 feature_importance_list = []
@@ -471,52 +533,53 @@ pd.DataFrame({f"top{select_how_many}names": X_best}).to_csv(
     f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
     index=False,
 )
-
 # %%
-# FIND REDUNDANT FEATURES #
-# # %% feature clustering to find redundant features
-# # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
-# Read in the list of selected images
+# %% skipp doesn't work properly doesn't prioritize the important features
+# # FIND REDUNDANT FEATURES #
+# # # %% feature clustering to find redundant features
+# # # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
+# # Read in the list of selected images
 
-# Trying other method
-# https://stackoverflow.com/questions/29294983/how-to-calculate-correlation-between-all-columns-and-remove-highly-correlated-on
+# # Trying other method
+# # https://stackoverflow.com/questions/29294983/how-to-calculate-correlation-between-all-columns-and-remove-highly-correlated-on
 
-# NOTE THIS MIGHT NOT BE WORKING PROPERLY CHECK
+# # NOTE THIS MIGHT NOT BE WORKING PROPERLY CHECK
 
-select_images = list(
-    set(
-        list(
-            pd.read_csv(
-                f"../outputs/mean_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-            )[f"top{select_how_many}names"].values
-        )
-        + list(
-            pd.read_csv(
-                f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-            )[f"top{select_how_many}names"].values
-        )
-        + list(
-            pd.read_csv(
-                f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-            )[f"top{select_how_many}names"].values
-        )
-    )
-)
+# select_images = list(
+#     set(
+#         list(
+#             pd.read_csv(
+#                 f"../outputs/mean_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+#             )[f"top{select_how_many}names"].values
+#         )
+#         + list(
+#             pd.read_csv(
+#                 f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+#             )[f"top{select_how_many}names"].values
+#         )
+#         + list(
+#             pd.read_csv(
+#                 f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+#             )[f"top{select_how_many}names"].values
+#         )
+#     )
+# )
+# # # %%
 
-# remove nan and bad columns
+# # remove nan and bad columns
 
-X = pipeline_scale.fit_transform(X)
+# X = pipeline_scale.fit_transform(X)
 
-remove_collinear_features(
-    pd.DataFrame(X, columns=X_columns),
-    threshold=0.95,
-    out_df=f"../outputs/collinear_features_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
-)
+# remove_collinear_features(
+#     pd.DataFrame(X, columns=X_columns),
+#     threshold=0.98,
+#     out_df=f"../outputs/collinear_features_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
+# # )
 
 
-##############################################################
-# %% find final selected images
-##############################################################
+# ##############################################################
+# # %% find final selected images
+# ##############################################################
 
 select_images = set(
     list(
@@ -529,68 +592,15 @@ select_images = set(
             f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
         )[f"top{select_how_many}names"].values
     )
-    + list(
-        pd.read_csv(
-            f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-        )[f"top{select_how_many}names"].values
-    )
+    # + list(
+    #     pd.read_csv(
+    #         f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+    #     )[f"top{select_how_many}names"].values
+    # )
+    # )
 )
-
-
-print("top features")
-print("N:", len(select_images))
 display(select_images)
-# remove highly correlated features
-high_corr = set(
-    pd.read_csv(
-        f"../outputs/collinear_features_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-    )[f"highcorrelation"].values
-)
-
-low_corr_selected = (
-    set(select_images) - high_corr
-)  # remove_list_from_list(select_images, high_corr)
-print("Low Cross Corr")
-print("N:", len(low_corr_selected))
-display(low_corr_selected)
-
-# %%
-
-# # Reduce image size and create 10m resolution images
-
-# os.makedirs("./outputs/selected_images_10m", exist_ok=True)
-
-# # delete old selected images
-# folder_path = "./outputs/selected_images_10m"
-
-# # Get a list of all files in the folder
-# file_list = os.listdir(folder_path)
-
-# # Loop through the file list and delete each file
-# for file_name in file_list:
-#     file_path = os.path.join(folder_path, file_name)
-#     if os.path.isfile(file_path):
-#         os.remove(file_path)
-
-
-# # get an EVI example
-# target_string = next((string for string in select_images if "EVI" in string), None)
-
-# for select_image in select_images:
-#     with gw.config.update(ref_image=target_string):
-#         with gw.open(
-#             select_image,
-#             nodata=9999,
-#             resampling="bilinear",
-#         ) as src:
-#             # replace missing with mean
-#             data = src.gw.replace({9999: src.mean()})
-#             data = data.gw.replace({np.nan: src.mean()})
-#             data.gw.save(
-#                 f"./outputs/selected_images_10m/{os.path.basename(select_image)}",
-#                 overwrite=True,
-#                 compress="lzw",
-#             )
+print(len(select_images))
 
 
 # %%
@@ -616,10 +626,8 @@ y = data["lc"]
 
 X = data[list(select_images)].values
 
-#  Create optuna classifier study
+studyname = f"model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
-# Create an SQLite connection
-conn = sqlite3.connect("study.db")
 
 # Create a study with SQLite storage
 storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
@@ -627,11 +635,11 @@ storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
 # delete any existing study
 try:
     study = optuna.load_study(
-        study_name=f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        study_name=studyname,
         storage=storage,
     )
     optuna.delete_study(
-        study_name=f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        study_name=studyname,
         storage=storage,
     )
 except:
@@ -640,7 +648,7 @@ except:
 # create new study
 study = optuna.create_study(
     storage=storage,
-    study_name="model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    study_name=studyname,
     direction="maximize",
 )
 
@@ -652,16 +660,15 @@ study.optimize(
         X,
         y,
         groups=groups,
+        n_splits=n_splits,
         classifier_override=["LGBM", "RandomForest"],
-        weights=data.Field_size,
-        scoring="kappa",
+        weights=data.Field_size,  # this might be introducing NAs if field size is missing ??
+        scoring=scoring,
     ),
-    n_trials=10,
+    n_trials=100,
     n_jobs=-1,
 )
 
-# Close the SQLite connection
-conn.close()
 
 print("Number of finished trials: {}".format(len(study.trials)))
 
@@ -675,19 +682,15 @@ for key, value in trial.params.items():
     print("    {}: {}".format(key, value))
 
 # write params to csv
-pd.DataFrame(study.trials_dataframe()).to_csv(
-    "./optuna_study_model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-)
+pd.DataFrame(study.trials_dataframe()).to_csv(studyname)
+
 # %%
 #   optuna classifier study
 
 
-# grab results
-conn = sqlite3.connect("study.db")
-
 study = optuna.load_study(
     storage="sqlite:///study.db",
-    study_name="model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    study_name=f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
 )
 
 
@@ -707,9 +710,19 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 
 # Print the ranked listing of trials
 print(sorted_trials[["number", "value", "params_classifier"]])
-conn.close()
 
 ##################################################################
+# %%
+
+# print study names and best trial performance
+study_summaries = optuna.study.get_all_study_summaries(storage=storage)
+for summary in study_summaries:
+    print(summary.study_name)
+    print(summary.best_trial.values)
+
+    # # grab results
+    # study = optuna.load_study(storage=storage, study_name=summary.study_name)
+
 # %%
 ########################################################
 # Final Model & Class level prediction performance
@@ -718,7 +731,8 @@ conn.close()
 
 # get optimal parameters
 pipeline_performance = best_classifier_pipe(
-    "study.db", "model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
+    "study.db",
+    f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
 )
 print(pipeline_performance)
 

@@ -17,6 +17,14 @@ from sklearn.model_selection import (
 import numpy as np
 from glob import glob
 from sklearn.metrics import get_scorer_names
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectFromModel
+from sklearn.metrics import balanced_accuracy_score, cohen_kappa_score, confusion_matrix
+from sklearn.model_selection import StratifiedGroupKFold
 
 
 def remove_list_from_list(main_list, remove_containing):
@@ -349,6 +357,98 @@ def get_selected_ranked_images(
         ["rank", f"top{select_how_many}", "basename"]
     ]
     return list(ordered[f"top{select_how_many}"])
+
+
+def get_oos_confusion_matrix(
+    pipeline,
+    X,
+    y,
+    groups,
+    class_names,
+    label_encoder,
+    weights,
+    n_splits=5,
+    random_state=42,
+    save_path=None,
+):
+    skf = StratifiedGroupKFold(
+        n_splits=n_splits, shuffle=True, random_state=random_state
+    )
+
+    # Initialize global confusion matrix as a DataFrame
+    global_conf_matrix_df = pd.DataFrame(
+        np.zeros((len(class_names), len(class_names))),
+        index=class_names,
+        columns=class_names,
+    )
+
+    list_balanced_accuracy = []
+    list_kappa = []
+
+    for train_index, test_index in skf.split(X, y, groups):
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        pipeline.fit(X_train, y_train, classifier__sample_weight=weights[train_index])
+        y_pred = pipeline.predict(X_test)
+
+        # Performance metrics
+        list_balanced_accuracy.append(balanced_accuracy_score(y_test, y_pred))
+        list_kappa.append(cohen_kappa_score(y_test, y_pred))
+
+        # Generate confusion matrix for the current fold
+        conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)
+        conf_matrix_df = pd.DataFrame(
+            conf_matrix, index=class_names, columns=class_names
+        )
+
+        # Update the global confusion matrix
+        global_conf_matrix_df = global_conf_matrix_df.add(conf_matrix_df, fill_value=0)
+
+    # Get aggregate confusion matrix
+    agg_conf_matrix = global_conf_matrix_df.copy()
+    balanced_accuracy = np.nanmean(np.array(list_balanced_accuracy))
+    kappa_accuracy = np.nanmean(np.array(list_kappa))
+
+    # Calculate the row-wise sums
+    row_sums = agg_conf_matrix.sum(axis=1)
+
+    # Convert counts to percentages by row
+    conf_matrix_percent = agg_conf_matrix / row_sums.values.reshape(-1, 1)
+
+    # Get the class names
+    class_names = label_encoder.inverse_transform(pipeline["classifier"].classes_)
+
+    # Create a heatmap using seaborn
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(
+        conf_matrix_percent,
+        annot=True,
+        cmap="Blues",
+        fmt=".0%",
+        xticklabels=class_names,
+        yticklabels=class_names,
+    )
+
+    # Set labels and title
+    plt.xlabel("Predicted")
+    plt.ylabel("True")
+    plt.title(
+        f"Out of Sample Mean Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}"
+    )
+    plt.show()
+
+    if save_path:
+        plt.savefig(
+            save_path,
+            bbox_inches="tight",
+        )
+
+    return {
+        "balanced_accuracy": balanced_accuracy,
+        "kappa_accuracy": kappa_accuracy,
+        # "confusion_matrix": agg_conf_matrix,
+    }
 
 
 # %%

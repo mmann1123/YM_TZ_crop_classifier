@@ -201,7 +201,7 @@ n_jobs = -1
 classifier = "LGBM"
 
 # how many images will be selected for importances
-select_how_many = 40
+select_how_many = 35
 
 
 ######################################## Code Start ########################################
@@ -497,85 +497,7 @@ extract_top_from_shaps(
 )
 
 
-# %% Get kbest features from sklearn
-from sklearn.feature_selection import VarianceThreshold, SelectKBest, f_classif
-
-pl = Pipeline(
-    [
-        # ("variance_threshold", VarianceThreshold()),  # Remove low variance features
-        ("impute", SimpleImputer(strategy="mean")),
-        (
-            "feature_selection",
-            SelectKBest(k=select_how_many, score_func=f_classif),
-        ),  # Select top k features based on ANOVA F-value
-        ("clf", RandomForestClassifier()),
-    ]
-)
-
-gridsearch = GridSearchCV(
-    pl,
-    cv=KFold(n_splits=3),
-    scoring="matthews_corrcoef",
-    param_grid={"clf__n_estimators": [1000]},
-)
-
-gridsearch.fit(X=X, y=y)
-print(gridsearch.cv_results_)
-print(gridsearch.best_score_)
-print(gridsearch.best_params_)
-
-
-kbest_TF = gridsearch.best_estimator_.named_steps["feature_selection"].get_support()
-X_best = X_columns[kbest_TF]
-
-
-pd.DataFrame({f"top{select_how_many}names": X_best}).to_csv(
-    f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
-    index=False,
-)
 # %%
-# %% skipp doesn't work properly doesn't prioritize the important features
-# # FIND REDUNDANT FEATURES #
-# # # %% feature clustering to find redundant features
-# # # https://shap.readthedocs.io/en/latest/example_notebooks/api_examples/plots/bar.html#Using-feature-clustering
-# # Read in the list of selected images
-
-# # Trying other method
-# # https://stackoverflow.com/questions/29294983/how-to-calculate-correlation-between-all-columns-and-remove-highly-correlated-on
-
-# # NOTE THIS MIGHT NOT BE WORKING PROPERLY CHECK
-
-# select_images = list(
-#     set(
-#         list(
-#             pd.read_csv(
-#                 f"../outputs/mean_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-#             )[f"top{select_how_many}names"].values
-#         )
-#         + list(
-#             pd.read_csv(
-#                 f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-#             )[f"top{select_how_many}names"].values
-#         )
-#         + list(
-#             pd.read_csv(
-#                 f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-#             )[f"top{select_how_many}names"].values
-#         )
-#     )
-# )
-# # # %%
-
-# # remove nan and bad columns
-
-# X = pipeline_scale.fit_transform(X)
-
-# remove_collinear_features(
-#     pd.DataFrame(X, columns=X_columns),
-#     threshold=0.98,
-#     out_df=f"../outputs/collinear_features_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
-# # )
-
 
 # ##############################################################
 # # %% find final selected images
@@ -592,13 +514,8 @@ select_images = set(
             f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
         )[f"top{select_how_many}names"].values
     )
-    # + list(
-    #     pd.read_csv(
-    #         f"../outputs/selected_images_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-    #     )[f"top{select_how_many}names"].values
-    # )
-    # )
 )
+
 display(select_images)
 print(len(select_images))
 
@@ -626,12 +543,12 @@ y = data["lc"]
 
 X = data[list(select_images)].values
 
-studyname = f"model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
+studyname = f"model_selection_all_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
 
 # Create a study with SQLite storage
 storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
-
+# %%
 # delete any existing study
 try:
     study = optuna.load_study(
@@ -722,6 +639,8 @@ for summary in study_summaries:
 
     # # grab results
     # study = optuna.load_study(storage=storage, study_name=summary.study_name)
+# %%
+
 
 # %%
 ########################################################

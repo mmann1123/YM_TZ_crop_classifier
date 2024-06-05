@@ -522,9 +522,7 @@ y = data["lc"]
 
 X = data[list(select_images)].values
 
-studyname = (
-    f"model_mean+max15_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
-)
+studyname = f"model_selection_mean_shaps_only_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
 
 # Create a study with SQLite storage
@@ -588,7 +586,7 @@ pd.DataFrame(study.trials_dataframe()).to_csv(studyname)
 
 study = optuna.load_study(
     storage="sqlite:///study.db",
-    study_name=f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    study_name=studyname,
 )
 
 

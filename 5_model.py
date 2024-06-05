@@ -201,7 +201,7 @@ n_jobs = -1
 classifier = "LGBM"
 
 # how many images will be selected for importances
-select_how_many = 45
+select_how_many = 40
 
 
 ######################################## Code Start ########################################
@@ -505,57 +505,26 @@ extract_top_from_shaps(
 mean_shaps_file = f"../outputs/mean_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
 max_shaps_file = f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
 
-# select_images = set(
-#     list(pd.read_csv(mean_shaps_file)[f"top{select_how_many}names"].values)
-#     + list(pd.read_csv(max_shaps_file)[f"top{select_how_many}names"].values)
-# )
+select_images = set(
+    list(pd.read_csv(mean_shaps_file)[f"top{select_how_many}names"].values)
+    # + list(pd.read_csv(max_shaps_file)[f"top{select_how_many}names"].values)
+)
 
 # display(select_images)
 # print(len(select_images))
 
-# merge files and sum feature_importance_vals
-select_images = pd.merge(
-    pd.read_csv(mean_shaps_file),
-    pd.read_csv(max_shaps_file),
-    how="outer",
-    on=f"top{select_how_many}names",
-)
-select_images.fillna(0, inplace=True)
-select_images["feature_importance_vals_y"] = (
-    select_images["feature_importance_vals_y"] / 2
-)
-select_images["feature_importance_vals"] = (
-    select_images["feature_importance_vals_y"]
-    + select_images["feature_importance_vals_x"]
-)
-select_images.sort_values("feature_importance_vals", ascending=False, inplace=True)
-select_images = select_images.iloc[0:select_how_many][f"top{select_how_many}names"]
 select_images
 
-# %%
-########################################################
-# MODEL SELECTION between RF, LGBM, SVC
-########################################################
-# uses select_how_many from top of script
 
-# select_images = glob("./outputs/selected_images_10m/*.tif")
-
-# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-#     # fit a model to get Xy used to train model
-#     df = gw.extract(src, lu_poly, verbose=1)
-#     y = df["lc"]
-#     X = df[range(1, len(select_images) + 1)]
-#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-#     groups = df.id.values
-
-# X = pipeline_scale.fit_transform(X)
 # %%
 
 y = data["lc"]
 
 X = data[list(select_images)].values
 
-studyname = f"model_sum_mean_max_shaps_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
+studyname = (
+    f"model_mean+max15_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
+)
 
 
 # Create a study with SQLite storage
@@ -651,8 +620,6 @@ for summary in study_summaries:
 
     # # grab results
     # study = optuna.load_study(storage=storage, study_name=summary.study_name)
-# %%
-
 
 # %%
 ########################################################

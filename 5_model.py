@@ -6,12 +6,13 @@ import pandas as pd
 
 from sklearn_helpers import (
     best_classifier_pipe,
-    get_selected_ranked_images,
+    # get_selected_ranked_images,
     classifier_objective,
     extract_top_from_shaps,
-    remove_collinear_features,
+    # remove_collinear_features,
     get_oos_confusion_matrix,
-    remove_list_from_list,
+    # remove_list_from_list,
+    feature_selection_study,
 )
 import pickle
 import pandas as pd
@@ -201,7 +202,7 @@ n_jobs = -1
 classifier = "LGBM"
 
 # how many images will be selected for importances
-select_how_many = 40
+select_how_many = 30
 
 
 ######################################## Code Start ########################################
@@ -213,15 +214,18 @@ os.chdir(
 
 # Create a study with SQLite storage
 storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
+study_name = (
+    f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
+)
 
 # delete any existing study
 try:
     study = optuna.load_study(
-        study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        study_name=study_name,
         storage=storage,
     )
     optuna.delete_study(
-        study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        study_name=study_name,
         storage=storage,
     )
 except:
@@ -230,7 +234,7 @@ except:
 # create new study
 study = optuna.create_study(
     storage=storage,
-    study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    study_name=study_name,
     direction="maximize",
 )
 
@@ -254,7 +258,7 @@ study.optimize(
 # Try to load the study from the storage
 try:
     loaded_study = optuna.load_study(
-        study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+        study_name=study_name,
         storage=storage,
     )
     print("The study was saved correctly.")
@@ -289,7 +293,7 @@ for summary in study_summaries:
 # grab results
 study = optuna.load_study(
     storage=storage,
-    study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    study_name=study_name,
 )
 
 
@@ -311,7 +315,6 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 print(sorted_trials[["number", "value", "params_classifier"]])
 
 # %% Create out of sample confusion matrix
-
 
 groups = data["field_id"].values
 X = data.drop(
@@ -495,8 +498,6 @@ extract_top_from_shaps(
     data_dir_tif_glob=None,
     out_path=f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
 )
-
-
 # %%
 
 # ##############################################################
@@ -507,14 +508,16 @@ max_shaps_file = f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([
 
 select_images = set(
     list(pd.read_csv(mean_shaps_file)[f"top{select_how_many}names"].values)
-    # + list(pd.read_csv(max_shaps_file)[f"top{select_how_many}names"].values)
+    + list(pd.read_csv(max_shaps_file)[f"top{select_how_many}names"].values)
 )
 
 # display(select_images)
 # print(len(select_images))
+# select_images = [
+#     x for x in select_images if "B11" in x or "B12" in x
+# ]
 
 select_images
-
 
 # %%
 
@@ -522,63 +525,11 @@ y = data["lc"]
 
 X = data[list(select_images)].values
 
-studyname = f"model_selection_mean_shaps_only_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
+studyname = f"model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
 
 # Create a study with SQLite storage
-storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
-# %%
-# delete any existing study
-try:
-    study = optuna.load_study(
-        study_name=studyname,
-        storage=storage,
-    )
-    optuna.delete_study(
-        study_name=studyname,
-        storage=storage,
-    )
-except:
-    pass
-
-# create new study
-study = optuna.create_study(
-    storage=storage,
-    study_name=studyname,
-    direction="maximize",
-)
-
-
-# Optimize the objective function
-study.optimize(
-    lambda trial: classifier_objective(
-        trial,
-        X,
-        y,
-        groups=groups,
-        n_splits=n_splits,
-        classifier_override=["LGBM", "RandomForest"],
-        weights=data.Field_size,  # this might be introducing NAs if field size is missing ??
-        scoring=scoring,
-    ),
-    n_trials=100,
-    n_jobs=-1,
-)
-
-
-print("Number of finished trials: {}".format(len(study.trials)))
-
-print("Best trial:")
-trial = study.best_trial
-
-print("  Value: {}".format(trial.value))
-
-print("  Params: ")
-for key, value in trial.params.items():
-    print("    {}: {}".format(key, value))
-
-# write params to csv
-pd.DataFrame(study.trials_dataframe()).to_csv(studyname)
+feature_selection_study(studyname, X, y, groups, n_splits, scoring)
 
 # %%
 #   optuna classifier study
@@ -620,24 +571,61 @@ for summary in study_summaries:
     # study = optuna.load_study(storage=storage, study_name=summary.study_name)
 
 # %%
+#########################################################
+############ get 10m images for final model #############
+#########################################################
+
+from sklearn_helpers import best_classifier_pipe, find_selected_ranked_images
+
+# %%
+
+# get important image paths
+select_image_paths = find_selected_ranked_images(
+    ranked_features=[
+        x + "_0" for x in select_images
+    ],  # append _0 to avoid matching multipl uses of values like 'mean'
+    available_image_list=glob("../features/*/*.tif"),
+    select_how_many=select_how_many,
+)
+select_image_paths
+
+# %%
+images = [
+    "../features/B12/B12_kurtosis_0000000000-0000046592.tif",
+    "../features/B12/B12_kurtosis_0000000000-0000000000.tif",
+]
+# create vrt files for multiple images using gdal
+import gdal
+
+# create vrt file
+vrt_options = gdal.BuildVRTOptions(resampleAlg="nearest")
+gdal.BuildVRT(
+    f"outputs/selected_images_10m.vrt",
+    images,
+    options=vrt_options,
+)
+
+with gw.open(f"outputs/selected_images_10m.vrt", nodata=9999) as src:
+    display(src)
+
+# %%
 ########################################################
 # Final Model & Class level prediction performance
 ########################################################
-# NOTE: Performs better without kmeans included
 
 # get optimal parameters
 pipeline_performance = best_classifier_pipe(
     "study.db",
-    f"model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    studyname,
 )
 print(pipeline_performance)
 
 # get important image paths
-# select_images = get_selected_ranked_images(
-#     original_rank_images_df=f"./outputs/selected_images_{select_how_many}.csv",
-#     subset_image_list=glob("./outputs/selected_images_10m/*.tif"),
-#     select_how_many=select_how_many,
-# )
+select_images = get_selected_ranked_images(
+    original_rank_images=select_images,
+    available_image_list=glob("./outputs/selected_images_10m/*.tif"),
+    select_how_many=select_how_many,
+)
 
 # select_images = glob("./outputs/selected_images_10m/*.tif")
 

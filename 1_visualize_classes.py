@@ -11,13 +11,14 @@ import os
 from dask.distributed import Client, LocalCluster
 
 os.chdir(
-    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/"
+    r"/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/features"
 )
 
 missing_data = 9999
 
 # Get all the feature files
-files = sorted(glob("./data/**/annual_features/**/**.tif"))
+files = sorted(glob("./**/**.tif"))
+print(files)
 # Get the names of the bands
 band_names = [os.path.basename(f).split(".")[0] for f in files]
 # Read the training data

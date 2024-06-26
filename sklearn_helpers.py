@@ -25,6 +25,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel
 from sklearn.metrics import balanced_accuracy_score, cohen_kappa_score, confusion_matrix
 from sklearn.model_selection import StratifiedGroupKFold
+from typing import Union, List, Dict, Set, Optional
+import os
+import pandas as pd
 
 
 def remove_list_from_list(main_list, remove_containing):
@@ -76,78 +79,79 @@ def remove_list_from_list(main_list, remove_containing):
 #     return x
 
 
-def remove_collinear_features(
-    x, threshold=0.95, out_df="./outputs/collinear_features_recalculated.csv"
-):
-    """
-    Objective:
-        Remove collinear features in a dataframe with a correlation coefficient
-        greater than the threshold, recalculating the correlation matrix and
-        re-evaluating collinearity after each drop. This iterative approach
-        ensures that the final set of features is not influenced by the initial
-        order of the features in the dataset.
+# not working as expected need to sort by importance, remove least important.
+# def remove_collinear_features(
+#     x, threshold=0.95, out_df="./outputs/collinear_features_recalculated.csv"
+# ):
+#     """
+#     Objective:
+#         Remove collinear features in a dataframe with a correlation coefficient
+#         greater than the threshold, recalculating the correlation matrix and
+#         re-evaluating collinearity after each drop. This iterative approach
+#         ensures that the final set of features is not influenced by the initial
+#         order of the features in the dataset.
 
-    Inputs:
-        x: features dataframe
-        threshold: features with correlations greater than this value are removed
-        out_df: path to save the CSV file listing the dropped features
+#     Inputs:
+#         x: features dataframe
+#         threshold: features with correlations greater than this value are removed
+#         out_df: path to save the CSV file listing the dropped features
 
-    Output:
-        dataframe that contains only the non-highly-collinear features
-    """
+#     Output:
+#         dataframe that contains only the non-highly-collinear features
+#     """
 
-    # Initialize a list to keep track of columns to drop
-    drop_cols = []
-    count = 0
-    # Flag to keep track of whether to continue dropping columns
-    continue_dropping = True
+#     # Initialize a list to keep track of columns to drop
+#     drop_cols = []
+#     count = 0
+#     # Flag to keep track of whether to continue dropping columns
+#     continue_dropping = True
 
-    while continue_dropping:
-        # Calculate the correlation matrix
-        corr_matrix = (
-            x.corr().abs()
-        )  # Use absolute value to consider both positive and negative correlations
-        continue_dropping = False  # Reset flag for this iteration
+#     while continue_dropping:
+#         # Calculate the correlation matrix
+#         corr_matrix = (
+#             x.corr().abs()
+#         )  # Use absolute value to consider both positive and negative correlations
+#         continue_dropping = False  # Reset flag for this iteration
 
-        # Iterate over the upper triangle of the correlation matrix
-        for i in range(len(corr_matrix.columns) - 1):
-            for j in range(i + 1, len(corr_matrix.columns)):
-                # If correlation exceeds the threshold
-                if corr_matrix.iloc[i, j] >= threshold:
-                    # Identify the column to drop (preferentially the one not already in drop_cols list)
-                    col_to_drop = (
-                        corr_matrix.columns[j]
-                        if corr_matrix.columns[i] not in drop_cols
-                        else corr_matrix.columns[i]
-                    )
+#         # Iterate over the upper triangle of the correlation matrix
+#         for i in range(len(corr_matrix.columns) - 1):
+#             for j in range(i + 1, len(corr_matrix.columns)):
+#                 # If correlation exceeds the threshold
+#                 if corr_matrix.iloc[i, j] >= threshold:
+#                     # Identify the column to drop (preferentially the one not already in drop_cols list)
+#                     col_to_drop = (
+#                         corr_matrix.columns[j]
+#                         if corr_matrix.columns[i] not in drop_cols
+#                         else corr_matrix.columns[i]
+#                     )
 
-                    # If the column is not already marked for dropping
-                    if col_to_drop not in drop_cols:
-                        drop_cols.append(col_to_drop)
-                        continue_dropping = (
-                            True  # Set flag to re-evaluate after dropping
-                        )
+#                     # If the column is not already marked for dropping
+#                     if col_to_drop not in drop_cols:
+#                         drop_cols.append(col_to_drop)
+#                         continue_dropping = (
+#                             True  # Set flag to re-evaluate after dropping
+#                         )
 
-                        # Break to recalculate correlation matrix after dropping this column
-                        break
+#                         # Break to recalculate correlation matrix after dropping this column
+#                         break
 
-            if continue_dropping:
-                break  # Break the outer loop as well to recalculate the correlation matrix
-        try:
-            print("Dropping", drop_cols[count])
-            count += 1
-        except:
-            print("done")
-        # Drop marked columns from dataframe
-        x = x.drop(
-            columns=drop_cols, errors="ignore"
-        )  # errors='ignore' allows it to continue even if a column is not found
+#             if continue_dropping:
+#                 break  # Break the outer loop as well to recalculate the correlation matrix
+#         try:
+#             print("Dropping", drop_cols[count])
+#             count += 1
+#         except:
+#             print("done")
+#         # Drop marked columns from dataframe
+#         x = x.drop(
+#             columns=drop_cols, errors="ignore"
+#         )  # errors='ignore' allows it to continue even if a column is not found
 
-    # Output the list of dropped columns to a CSV file
-    pd.DataFrame({"highcorrelation": drop_cols}).to_csv(out_df, index=False)
+#     # Output the list of dropped columns to a CSV file
+#     pd.DataFrame({"highcorrelation": drop_cols}).to_csv(out_df, index=False)
 
-    print("Dropped columns:", drop_cols)
-    return x
+#     print("Dropped columns:", drop_cols)
+#     return x
 
 
 def extract_top_from_shaps(
@@ -340,23 +344,116 @@ def best_classifier_pipe(
     return Pipeline([("classifier", cl_estimator)])
 
 
-def get_selected_ranked_images(
-    original_rank_images_df, subset_image_list, select_how_many
-):
-    original = pd.read_csv(original_rank_images_df)
-    subset_image = pd.DataFrame({f"top{select_how_many}": subset_image_list})
-    original["basename"] = original[f"top{select_how_many}"].apply(
-        lambda x: os.path.basename(x)
+def find_selected_ranked_images(
+    ranked_features: Union[
+        str,
+        pd.DataFrame,
+        List[str],
+        Set[str],
+        Dict[
+            str,
+            float,
+        ],
+    ],
+    available_image_list: List[str],
+    select_how_many: int,
+) -> Dict:
+    """Accept a list of images and return the top n ranked images from the original rank list
+    and return the paths to the images in the order of the  available_image_list: List[str],
+
+
+    Args:
+        original_rank_images (Union[str, pd.DataFrame]): A list of ranked images
+        available_image_list (List[str]): A list of images to select from the original list
+        select_how_many (int): How many images to select from the original list
+    """
+    if isinstance(ranked_features, str):
+        original: Dict[str, list] = {
+            key: []
+            for key in pd.read_csv(ranked_features)[f"top{select_how_many}names"]
+        }
+
+    elif isinstance(ranked_features, (set, list)):
+        # convert to dictionary
+        original: Dict[str, list] = {key: [] for key in ranked_features}
+
+    elif isinstance(ranked_features, dict):
+        original: Dict[str, list] = {key: [] for key in ranked_features.keys()}
+    else:
+        raise ValueError("Ranked features must be a path to a csv, a set, or a list")
+
+    # Update dictionary with new paths if the key is in the path
+    for key in original.keys():
+        for image_path in available_image_list:
+            if key in image_path:
+                # update value by appending the path
+                original[key].append(image_path)
+
+    # select_how_many is set, return the top n images
+    if select_how_many:
+        original = dict(list(original.items())[:select_how_many])
+
+    return original
+
+
+def feature_selection_study(studyname, X, y, groups, n_splits, scoring):
+    """
+    Conducts a feature selection study using Optuna with specified classifiers.
+
+    Args:
+        studyname (str): Name of the study.
+        X (DataFrame): Features dataset.
+        y (Series): Target variable.
+        groups (Series): Group labels for group k-fold.
+        n_splits (int): Number of splits for cross-validation.
+        scoring (str): Scoring method to use.
+        output_path (str): Path to save the CSV results.
+
+    Returns:
+        None
+    """
+    # Create a study with SQLite storage
+    storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
+
+    # Delete any existing study
+    try:
+        study = optuna.load_study(study_name=studyname, storage=storage)
+        optuna.delete_study(study_name=studyname, storage=storage)
+    except Exception as e:
+        print("No existing study found or error deleting study:", e)
+
+    # Create new study
+    study = optuna.create_study(
+        storage=storage, study_name=studyname, direction="maximize"
     )
-    subset_image["basename"] = subset_image[f"top{select_how_many}"].apply(
-        lambda x: os.path.basename(x)
+
+    # Optimize the objective function
+    study.optimize(
+        lambda trial: classifier_objective(
+            trial,
+            X,
+            y,
+            groups=groups,
+            n_splits=n_splits,
+            classifier_override=["LGBM", "RandomForest"],
+            weights=None,  # Assuming weights are to be handled outside or not required
+            scoring=scoring,
+        ),
+        n_trials=100,
+        n_jobs=-1,
     )
-    ordered = subset_image.merge(
-        original, on=f"basename", how="left", suffixes=("", "_subset")
-    ).sort_values(ascending=True, by="rank")[
-        ["rank", f"top{select_how_many}", "basename"]
-    ]
-    return list(ordered[f"top{select_how_many}"])
+
+    print("Number of finished trials: {}".format(len(study.trials)))
+
+    print("Best trial:")
+    trial = study.best_trial
+    print("  Value: {}".format(trial.value))
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
+
+    # Write params to CSV
+    pd.DataFrame(study.trials_dataframe()).to_csv(studyname)
 
 
 def get_oos_confusion_matrix(

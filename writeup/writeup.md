@@ -1,5 +1,5 @@
 ---
-title: "Hit the Ground Running with Pandoc and LaTeX"
+title: "Crop Type Classification in Tanzania: Crowdsourced Data and Time Series Features"
 author: " "
 header-includes:
    - \usepackage{authblk}
@@ -15,6 +15,7 @@ header-includes:
 
 
 \begin{titlepage}
+
 \author{Michael L. Mann\thanks{Department of Geography, The George Washington University, Washington DC 20052}}
  
 \date{DRAFT (please do not cite or distribute): \today}

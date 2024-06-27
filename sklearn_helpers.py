@@ -630,6 +630,7 @@ def classifier_objective(
             min_samples_leaf=rf_min_samples_leaf,
             max_features=rf_max_features,
             criterion=rf_criterion,
+            random_state=42,
         )
 
     # ranges from https://docs.aws.amazon.com/sagemaker/latest/dg/lightgbm-tuning.html
@@ -648,6 +649,7 @@ def classifier_objective(
             bagging_fraction=lgbm_bagging_fraction,
             bagging_freq=lgbm_bagging_freq,
             min_data_in_leaf=lgbm_min_data_in_leaf,
+            random_state=42,
         )
     # Perform cross-validation
     params = {}

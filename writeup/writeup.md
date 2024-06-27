@@ -6,6 +6,8 @@ author:
   thanks: Corresponding author. Email mmann1123@gmail.com
 - name: Lisa Colson
   affiliation: USDA Foreign Agricultural Service, Washington DC 20250
+- name: Rory Nealon
+  affiliation: USAID GeoCenter, Washington DC 20523
 header-includes:
    - \usepackage{geometry}
    - |
@@ -28,7 +30,6 @@ abstract: |
   It consists of two paragraphs.
 
   This is the second paragraph of the abstract.
-bibliography: ["refs.bib"]
 ---
 
 \newgeometry{margin=1in}  

@@ -187,13 +187,14 @@ X = data.drop(
     ]
 )
 X_columns = X.columns
+
 X = pipeline_scale_clean.fit_transform(X)
 kept_features = pipeline_scale_clean.named_steps["variance_threshold"].get_support()
 X_columns = X_columns[kept_features]
 
 y = data["lc"]
 
-
+# %%
 #   Create optuna classifier study
 scoring = "kappa"
 n_splits = 3
@@ -816,19 +817,41 @@ plt.show()
 
 # %%
 ##################################################################
-# Write out final mode
+# Write out final model
 ##################################################################
 # # %%
 
 # %% Create a prediction stack
+select_images = glob("./outputs/selected_images_10m/*.tif")
+pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
 
+# %%
 with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-    src = pipeline_scale_clean.fit_transform(src)
+    src.gw.to_raster(
+        "outputs/pred_stack.tif", compress="lzw", overwrite=True, bigtiff=True
+    )
 
-    src.gw.save(
-        "outputs/pred_stack.tif",
-        compress="lzw",
-        overwrite=True,  # bigtiff=True
+
+# %%
+with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+    # fit a model to get Xy used to train model
+    df = gw.extract(src, lu_poly, verbose=1)
+    y = df["lc"]
+    X = df[range(1, len(select_images) + 1)]
+    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+    groups = df.id.values
+    weights = df.Field_size
+
+# %%
+
+skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
+    # for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+
+    pipeline_performance.fit(
+        X_train, y_train, classifier__sample_weight=weights[train_index]
     )
 
 
@@ -845,85 +868,139 @@ def user_func(w, block, model):
 
 gw.apply(
     "outputs/pred_stack.tif",
-    f"outputs/final_model_rf{len(select_images)}.tif",
+    f"outputs/final_model_lgbm{len(select_images)}.tif",
     user_func,
     args=(pipeline_performance,),
     n_jobs=16,
     count=1,
+    overwrite=True,
+    scheduler="threads",  #  LGBM needs threads since its multithreaded
 )
 
+# %% Validate distribution of pixels
 
-###############################################
-# %% Compare to unsupervised
+select_images = glob("./outputs/selected_images_10m/*.tif")
 
-files = glob("./outputs/*kmean*.tif")
+
 with gw.open(
-    files,
-    nodata=9999,
-    stack_dim="band",
+    f"outputs/final_model_lgbm{len(select_images)}.tif", nodata=9999, stack_dim="band"
 ) as src:
-    # fit a model to get Xy used to train model
-    X = gw.extract(src, lu_complete)
+    plt.hist(src.values.ravel(), bins=30, edgecolor="black")
 
-    y = lu_complete["lc"]
+data_values = src.values.ravel()
+pixels = pd.DataFrame({"values": data_values.astype(np.uint8)})
+pred = pd.DataFrame(
+    {
+        "percent": (pixels.groupby("values").size() / len(data_values))
+        .sort_values(ascending=False)
+        .values,
+        "Model": "prediction",
+    },
+    index=(pixels.groupby("values").size()).sort_values(ascending=False).index,
+)
+actual = pd.DataFrame(
+    {
+        "percent": lu_poly.lc.value_counts(normalize=True)
+        .sort_values(ascending=False)
+        .values,
+        "Model": "training data",
+    },
+    index=(lu_poly.lc.value_counts(normalize=True).sort_values(ascending=False)).index,
+)
+pred.reset_index(inplace=True)
+pred.columns = ["lc", "percent", "Model"]
+actual.reset_index(inplace=True)
 
-for i in range(0, len(files)):
-    print(files[i])
 
-    y_hat = X[i + 1]
-    y_hat = np.reshape(y_hat, (-1, 1))  # Reshape to (742, 1)
-    # Create an instance of RandomForestClassifier
-    rf_classifier = RandomForestClassifier()
+print(pred)
+print(actual)
+# %%
+pred_actual = pd.concat([pred, actual], axis=0)
+pred_actual["lc"] = le.inverse_transform(pred_actual["lc"])
 
-    # Fit the classifier to your training data
-    rf_classifier.fit(y_hat, y)
+ax = sns.barplot(data=pred_actual, x="lc", y="percent", hue="Model")
+ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+ax.set_ylabel("Percent of Pixels/Training Points")
+ax.set_xlabel("Land Use Class")
 
-    # Predict the labels for your training data
-    y_pred = rf_classifier.predict(y_hat)
+plt.savefig("outputs/final_model_lgbm_distribution.png", dpi=300, bbox_inches="tight")
+plt.show()
+# %%
 
-    # Calculate the balanced accuracy score for the training data
-    print(files[i])
-    print(f"Kapa accuracy: {cohen_kappa_score(y, y_pred)}")
+# %%
+###############################################
 
-    conf_matrix = confusion_matrix(
-        y,
-        y_pred,  # labels=le.inverse_transform(rf_classifier.classes_)
-    )
 
-    # Calculate the row-wise sums
-    row_sums = conf_matrix.sum(axis=1, keepdims=True)
+# # %% Compare to unsupervised
 
-    # Convert counts to percentages by row
-    conf_matrix_percent = conf_matrix / row_sums
+# files = glob("./outputs/*kmean*.tif")
+# with gw.open(
+#     files,
+#     nodata=9999,
+#     stack_dim="band",
+# ) as src:
+#     # fit a model to get Xy used to train model
+#     X = gw.extract(src, lu_complete)
 
-    # Get the class names
-    class_names = le.inverse_transform(rf_classifier.classes_)
+#     y = lu_complete["lc"]
 
-    # Create a heatmap using seaborn
-    plt.figure(figsize=(10, 8))
+# for i in range(0, len(files)):
+#     print(files[i])
 
-    sns.heatmap(
-        conf_matrix_percent,
-        annot=True,
-        cmap="Blues",
-        fmt=".0%",
-        xticklabels=class_names,
-        yticklabels=class_names,
-    )
+#     y_hat = X[i + 1]
+#     y_hat = np.reshape(y_hat, (-1, 1))  # Reshape to (742, 1)
+#     # Create an instance of RandomForestClassifier
+#     rf_classifier = RandomForestClassifier()
 
-    # Set labels and title
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.title(
-        f"Confusion Matrix Kmean: {files[i]} \n Kappa Accuracy = {round(cohen_kappa_score(y, y_pred),3)}"
-    )
-    plt.savefig(
-        f"outputs/final_class_perfomance_{os.path.basename(files[i])}.png",
-        bbox_inches="tight",
-    )
+#     # Fit the classifier to your training data
+#     rf_classifier.fit(y_hat, y)
 
-    # Show the plot
-    plt.show()
+#     # Predict the labels for your training data
+#     y_pred = rf_classifier.predict(y_hat)
+
+#     # Calculate the balanced accuracy score for the training data
+#     print(files[i])
+#     print(f"Kapa accuracy: {cohen_kappa_score(y, y_pred)}")
+
+#     conf_matrix = confusion_matrix(
+#         y,
+#         y_pred,  # labels=le.inverse_transform(rf_classifier.classes_)
+#     )
+
+#     # Calculate the row-wise sums
+#     row_sums = conf_matrix.sum(axis=1, keepdims=True)
+
+#     # Convert counts to percentages by row
+#     conf_matrix_percent = conf_matrix / row_sums
+
+#     # Get the class names
+#     class_names = le.inverse_transform(rf_classifier.classes_)
+
+#     # Create a heatmap using seaborn
+#     plt.figure(figsize=(10, 8))
+
+#     sns.heatmap(
+#         conf_matrix_percent,
+#         annot=True,
+#         cmap="Blues",
+#         fmt=".0%",
+#         xticklabels=class_names,
+#         yticklabels=class_names,
+#     )
+
+#     # Set labels and title
+#     plt.xlabel("Predicted")
+#     plt.ylabel("True")
+#     plt.title(
+#         f"Confusion Matrix Kmean: {files[i]} \n Kappa Accuracy = {round(cohen_kappa_score(y, y_pred),3)}"
+#     )
+#     plt.savefig(
+#         f"outputs/final_class_perfomance_{os.path.basename(files[i])}.png",
+#         bbox_inches="tight",
+#     )
+
+#     # Show the plot
+#     plt.show()
 
 # %%
 

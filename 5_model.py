@@ -13,6 +13,7 @@ from sklearn_helpers import (
     get_oos_confusion_matrix,
     # remove_list_from_list,
     feature_selection_study,
+    compute_shap_importance,
 )
 import pickle
 import pandas as pd
@@ -214,53 +215,20 @@ os.chdir(
 # %%
 
 # Create a study with SQLite storage
-storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
+storage_name = "sqlite:///study.db"
 study_name = (
     f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
 )
 
-# delete any existing study
-try:
-    study = optuna.load_study(
-        study_name=study_name,
-        storage=storage,
-    )
-    optuna.delete_study(
-        study_name=study_name,
-        storage=storage,
-    )
-except:
-    pass
-
-# create new study
-study = optuna.create_study(
-    storage=storage,
-    study_name=study_name,
-    direction="maximize",
-)
-
-
-# Optimize the objective function
-study.optimize(
-    lambda trial: classifier_objective(
-        trial,
-        X,
-        y,
-        groups=groups,
-        n_splits=n_splits,
-        scoring=scoring,
-        classifier_override=classifier,
-    ),
-    n_trials=n_trials,
-    n_jobs=n_jobs,
-)
+# Run study
+feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scoring)
 
 
 # Try to load the study from the storage
 try:
-    loaded_study = optuna.load_study(
+    study = optuna.load_study(
         study_name=study_name,
-        storage=storage,
+        storage=storage_name,
     )
     print("The study was saved correctly.")
 except:
@@ -277,13 +245,10 @@ print("  Params: ")
 for key, value in trial.params.items():
     print("    {}: {}".format(key, value))
 
-# write params to csv
-pd.DataFrame(study.trials_dataframe()).to_csv(
-    f"../models/model_selection_feature_selection_{scoring}_{n_splits}.csv"
-)
 # %%
 #  Open results after restarting kernel
-# conn = sqlite3.connect("study.db")
+
+
 storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
 
 # check names of studies
@@ -315,7 +280,7 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 # Print the ranked listing of trials
 print(sorted_trials[["number", "value", "params_classifier"]])
 
-# %% Create out of sample confusion matrix
+# %% Create out of sample confusion matrix for all variables model
 
 groups = data["field_id"].values
 X = data.drop(
@@ -376,50 +341,12 @@ lgbm_pipe = best_classifier_pipe(
 )
 params_lgbm_dict = lgbm_pipe["classifier"].get_params()
 
-# %%
+# %% get shaps importance
 
-skf = StratifiedGroupKFold(
-    n_splits=3, shuffle=True, random_state=7
-)  # probably could use 5 nsplits
 
-feature_importance_list = []
-shaps_importance_list = []
-for train_index, test_index in skf.split(X, y, groups=groups):
-    X_train, X_test = X[train_index], X[test_index]
-    y_train, y_test = y[train_index], y[test_index]
-
-    for metric in ["multi_error", "multi_logloss"]:
-        # Train the LightGBM model
-        params = params_lgbm_dict.copy()
-        params["objective"] = "multiclass"
-        params["metric"] = metric
-        params["num_classes"] = len(data["lc"].unique())
-        d_train = lgb.Dataset(X_train, label=y_train)
-        d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
-        model = lgb.train(
-            params,
-            d_train,
-            10000,
-            valid_sets=[d_test],
-            early_stopping_rounds=200,
-            verbose_eval=1000,
-        )
-
-        # SHAP exaplainer
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X)
-        shaps_importance_list.append(shap_values)
-
-        # feature importance
-        shap.summary_plot(
-            shap_values,
-            X,
-            feature_names=[x.replace("_", ".") for x in X_columns],
-            class_names=le.classes_,
-            plot_type="bar",
-            max_display=20,
-            plot_size=(10, 10),
-        )
+shaps_importance_list = compute_shap_importance(
+    X, y, groups, params_lgbm_dict, X_columns, le, n_splits=3, random_state=42
+)
 
 #  save pickle of shaps_importance_list
 with open(
@@ -428,8 +355,7 @@ with open(
     pickle.dump(shaps_importance_list, f)
 
 
-#  Calculate mean shapes values
-# %%
+# %% Calculate mean shapes values
 mean_shaps = [
     np.mean(np.abs(elements), axis=0) for elements in zip(*shaps_importance_list)
 ]
@@ -451,7 +377,8 @@ plt.savefig(
 )
 
 
-# %% By default the features are ordered using shap_values.abs.mean(0), which is the mean absolute value of
+# %% Calculate max shapes values
+# By default the features are ordered using shap_values.abs.mean(0), which is the mean absolute value of
 # the SHAP values for each feature.
 # This order however places more emphasis on broad average impact, and less on rare but high magnitude impacts.
 # If we want to find features with high impacts for individual classes we can instead sort by the max absolute
@@ -525,20 +452,18 @@ select_images
 y = data["lc"]
 
 X = data[list(select_images)].values
-
-studyname = f"model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
+storage_name = "sqlite:///study.db"
+study_name = f"model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
 
 # Create a study with SQLite storage
-feature_selection_study(studyname, X, y, groups, n_splits, scoring)
+feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scoring)
 
 # %%
 #   optuna classifier study
-
-
 study = optuna.load_study(
-    storage="sqlite:///study.db",
-    study_name=studyname,
+    storage_name,
+    study_name,
 )
 
 
@@ -572,6 +497,27 @@ for summary in study_summaries:
     # study = optuna.load_study(storage=storage, study_name=summary.study_name)
 
 # Note: using model_selection_no_kbest_30_LGBM_kappa_3
+
+
+# %% Get out of sample confusion matrix for final model
+
+final_study = optuna.load_study(
+    storage="sqlite:///study.db",
+    study_name=study_name,
+)
+
+get_oos_confusion_matrix(
+    pipeline=pipeline_performance,
+    X=X,
+    y=y,
+    groups=groups,
+    class_names=class_names,
+    label_encoder=label_encoder,
+    weights=data.Field_size,
+    n_splits=5,
+    random_state=42,
+    save_path=f"../outputs/final_model_subset_nokbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
+)
 
 
 # %%

@@ -6,7 +6,6 @@ from lightgbm import LGBMClassifier
 import sqlite3
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import balanced_accuracy_score, matthews_corrcoef
-from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
 from sklearn.model_selection import (
@@ -16,24 +15,104 @@ from sklearn.model_selection import (
 )
 import numpy as np
 from glob import glob
-from sklearn.metrics import get_scorer_names
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import SelectFromModel
 from sklearn.metrics import balanced_accuracy_score, cohen_kappa_score, confusion_matrix
 from sklearn.model_selection import StratifiedGroupKFold
-from typing import Union, List, Dict, Set, Optional
+from typing import Union, List, Dict, Set, Optional, Any, Tuple
 import os
-import pandas as pd
+import lightgbm as lgb
+import shap
+from sklearn.preprocessing import LabelEncoder
 
 
 def remove_list_from_list(main_list, remove_containing):
     for remove in remove_containing:
         main_list = [x for x in main_list if remove not in x]
     return main_list
+
+
+def compute_shap_importance(
+    X: np.ndarray,
+    y: np.ndarray,
+    groups: np.ndarray,
+    params_lgbm_dict: Dict[str, Any],
+    X_columns: List[str],
+    le: LabelEncoder,
+    n_splits: int = 3,
+    random_state: int = 7,
+) -> List[np.ndarray]:
+    """
+    Trains a LightGBM model and computes SHAP values across specified number of cross-validation folds.
+
+    Args:
+        X (np.ndarray): Feature dataset.
+        y (np.ndarray): Target variable.
+        groups (np.ndarray): Group labels for group k-fold.
+        params_lgbm_dict (Dict[str, Any]): Base parameters for LightGBM.
+        X_columns (List[str]): List of feature names.
+        le (LabelEncoder): Encoder for class names.
+        n_splits (int): Number of splits for StratifiedGroupKFold.
+        random_state (int): Random state for reproducibility.
+
+    Returns:
+        List[np.ndarray]: A list of SHAP values from each fold and metric.
+    """
+    skf = StratifiedGroupKFold(
+        n_splits=n_splits, shuffle=True, random_state=random_state
+    )
+
+    shaps_importance_list = []
+    for train_index, test_index in skf.split(X, y, groups=groups):
+        X_train, X_test = X[train_index], X[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        for metric in ["multi_error", "multi_logloss"]:
+            # Prepare parameters
+            params = params_lgbm_dict.copy()
+            params.update(
+                {
+                    "objective": "multiclass",
+                    "metric": metric,
+                    "num_classes": len(np.unique(y)),
+                    "seed": random_state,
+                }
+            )
+
+            # Create LightGBM datasets
+            d_train = lgb.Dataset(X_train, label=y_train)
+            d_test = lgb.Dataset(X_test, label=y_test, reference=d_train)
+
+            # Train the model
+            model = lgb.train(
+                params,
+                d_train,
+                num_boost_round=10000,
+                valid_sets=[d_test],
+                early_stopping_rounds=200,
+                verbose_eval=1000,
+            )
+
+            # SHAP explainer
+            explainer = shap.TreeExplainer(model)
+            shap_values = explainer.shap_values(X)
+            shaps_importance_list.append(shap_values)
+
+            # Optionally, plot the feature importance
+            shap.summary_plot(
+                shap_values,
+                X,  # Consider changing to X_test
+                feature_names=[x.replace("_", ".") for x in X_columns],
+                class_names=le.classes_,
+                plot_type="bar",
+                max_display=20,
+                plot_size=(10, 10),
+            )
+
+    return shaps_importance_list
 
 
 # def remove_collinear_features(x, threshold, out_df="./outputs/collinear_features.csv"):
@@ -396,12 +475,13 @@ def find_selected_ranked_images(
     return original
 
 
-def feature_selection_study(studyname, X, y, groups, n_splits, scoring):
+def feature_selection_study(studyname, storage_name, X, y, groups, n_splits, scoring):
     """
     Conducts a feature selection study using Optuna with specified classifiers.
 
     Args:
         studyname (str): Name of the study.
+        storage_name (str): Name of the storage. eg 'sqlite:///study.db'
         X (DataFrame): Features dataset.
         y (Series): Target variable.
         groups (Series): Group labels for group k-fold.
@@ -413,7 +493,7 @@ def feature_selection_study(studyname, X, y, groups, n_splits, scoring):
         None
     """
     # Create a study with SQLite storage
-    storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
+    storage = optuna.storages.RDBStorage(url=storage_name)
 
     # Delete any existing study
     try:

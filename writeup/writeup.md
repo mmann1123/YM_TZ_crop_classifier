@@ -87,4 +87,4 @@ This document is a simple demonstration of MyST Markdown capabilities.
 \newpage
 # References
 <!-- Compile with  -->
-<!-- pandoc writeup.md --citeproc --bibliography=refs.bib -o output.pdf -->
+<!-- pandoc writeup.md --citeproc --bibliography=refs.bib -o compiledpaper.pdf -->

@@ -570,6 +570,9 @@ for summary in study_summaries:
     # # grab results
     # study = optuna.load_study(storage=storage, study_name=summary.study_name)
 
+# Note: using model_selection_no_kbest_30_LGBM_kappa_3
+
+
 # %%
 #########################################################
 ############ get 10m images for final model #############
@@ -585,28 +588,68 @@ select_image_paths = find_selected_ranked_images(
         x + "_0" for x in select_images
     ],  # append _0 to avoid matching multipl uses of values like 'mean'
     available_image_list=glob("../features/*/*.tif"),
-    select_how_many=select_how_many,
+    # select_how_many=len(select_images), dont use doesn't make sense with multiple zones
 )
+
+# update keys to remove _0
+select_image_paths = {k.replace("_0", ""): v for k, v in select_image_paths.items()}
 select_image_paths
 
 # %%
-images = [
-    "../features/B12/B12_kurtosis_0000000000-0000046592.tif",
-    "../features/B12/B12_kurtosis_0000000000-0000000000.tif",
+from shapely.geometry import box
+
+# from shapely import bounds
+from rasterio.coords import BoundingBox
+import geopandas as gpd
+
+# create bounding box for images
+with gw.open(select_image_paths["B12_maximum"], mosaic=True) as src:
+    bbox = BoundingBox(*src.gw.bounds)
+    print(bbox)
+
+
+# Calculate the width and height of each quadrant
+width = (bbox.right - bbox.left) / 2
+height = (bbox.top - bbox.bottom) / 2
+
+# Create quadrants
+quadrants = [
+    box(bbox.left, bbox.bottom, bbox.left + width, bbox.bottom + height),  # Bottom Left
+    box(bbox.left, bbox.bottom + height, bbox.left + width, bbox.top),  # Top Left
+    box(
+        bbox.left + width, bbox.bottom, bbox.right, bbox.bottom + height
+    ),  # Bottom Right
+    box(bbox.left + width, bbox.bottom + height, bbox.right, bbox.top),  # Top Right
 ]
-# create vrt files for multiple images using gdal
-import gdal
 
-# create vrt file
-vrt_options = gdal.BuildVRTOptions(resampleAlg="nearest")
-gdal.BuildVRT(
-    f"outputs/selected_images_10m.vrt",
-    images,
-    options=vrt_options,
-)
+# Create a GeoDataFrame
+gdf = gpd.GeoDataFrame({"geometry": quadrants}, crs=src.crs)
 
-with gw.open(f"outputs/selected_images_10m.vrt", nodata=9999) as src:
-    display(src)
+# Save to GeoJSON
+geojson_path = "../grids/quadrants.geojson"
+gdf.to_file(geojson_path, driver="GeoJSON")
+
+# %%
+
+
+# # %%
+# images = [
+#     "../features/B12/B12_kurtosis_0000000000-0000046592.tif",
+#     "../features/B12/B12_kurtosis_0000000000-0000000000.tif",
+# ]
+# # create vrt files for multiple images using gdal
+# import gdal
+
+# # create vrt file
+# vrt_options = gdal.BuildVRTOptions(resampleAlg="nearest")
+# gdal.BuildVRT(
+#     f"outputs/selected_images_10m.vrt",
+#     images,
+#     options=vrt_options,
+# )
+
+# with gw.open(f"outputs/selected_images_10m.vrt", nodata=9999) as src:
+#     display(src)
 
 # %%
 ########################################################
@@ -624,7 +667,6 @@ print(pipeline_performance)
 select_images = get_selected_ranked_images(
     original_rank_images=select_images,
     available_image_list=glob("./outputs/selected_images_10m/*.tif"),
-    select_how_many=select_how_many,
 )
 
 # select_images = glob("./outputs/selected_images_10m/*.tif")

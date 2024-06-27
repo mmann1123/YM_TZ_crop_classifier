@@ -356,7 +356,7 @@ def find_selected_ranked_images(
         ],
     ],
     available_image_list: List[str],
-    select_how_many: int,
+    select_how_many: int = None,
 ) -> Dict:
     """Accept a list of images and return the top n ranked images from the original rank list
     and return the paths to the images in the order of the  available_image_list: List[str],
@@ -390,7 +390,7 @@ def find_selected_ranked_images(
                 original[key].append(image_path)
 
     # select_how_many is set, return the top n images
-    if select_how_many:
+    if select_how_many is not None:
         original = dict(list(original.items())[:select_how_many])
 
     return original

@@ -161,6 +161,7 @@ Feature selection then is the union of the top 30 time series features found wit
 ## Results
 
 ### Land Cover and Crop Type
+
 The distribution of primary land cover types within the training dataset used for the model is represented in Figure \ref{fig:lc_percentages}. The dataset consists of a diverse range of land cover types, each contributing differently to the total number of observations. Maize is the most prevalent land cover type, accounting for the highest percentage of the observations, followed by rice and sunflower. This is indicative of the agricultural dominance in the region being studied. Lesser common land covers such as millet, sorghum, and urban areas represent intermediate percentages, suggesting a varied landscape that includes both agricultural and urbanized zones.
  
 \begin{figure}[ht]
@@ -174,7 +175,20 @@ The distribution of primary land cover types within the training dataset used fo
 
 ### Feature Importance
 
+### Model Performance
 
+The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.7975, indicating substantial agreement between predicted and actual classifications. The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, 'rice' and 'urban' categories achieved classification accuracies of 90% and 94%, respectively. Other well-classified categories included 'forest' and 'millet', each with over 70% accuracy. However 'forest' is primarily confused with the category 'shrub', which is likely a result of poor training data. 
+
+Categories such as 'sorghum' and 'cotton' displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types. Notably, the 'other' category showed a broader distribution of misclassifications, likely due to its encompassing a diverse range of less frequent land covers, achieving a lower accuracy of 40%.
+
+The overall high performance across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/final_confusion_final_model_selection_no_kbest_30_LGBM_kappa_3.png} % Adjust the path and options
+    \caption{Out of Sample Confusion Matrix}
+    \label{fig:oos_confusion} %can refer to in text with \ref{fig:lc_percentages}
+\end{figure}
 
 
 ## Conclusion

@@ -76,19 +76,37 @@ The study area is located in Tanzania, a country in East Africa known for its di
 
 @rory or stella - Can you create a *pretty* map of the study area? the bounds file is northern_TZ_states.geojson
 
-## Data Collection
+### Crowd Sourced Crop Data
 
 @anyone __________describe YM data collection__________
 
-### Crowd Sourced Data
 
 ### Satellite Imagery
 Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area during the growing season, capturing the spectral characteristics of different crop types. The Sentinel-2 data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes. 
 
 In our study, cloud and cloud shadow contamination was mitigated using the 's2cloudless' machine learning model on the Google Earth Engine platform. Cloudy pixels were identified using a cloud probability mask, with pixels having a probability above 50% classified as clouds. To detect cloud shadows, we used the Near-Infrared (NIR) spectrum to flag dark pixels not identified as water as potential shadow pixels. The projected shadows from the clouds were identified using a directional distance transform based on the solar azimuth angle from the image metadata. A combined cloud and shadow mask was refined through morphological dilation, creating a buffer zone to ensure comprehensive coverage. This mask was applied to the Sentinel-2 surface reflectance data to exclude all pixels identified as clouds or shadows, enhancing the reliability of the dataset for environmental analysis.
 
-Monthly composites were collected for January through August of 2023 for the the bands B2, B6, B8, B11, and B12. Due to the high prevelence of clouds in the region, we used linear interpolation to fill in missing data in the time series using xr_fresh [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
+Monthly composites were collected for January through August of 2023 for the the bands B2, B6, B8, B11, and B12. Due to the high prevelence of clouds in the region, we used linear interpolation to fill in missing data in the time series using `xr_fresh` [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
 
+### Time Series Features
+Time series features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. We leverage the time series nature of the satellite imagery to extract relevant features for crop type classification.
+
+In this study, we utilized the `xr_fresh` toolkit to compute detailed time-series statistics for various spectral bands, facilitating comprehensive pixel-by-pixel temporal analysis [@xr_fresh_2021]. The `xr_fresh` framework is specifically designed to extract a wide array of statistical measures from time-series data, which are essential for understanding temporal dynamics in remote sensing datasets.
+
+The metrics computed by `xr_fresh` in this study include basic statistical descriptors, changes over time, and distribution-based metrics, applied to each pixel's time series for selected spectral bands (B12, B11, hue, B6, EVI, and B2). The list of computed time-series statistics encompasses:
+
+- **Energy Measures**: Absolute energy which provides a sum of squares of the values.
+- **Change Metrics**: Absolute sum of changes to quantify overall variability, mean absolute change, and mean change.
+- **Autocorrelation**: Calculated for three lags (1, 2, and 3) to assess the serial dependence at different time intervals.
+- **Count Metrics**: Count above and below mean, capturing the frequency of high and low values relative to the average.
+- **Extreme Values**: Day of the year for maximum and minimum values, providing insight into seasonal patterns.
+- **Distribution Characteristics**: Kurtosis, skewness, and quantiles (5th and 95th percentiles) to describe the shape and spread of the distribution.
+- **Variability Metrics**: Standard deviation, variance, and whether variance is larger than standard deviation to evaluate the dispersion of values.
+- **Complexity and Trend Analysis**: Time series complexity and symmetry looking, adding depth to the analysis of temporal patterns.
+
+Notably, certain statistics like `longest_strike_above_mean` and `longest_strike_below_mean` were excluded due to computational constraints related to GPU memory capacity on the JAX platform. Additionally, some planned metrics such as OLS slope, intercept, and R-squared calculations were not implemented.
+
+The integration of `xr_fresh` into our analytical workflow allowed for an automated and robust analysis of temporal patterns across the study area. By leveraging this toolkit, we could efficiently process large datasets, ensuring that each pixel's temporal dynamics were comprehensively characterized, which is critical for accurate environmental monitoring and change detection.
 
 
 <!-- ├── Significance and Innovations
@@ -106,16 +124,7 @@ Monthly composites were collected for January through August of 2023 for the the
 
 
 
-## Citation
 
- 
-## Mathematics
-
-Here is an example of a mathematical formula in LaTeX:
-
-$$
-e^{i\pi} + 1 = 0
-$$
 
 ## Conclusion
 

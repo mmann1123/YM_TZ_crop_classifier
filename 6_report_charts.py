@@ -8,7 +8,68 @@ import matplotlib.image as mpimg
 import os
 import urllib
 import PIL
+import seaborn as sns
+import geopandas as gpd
 
+os.chdir(
+    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/"
+)
+drop = [
+    "Don't know",
+    "Other (later, specify in optional notes)",
+    "water_body",
+    "large_building",
+    "could be maize.",
+    "no",
+    "don_t_know",
+    "fallow_barren",  # only two examples
+    "forest_shrubland",  # only two examples
+]
+data = gpd.read_file("outputs/lu_complete_inputs.geojson")
+data
+
+data.drop(data[data["lc_name"].isin(drop)].index, inplace=True)
+
+secondary_count = data.groupby(["lc_name"])["lc_name"].count()
+secondary_count = secondary_count.reset_index(name="count")
+
+# Calculate the total number of observations
+total_observations = secondary_count["count"].sum()
+
+# Calculate the percentage for each category
+secondary_count["percentage"] = (secondary_count["count"] / total_observations) * 100
+
+# Sort the DataFrame by percentage in descending order
+secondary_count.sort_values(by="percentage", ascending=False, inplace=True)
+
+
+secondary_count.sort_values(by="percentage", inplace=True, ascending=False)
+# Create the histogram plot
+ax = sns.barplot(data=secondary_count, x="lc_name", y="percentage")
+
+# Rotate the x-axis labels vertically
+ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+ax.set_xlabel("Primary Land Cover", fontsize=15)
+
+# increas font size for x and y axis and axis labels
+plt.xticks(fontsize=15)
+plt.yticks(fontsize=15)
+
+
+plt.ylabel("% of Total Observations", fontsize=15)
+
+# Use tight_layout to automatically adjust subplot parameters
+plt.tight_layout()
+
+plt.savefig(
+    f"/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/primary_land_cover.png",
+)
+
+# Display the plot
+plt.show()
+
+
+# %%
 
 # NOTES: Millet, Sorghum, maize very similar especially when young,
 # maybe combine millet and sorghum into one category

@@ -85,7 +85,7 @@ lu_complete = lu_complete[["lc_name", "Field_size", "Quality", "geometry"]]
 
 
 # get buffer size based on field size
-# large fields are defines as 400m x 400m  NOTE: THESE DON'T SEEM RIGHT, FIELDS ARE TOO LARGE
+# large fields are defines as 400m x 400m   #NOTE: used small buffers to avoid heterogeneity in the data
 lu_complete.Field_size.replace(
     {
         "Small": 5,
@@ -103,6 +103,8 @@ lu_complete.Field_size.replace(
     inplace=True,
 )
 
+# write out combined data
+lu_complete.to_file("../outputs/lu_complete_inputs.geojson", driver="GeoJSON")
 
 # PROBLEM - THIS DOESN'T RETAIN THE ORIGINAL POINTS
 # buffer points based on filed size
@@ -110,6 +112,8 @@ lu_poly = lu_complete.copy()
 lu_poly = lu_poly[lu_poly.is_valid]
 lu_poly["geometry"] = lu_poly.apply(lambda x: x.geometry.buffer(x.Field_size), axis=1)
 lu_poly["sample"] = (lu_poly.Field_size // 5).astype(int)
+
+
 # %%
 # sample points
 lu_points_sample = lu_poly.copy()

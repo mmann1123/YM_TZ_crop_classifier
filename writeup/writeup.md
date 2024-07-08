@@ -8,6 +8,8 @@ author:
   affiliation: USDA Foreign Agricultural Service, Washington DC 20250
 - name: Rory Nealon
   affiliation: USAID GeoCenter, Washington DC 20523
+- name: Stellamaris Wavamunno Nakacwa
+  affliation: 
 header-includes:
    - \usepackage{geometry}
    - |
@@ -31,6 +33,9 @@ abstract: |
 
   This is the second paragraph of the abstract.
 ---
+
+@stella add you details above
+
 
 \newgeometry{margin=1in}  
 
@@ -101,6 +106,8 @@ The study area is located in Tanzania, a country in East Africa known for its di
 
 (keep this ->) The land cover classes included in the analysis were rice, maize, cassava, sunflower, sorghum, urban, forest, shrub, tidal, cotton, water, and millet. Classes excluded due to irrelevance or insufficient data included 'Don't know', 'Other (specify later)', 'water body', 'large building', and several others which were either ambiguous or represented a negligible fraction of the data.
 
+Additional training data was collected utilizing high resolution imagery from Google Earth. This data was used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  
+
 ### Satellite Imagery
 
 Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area during the growing season, capturing the spectral characteristics of different crop types. The Sentinel-2 data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes. 
@@ -150,12 +157,18 @@ In our feature selection process, we incorporate both the mean and maximum SHAP 
 
 Feature selection then is the union of the top 30 time series features found with both the mean and maximum SHAP values, resulting in 33 total features. This approach ensures that the selected features are both consistently influential across the dataset and capable of exerting substantial impacts under specific conditions, providing a comprehensive set of features for model training and evaluation.
 
+## Results
+
+### Feature Importance
+
+![Land Cover Percentages](/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/primary_land_cover.png)
+
+
 ## Conclusion
 
-This document is a simple demonstration of MyST Markdown capabilities.
 
 \newpage
 # References
 
 <!-- compile working with:
-andoc writeup.md --template=mytemplate.tex -o output.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc -->
+pandoc writeup.md --template=mytemplate.tex -o output.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc -->

@@ -475,7 +475,9 @@ def find_selected_ranked_images(
     return original
 
 
-def feature_selection_study(studyname, storage_name, X, y, groups, n_splits, scoring):
+def feature_selection_study(
+    studyname, storage_name, X, y, groups, n_splits, scoring, n_trials=100
+):
     """
     Conducts a feature selection study using Optuna with specified classifiers.
 
@@ -519,7 +521,7 @@ def feature_selection_study(studyname, storage_name, X, y, groups, n_splits, sco
             weights=None,  # Assuming weights are to be handled outside or not required
             scoring=scoring,
         ),
-        n_trials=100,
+        n_trials=n_trials,
         n_jobs=-1,
     )
 
@@ -613,13 +615,13 @@ def get_oos_confusion_matrix(
     plt.title(
         f"Out of Sample Mean Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}"
     )
-    plt.show()
 
     if save_path:
         plt.savefig(
             save_path,
             bbox_inches="tight",
         )
+    plt.show()
 
     return {
         "balanced_accuracy": balanced_accuracy,

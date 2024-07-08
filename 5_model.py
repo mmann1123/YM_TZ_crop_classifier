@@ -221,7 +221,9 @@ study_name = (
 )
 
 # Run study
-feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scoring)
+feature_selection_study(
+    study_name, storage_name, X, y, groups, n_splits, scoring, n_trials=500
+)
 
 
 # Try to load the study from the storage
@@ -316,7 +318,7 @@ get_oos_confusion_matrix(
     class_names=class_names,
     label_encoder=label_encoder,
     weights=data.Field_size,
-    n_splits=5,
+    n_splits=3,
     random_state=42,
     save_path=f"../outputs/final_class_perfomance_rf_kbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
 )
@@ -447,25 +449,29 @@ select_images = set(
 
 select_images
 
-# %%
+# %% final model with subset of features
 
 y = data["lc"]
 
 X = data[list(select_images)].values
 storage_name = "sqlite:///study.db"
-study_name = f"model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
+study_name = f"final_model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
 
 # Create a study with SQLite storage
 feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scoring)
 
-# %%
+# %% retrieve results from final model
 #   optuna classifier study
-study = optuna.load_study(
-    storage_name,
-    study_name,
-)
 
+
+# %%
+storage_load = optuna.storages.RDBStorage(url=storage_name)
+
+study = optuna.load_study(
+    study_name=study_name,
+    storage=storage_name,
+)
 
 # Access the top trials
 top_trials = study.best_trials
@@ -484,10 +490,9 @@ sorted_trials = trials_df.sort_values("value", ascending=False)
 # Print the ranked listing of trials
 print(sorted_trials[["number", "value", "params_classifier"]])
 
-##################################################################
-# %%
 
-# print study names and best trial performance
+# %% print study names and best trial performance
+
 study_summaries = optuna.study.get_all_study_summaries(storage=storage)
 for summary in study_summaries:
     print(summary.study_name)
@@ -503,7 +508,7 @@ for summary in study_summaries:
 
 final_study = optuna.load_study(
     storage="sqlite:///study.db",
-    study_name=study_name,
+    study_name="model_selection_no_kbest_30_LGBM_kappa_3",  # final model
 )
 
 get_oos_confusion_matrix(
@@ -514,9 +519,9 @@ get_oos_confusion_matrix(
     class_names=class_names,
     label_encoder=label_encoder,
     weights=data.Field_size,
-    n_splits=5,
+    n_splits=3,
     random_state=42,
-    save_path=f"../outputs/final_model_subset_nokbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
+    save_path=f"../outputs/final_confusion_{study_name}.png",
 )
 
 

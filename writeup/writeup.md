@@ -71,16 +71,24 @@ In this study we aim to address two critical challenges in the field of crop typ
 Data for this study were collected from multiple sources, including satellite imagery, and crowdsourced ground truth observations. 
 
 ## Study Area
-The study area is located in Tanzania, a country in East Africa known for its diverse agricultural landscape. The region is characterized by a mix of smallholder farms, commercial plantations, and natural vegetation, making it an ideal location for studying crop type classification.
+@anyone _____________ revise this _________________ 
+The study area is located in Tanzania, a country in East Africa known for its diverse agricultural landscape. We focus on the 15 northern most ?states? including Arusha, Dodoma, Geita, Kagera, Katavi, Kigoma, Kilimanjaro, Manyara, Mara, Mwanza, Shinyanga, Simiyu, Singida, Tabora and Tanga.  The region is characterized by a mix of smallholder farms, commercial plantations, and natural vegetation, making it an ideal location for studying crop type classification.  ??? 
 
 @rory or stella - Can you create a *pretty* map of the study area? the bounds file is northern_TZ_states.geojson
 
 ## Data Collection
 
+@anyone __________describe YM data collection__________
 
 ### Crowd Sourced Data
 
 ### Satellite Imagery
+Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area during the growing season, capturing the spectral characteristics of different crop types. The Sentinel-2 data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes. 
+
+In our study, cloud and cloud shadow contamination was mitigated using the 's2cloudless' machine learning model on the Google Earth Engine platform. Cloudy pixels were identified using a cloud probability mask, with pixels having a probability above 50% classified as clouds. To detect cloud shadows, we used the Near-Infrared (NIR) spectrum to flag dark pixels not identified as water as potential shadow pixels. The projected shadows from the clouds were identified using a directional distance transform based on the solar azimuth angle from the image metadata. A combined cloud and shadow mask was refined through morphological dilation, creating a buffer zone to ensure comprehensive coverage. This mask was applied to the Sentinel-2 surface reflectance data to exclude all pixels identified as clouds or shadows, enhancing the reliability of the dataset for environmental analysis.
+
+Monthly composites were collected for January through August of 2023 for the the bands B2, B6, B8, B11, and B12. Due to the high prevelence of clouds in the region, we used linear interpolation to fill in missing data in the time series using xr_fresh [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
+
 
 
 <!-- ├── Significance and Innovations

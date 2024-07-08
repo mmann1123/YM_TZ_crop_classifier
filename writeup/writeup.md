@@ -67,6 +67,23 @@ In this study we aim to address two critical challenges in the field of crop typ
 
  We propose a novel approach that combines crowdsourced data with time series features extracted from satellite imagery to classify crop types in Tanzania. By leveraging the power of crowdsourcing and remote sensing technologies, we aim to develop a robust and scalable solution for crop type classification that can be applied in other regions and contexts.
 
+
+<!-- ├── Significance and Innovations
+|    ├── Contributions to the Field
+|    └── Innovations in Methodology or Technology -->
+
+
+
+<!-- ├── Literature Review
+|    ├── Previous Work
+|    └── Distinction from Prior Work -->
+
+<!-- └── Outline of the Paper
+    └── Structure of Subsequent Sections -->
+
+
+
+
 # Data & Methods
 Data for this study were collected from multiple sources, including satellite imagery, and crowdsourced ground truth observations. 
 
@@ -80,13 +97,14 @@ The study area is located in Tanzania, a country in East Africa known for its di
 
 @anyone __________describe YM data collection__________
 
+(keep this ->) The land cover classes included in the analysis were rice, maize, cassava, sunflower, sorghum, urban, forest, shrub, tidal, cotton, water, and millet. Classes excluded due to irrelevance or insufficient data included 'Don't know', 'Other (specify later)', 'water body', 'large building', and several others which were either ambiguous or represented a negligible fraction of the data.
 
 ### Satellite Imagery
 Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area during the growing season, capturing the spectral characteristics of different crop types. The Sentinel-2 data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes. 
 
 In our study, cloud and cloud shadow contamination was mitigated using the 's2cloudless' machine learning model on the Google Earth Engine platform. Cloudy pixels were identified using a cloud probability mask, with pixels having a probability above 50% classified as clouds. To detect cloud shadows, we used the Near-Infrared (NIR) spectrum to flag dark pixels not identified as water as potential shadow pixels. The projected shadows from the clouds were identified using a directional distance transform based on the solar azimuth angle from the image metadata. A combined cloud and shadow mask was refined through morphological dilation, creating a buffer zone to ensure comprehensive coverage. This mask was applied to the Sentinel-2 surface reflectance data to exclude all pixels identified as clouds or shadows, enhancing the reliability of the dataset for environmental analysis.
 
-Monthly composites were collected for January through August of 2023 for the the bands B2, B6, B8, B11, and B12. Due to the high prevelence of clouds in the region, we used linear interpolation to fill in missing data in the time series using `xr_fresh` [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
+Monthly composites were collected for January through August of 2023 for the the bands B2, B6, B8, B11, and B12. We also calcuate the Enhanced Vegetation Index (EVI) and 'hue' the color spectrum value. This computed hue value provides the basic color as perceived in the color wheel, from red, through green, blue, and back to red. Due to the high prevelence of clouds in the region, we used linear interpolation to fill in missing data in the time series using `xr_fresh` [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
 
 ### Time Series Features
 Time series features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. We leverage the time series nature of the satellite imagery to extract relevant features for crop type classification.
@@ -108,23 +126,17 @@ Notably, certain statistics like `longest_strike_above_mean` and `longest_strike
 
 The integration of `xr_fresh` into our analytical workflow allowed for an automated and robust analysis of temporal patterns across the study area. By leveraging this toolkit, we could efficiently process large datasets, ensuring that each pixel's temporal dynamics were comprehensively characterized, which is critical for accurate environmental monitoring and change detection.
 
-
-<!-- ├── Significance and Innovations
-|    ├── Contributions to the Field
-|    └── Innovations in Methodology or Technology -->
+### Data Extraction
+To partially accound for variation in field size we extract pixels based on a buffer around field point locations. Small fields were buffered by only 5 meters, medium by 10m and large by 30m. This approach allowed us to capture the time series features from the surrounding area, providing a more comprehensive representation of the field's characteristics. The use of larger buffers was explored but found to decrease model performance as fields tended to be heterogenous - for instance containing patches of trees. To account for this in our modeling we treat observations from the same field as a "group" in our cross-validation scheme - as described below.
 
 
+### Machine Learning Models
 
-<!-- ├── Literature Review
-|    ├── Previous Work
-|    └── Distinction from Prior Work -->
+In our study, we utilized the extracted time-series features from satellite imagery, described above, to analyze crop classifications.  Notably, features were centered and scaled from the `scikit-learn` library to normalize the data, followed by the application of a variance threshold method to reduce dimensionality by excluding features with low variance [@scikit-learn].
 
-<!-- └── Outline of the Paper
-    └── Structure of Subsequent Sections -->
+In this study, we employed `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study using Optuna where each trial proposed a set of model parameters aimed at optimizing performance metrics. Specifically, we used stratified group k-fold cross-validation with the number of splits set to three, ensuring that samples from the same field were not split across training and validation sets to prevent data leakage. The scoring metric utilized was the kappa statistic, chosen for its suitability in evaluating models on imbalanced datasets.
 
-
-
-
+This approach allowed us to rigorously evaluate and compare different classifiers, including LightGBM, Support Vector Classification, and RandomForest, and their configurations under a variety of conditions. The final selection of the model and its parameters was based on the ability to maximize the kappa statistic, ensuring that the chosen model provided the best possible performance for the classification of land cover types in our dataset.
 
 ## Conclusion
 

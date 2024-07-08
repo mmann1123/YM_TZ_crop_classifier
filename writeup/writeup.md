@@ -67,6 +67,20 @@ In this study we aim to address two critical challenges in the field of crop typ
 
  We propose a novel approach that combines crowdsourced data with time series features extracted from satellite imagery to classify crop types in Tanzania. By leveraging the power of crowdsourcing and remote sensing technologies, we aim to develop a robust and scalable solution for crop type classification that can be applied in other regions and contexts.
 
+# Data & Methods
+Data for this study were collected from multiple sources, including satellite imagery, and crowdsourced ground truth observations. 
+
+## Study Area
+The study area is located in Tanzania, a country in East Africa known for its diverse agricultural landscape. The region is characterized by a mix of smallholder farms, commercial plantations, and natural vegetation, making it an ideal location for studying crop type classification.
+
+@rory or stella - Can you create a *pretty* map of the study area? the bounds file is northern_TZ_states.geojson
+
+## Data Collection
+
+
+### Crowd Sourced Data
+
+### Satellite Imagery
 
 
 <!-- ├── Significance and Innovations

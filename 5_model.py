@@ -76,14 +76,14 @@ data.head()
 # remove nan and bad columns
 pipeline_scale_clean = Pipeline(
     [
-        ("imputer", SimpleImputer(strategy="mean")),
+        # ("imputer", SimpleImputer(strategy="mean")),
         ("scaler", StandardScaler()),
         ("variance_threshold", VarianceThreshold(threshold=0.5)),
     ]
 )
 pipeline_scale = Pipeline(
     [
-        ("imputer", SimpleImputer(strategy="mean")),
+        # ("imputer", SimpleImputer(strategy="mean")),
         ("scaler", StandardScaler()),
     ]
 )
@@ -493,7 +493,7 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 
 # %% print study names and best trial performance
 
-study_summaries = optuna.study.get_all_study_summaries(storage=storage)
+study_summaries = optuna.study.get_all_study_summaries(storage=storage_load)
 for summary in study_summaries:
     print(summary.study_name)
     print(summary.best_trial.values)
@@ -507,10 +507,11 @@ for summary in study_summaries:
 # %% Get out of sample confusion matrix for final model
 
 final_study = optuna.load_study(
-    storage="sqlite:///study.db",
-    study_name="model_selection_no_kbest_30_LGBM_kappa_3",  # final model
+    study_name="model_selection_no_kbest_30_LGBM_kappa_3",
+    storage=storage_load,
 )
 
+# %%
 get_oos_confusion_matrix(
     pipeline=pipeline_performance,
     X=X,

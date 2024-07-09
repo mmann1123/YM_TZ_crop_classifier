@@ -158,7 +158,14 @@ In our feature selection process, we incorporate both the mean and maximum SHAP 
 
 Feature selection then is the union of the top 30 time series features found with both the mean and maximum SHAP values, resulting in 33 total features. This approach ensures that the selected features are both consistently influential across the dataset and capable of exerting substantial impacts under specific conditions, providing a comprehensive set of features for model training and evaluation.
 
-## Results
+## Results & Discussion
+
+### Crowd Sourced Data
+In addressing the significant gap in available crop type datasets, particularly in developing regions, this study harnessed the power of crowdsourced data to enhance the robustness and applicability of our machine learning models. Crowdsourced data collection, an innovative approach in the agricultural domain, involves gathering data from a large number of volunteers or citizen scientists, who provide valuable ground truth information. This method has proven especially useful in areas where traditional data collection methods are challenging due to logistical, financial, or infrastructural constraints. 
+
+By leveragign the YouthMappers student organization, with over 400 active chapter in _____ countries, we were able to collect a large dataset of crop type observations in Tanzania. Moreover this exercise provided an important opportunity for students to gain practical experience in data collection, analysis, and interpretation, contributing to their professional development and capacity building in the geospatial domain.
+
+@ Someone finish ___________ 
 
 ### Land Cover and Crop Type
 
@@ -175,13 +182,40 @@ The distribution of primary land cover types within the training dataset used fo
 
 ### Feature Importance
 
+The interpretation of model behavior using SHAP values has allowed for a deeper understanding of how different spectral features impact the model's predictions, which is critical for refining the feature selection process. By analyzing both the mean and maximum SHAP values, we were able to prioritize features based on their overall impact as well as their critical contributions to specific model decisions.
+
+In the two summary plots below, SHAP values for each feature to identify how much impact each feature has on the model output for individuals in the validation dataset. Features are sorted by the sum of the SHAP value magnitudes across all samples. The figures bar color (hue) represents the mean contributions to explaining each land class value. This visualization provides a comprehensive overview of the feature importance, highlighting the key predictors that drive the model's predictions. For example, features that are highly influential for "maize" may not be as impactful for "rice" or "sorghum", reflecting the unique spectral signatures of these crops.
+
+#### Mean SHAP Values
+
+In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights into the average impact of each feature across all predictions. This analysis highlights the features that consistently influence the model's output across various scenarios. For example, the mean value of B11 (B11.mean) and the 5th percentile of hue (hue.quantile.q.0.05) features were found to have substantial average impacts on model outputs, suggesting their strong relevance in distinguishing between different crop types. Reflecting on the colors of the bars we can see that 'B11.mean' is important in distinguishing sunflow, sorghum, and millet to a roughly equal degree, and has some small impact on distiguishing other classes. While 'hue.quantile.q.0.05' has the strongest effect distiguishing rice, sunflower, and to a lesser degree cotton. Looking down the list we can see that features like "EVI.standard.deviation" are most effective at isolating urban areas, and 'B12.mean.second.derivative.central' substantively differentiates shrub from other classes. Note that the mean second derivative of B12 is a measure of the rate of change of the rate of change of the B12 band, so positive values indicate increasing rate of change (increasingly upward trend), and negative values decreasing rate of change (increasingly downward trend).
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
+    \caption{Top 20 Mean Feature Importance by Land Cover Type}
+    \label{fig:mean_shaps} %can refer to in text with \ref{fig:lc_percentages}
+\end{figure}
+
+
+### Maximum SHAP Values
+
+On the other hand, Figure \ref{fig:max_shaps}, maximum SHAP values uncover features that, while perhaps not consistently influential, have high impacts under particular conditions. This aspect of the analysis is crucial for identifying features that can cause significant shifts in model output, potentially corresponding to specific agricultural or environmental contexts. Features such as "hue.median" and "B11.maximum" show high maximum SHAP values, indicating their pivotal roles in certain classifications. For instance,  "B11.maximum" reflects peak reflectance in the Short-Wavelength Infrared (SWIR), which could be critical in identifying crops at their maximum biomass, like sunflower at full bloom compared to other crops at different stages of growth.  
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
+    \caption{Top 20 Mean Feature Importance by Land Cover Type}
+    \label{fig:max_shaps} %can refer to in text with \ref{fig:lc_percentages}
+\end{figure}
+ 
+The final selection of features for model training was carefully curated to include all 30 of both the highest mean and maximum SHAP values, ensuring a comprehensive set of predictors for accurate and reliable classification of crop types in Tanzania. This strategic selection process has not only improved model accuracy but also enhanced our understanding of the spectral characteristics most relevant for distinguishing among the diverse agricultural landscape of the region.
+
 ### Model Performance
 
-The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.7975, indicating substantial agreement between predicted and actual classifications. The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, 'rice' and 'urban' categories achieved classification accuracies of 90% and 94%, respectively. Other well-classified categories included 'forest' and 'millet', each with over 70% accuracy. However 'forest' is primarily confused with the category 'shrub', which is likely a result of poor training data. 
+The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.7975, indicating substantial agreement between predicted and actual classifications. The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, 'rice' and 'urban' categories achieved classification accuracies of 90% and 94%, respectively. Other well-classified categories included 'forest' and 'millet', each with over 70% accuracy. However 'forest' is primarily confused with the category 'shrub', which is likely a result of poor training data obtained from high-res imagery.
 
 Categories such as 'sorghum' and 'cotton' displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types. Notably, the 'other' category showed a broader distribution of misclassifications, likely due to its encompassing a diverse range of less frequent land covers, achieving a lower accuracy of 40%.
-
-The overall high performance across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.
 
 \begin{figure}[ht]
     \centering
@@ -189,6 +223,9 @@ The overall high performance across the majority of categories suggests that the
     \caption{Out of Sample Confusion Matrix}
     \label{fig:oos_confusion} %can refer to in text with \ref{fig:lc_percentages}
 \end{figure}
+
+The overall high performance across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.
+
 
 
 ## Conclusion

@@ -193,7 +193,7 @@ In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights into the a
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
-    \caption{Top 20 Mean Feature Importance by Land Cover Type}
+    \caption{Top 20 Mean SHAP Feature Importance by Land Cover Type}
     \label{fig:mean_shaps} %can refer to in text with \ref{fig:lc_percentages}
 \end{figure}
 
@@ -205,7 +205,7 @@ On the other hand, Figure \ref{fig:max_shaps}, maximum SHAP values uncover featu
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
-    \caption{Top 20 Mean Feature Importance by Land Cover Type}
+    \caption{Top 20 Max SHAP Feature Importance by Land Cover Type}
     \label{fig:max_shaps} %can refer to in text with \ref{fig:lc_percentages}
 \end{figure}
  

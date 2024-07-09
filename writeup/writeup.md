@@ -29,16 +29,13 @@ header-includes:
     }
     ```
 abstract: |
-  This is the abstract of the document. It contains a brief summary of the content and objectives of the document.
-  It consists of two paragraphs.
-
-  This is the second paragraph of the abstract.
+  This study introduces a robust methodology for crop type classification in Tanzania, utilizing a novel integration of time-series feature from Sentinel-2 satellite data and crowdsourced ground truth data collected by the YouthMappers network. By combining advanced remote sensing techniques with extensive local knowledge, the research addresses significant gaps in agricultural monitoring within resource-limited settings. The application of machine learning algorithms to analyze temporal and spectral data enables the precise identification of crop types, showcasing the enhanced accuracy and utility of combining technological and human resources. We achieve 0.80 kappa accuracy scores, across a diverse multi-class dataset including challenging crops including cassava, millet, sorghum, and cotton amongst other. This methodological innovation not only improves crop classification accuracy but also contributes to sustainable agricultural practices and policy-making in developing countries, making a significant impact on food security and land management.
 ---
 
-@stella add you details above
 
 
 \newgeometry{margin=1in}  
+@stella add you details above
 
 # Introduction
 ## Background and Context

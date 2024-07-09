@@ -15,6 +15,7 @@ header-includes:
    - |
     ```{=latex}
     \usepackage{fancyhdr}
+    \usepackage{float}
     \usepackage{graphicx} 
     \pagestyle{fancy}
     \fancyhf{}
@@ -131,6 +132,8 @@ The metrics computed by `xr_fresh` in this study include basic statistical descr
 - **Variability Metrics**: Standard deviation, variance, and whether variance is larger than standard deviation to evaluate the dispersion of values.
 - **Complexity and Trend Analysis**: Time series complexity and symmetry looking, adding depth to the analysis of temporal patterns.
 
+For a full list of the time series features extracted in this study and thier descriptions, please refer to the Appendix.
+
 Notably, certain statistics like `longest_strike_above_mean` and `longest_strike_below_mean` were excluded due to computational constraints related to GPU memory capacity on the JAX platform. Additionally, some planned metrics such as OLS slope, intercept, and R-squared calculations were not implemented.
 
 The integration of `xr_fresh` into our analytical workflow allowed for an automated and robust analysis of temporal patterns across the study area. By leveraging this toolkit, we could efficiently process large datasets, ensuring that each pixel's temporal dynamics were comprehensively characterized, which is critical for accurate environmental monitoring and change detection.
@@ -168,7 +171,7 @@ By leveragign the YouthMappers student organization, with over 400 active chapte
 
 The distribution of primary land cover types within the training dataset used for the model is represented in Figure \ref{fig:lc_percentages}. The dataset consists of a diverse range of land cover types, each contributing differently to the total number of observations. Maize is the most prevalent land cover type, accounting for the highest percentage of the observations, followed by rice and sunflower. This is indicative of the agricultural dominance in the region being studied. Lesser common land covers such as millet, sorghum, and urban areas represent intermediate percentages, suggesting a varied landscape that includes both agricultural and urbanized zones.
  
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/primary_land_cover.png} % Adjust the path and options
     \caption{Land Cover Percentages}
@@ -187,7 +190,7 @@ In the two summary plots below, SHAP values for each feature to identify how muc
 
 In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights into the average impact of each feature across all predictions. This analysis highlights the features that consistently influence the model's output across various scenarios. For example, the mean value of B11 (B11.mean) and the 5th percentile of hue (hue.quantile.q.0.05) features were found to have substantial average impacts on model outputs, suggesting their strong relevance in distinguishing between different crop types. Reflecting on the colors of the bars we can see that 'B11.mean' is important in distinguishing sunflow, sorghum, and millet to a roughly equal degree, and has some small impact on distiguishing other classes. While 'hue.quantile.q.0.05' has the strongest effect distiguishing rice, sunflower, and to a lesser degree cotton. Looking down the list we can see that features like "EVI.standard.deviation" are most effective at isolating urban areas, and 'B12.mean.second.derivative.central' substantively differentiates shrub from other classes. Note that the mean second derivative of B12 is a measure of the rate of change of the rate of change of the B12 band, so positive values indicate increasing rate of change (increasingly upward trend), and negative values decreasing rate of change (increasingly downward trend).
 
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
     \caption{Top 20 Mean SHAP Feature Importance by Land Cover Type}
@@ -199,7 +202,7 @@ In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights into the a
 
 On the other hand, Figure \ref{fig:max_shaps}, maximum SHAP values uncover features that, while perhaps not consistently influential, have high impacts under particular conditions. This aspect of the analysis is crucial for identifying features that can cause significant shifts in model output, potentially corresponding to specific agricultural or environmental contexts. Features such as "hue.median" and "B11.maximum" show high maximum SHAP values, indicating their pivotal roles in certain classifications. For instance,  "B11.maximum" reflects peak reflectance in the Short-Wavelength Infrared (SWIR), which could be critical in identifying crops at their maximum biomass, like sunflower at full bloom compared to other crops at different stages of growth.  
 
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
     \caption{Top 20 Max SHAP Feature Importance by Land Cover Type}
@@ -214,7 +217,7 @@ The classification model demonstrated robust performance across multiple land co
 
 Categories such as 'sorghum' and 'cotton' displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types. Notably, the 'other' category showed a broader distribution of misclassifications, likely due to its encompassing a diverse range of less frequent land covers, achieving a lower accuracy of 40%.
 
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/final_confusion_final_model_selection_no_kbest_30_LGBM_kappa_3.png} % Adjust the path and options
     \caption{Out of Sample Confusion Matrix}
@@ -227,10 +230,65 @@ The overall high performance across the majority of categories suggests that the
 
 ## Conclusion
 
+In this study, we introduced a novel methodology for crop type classification in Tanzania, leveraging crowdsourced data and time series features extracted from Sentinel-2 satellite imagery. By combining advanced remote sensing techniques with local knowledge, we addressed significant gaps in agricultural monitoring within resource-limited settings. The application of machine learning algorithms to analyze temporal and spectral data enabled the precise identification of crop types, showcasing the enhanced accuracy and utility of combining technological and human resources.
 
-\newpage
-# References
+Our results demonstrated the effectiveness of the proposed methodology, achieving a Cohen's Kappa score of 0.7975 across a diverse multi-class dataset. The model accurately classified a range of challenging crops, including cassava, millet, sorghum, and cotton, among others. The integration of crowdsourced data and time series features from satellite imagery provided valuable insights into the temporal dynamics of crop growth and development, enhancing the accuracy and reliability of the classification model.
+
+The interpretation of feature importance using SHAP values allowed for a deeper understanding of the model's behavior and the key predictors driving its predictions. By identifying the most influential features across different land cover types, we refined the feature selection process, ensuring that the selected features were both consistently influential and capable of exerting substantial impacts under specific conditions.
+
+In conclusion, this methodological innovation not only improves crop classification accuracy but also contributes to sustainable agricultural practices and policy-making in developing countries. By combining advanced remote sensing technologies with crowdsourced data, we have made a significant impact on food security and land management, paving the way for future research and applications in agricultural monitoring and environmental analysis.
+
+
 
 <!-- compile working with:
 pandoc writeup.md --template=mytemplate.tex -o output.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc 
 -->
+
+```{=latex}
+\newpage
+```
+
+
+
+# Appendix
+
+## Time Series Features
+
+The following table provides a comprehensive list of the time series features extracted from the satellite imagery using the `xr_fresh` module. These features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. The computed metrics encompass a wide range of statistical measures, changes over time, and distribution-based metrics, offering a detailed analysis of the temporal patterns in the study area.
+
+
+| Statistic | Description   |
+|-----------------------|-----------|
+| Absolute Energy                               | Sum of squared values of the time series                                 |
+| Absolute Sum of Changes                       | Sum of absolute differences between consecutive values                   |
+| Autocorrelation (1 & 2 month lag)             | Correlation between the time series and its lagged values                |
+| Count Above Mean                              | Number of values above the mean                                          |
+| Day of Year of Maximum Value                  | Day of the year when the maximum value occurs                            |
+| Day of Year of Minimum Value                  | Day of the year when the minimum value occurs                            |
+| Kurtosis                                      | Measure of the tailedness of the time series distribution                |
+| Linear Time Trend                             | Linear trend coefficient estimated over the entire time series           |
+| Longest Strike Above Mean                     | Longest consecutive sequence of values above the mean                    |
+| Longest Strike Below Mean                     | Longest consecutive sequence of values below the mean                    |
+| Maximum                                       | Maximum value of the time series                                         |
+| Mean                                          | Mean value of the time series                                            |
+| Mean Absolute Change                          | Mean of absolute differences between consecutive values                  |
+| Mean Change                                   | Mean of the differences between consecutive values                       |
+| Mean Second Derivative (Central)              | Mean of the second derivative of the time series                         |
+| Median                                        | Median value of the time series                                          |
+| Minimum                                       | Minimum value of the time series                                         |
+| Quantile (q = 0.05, 0.95)                     | Values representing the specified quantiles (5th and 95th percentiles)   |
+| Ratio Beyond r Sigma (r=1,2,3)                | Proportion of values beyond r standard deviations from the mean          |
+| Ratio of Value Number to Time Series Length   | Ratio of the number of values to the length of the time series           |
+| Skewness                                      | Measure of the asymmetry of the time series distribution                 |
+| Standard Deviation                            | Standard deviation of the time series                                    |
+| Sum Values                                    | Sum of all values in the time series                                     |
+| Symmetry Looking                              | Measures the similarity of the time series when flipped horizontally     |
+| Time Series Complexity (CID CE)               | Complexity of the time series using the Complexity-Invariant Distance    |
+| Variance                                      | Variance of the time series                                              |
+| Variance Larger than Standard Deviation       | Proportion of values with variance larger than the standard deviation    |
+
+```{=latex}
+\newpage
+```
+
+# References

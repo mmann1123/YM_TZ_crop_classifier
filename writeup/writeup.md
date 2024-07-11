@@ -174,6 +174,10 @@ By leveragign the YouthMappers student organization, with over 400 active chapte
 
 @ Someone finish ___________ 
 
+#### Challenges and Lessons Learned
+
+???????????? ______________?????????????
+
 ### Land Cover and Crop Type
 
 The distribution of primary land cover types within the training dataset used for the model is represented in Figure \ref{fig:lc_percentages}. The dataset consists of a diverse range of land cover types, each contributing differently to the total number of observations. Maize is the most prevalent land cover type, accounting for the highest percentage of the observations, followed by rice and sunflower. This is indicative of the agricultural dominance in the region being studied. Lesser common land covers such as millet, sorghum, and urban areas represent intermediate percentages, suggesting a varied landscape that includes both agricultural and urbanized zones.

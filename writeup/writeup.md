@@ -12,11 +12,16 @@ author:
   affliation: 
 header-includes:
    - \usepackage{geometry}
+   - \usepackage{pdflscape}
+   - \usepackage{longtable}
+   - \usepackage{fancyhdr}
+   - \usepackage{float}
+   - \usepackage{graphicx}
+   - \usepackage{amsmath}
+   - \usepackage{amsfonts}
+   - \usepackage{lineno} 
    - |
     ```{=latex}
-    \usepackage{fancyhdr}
-    \usepackage{float}
-    \usepackage{graphicx} 
     \pagestyle{fancy}
     \fancyhf{}
     \rfoot{\thepage}
@@ -33,9 +38,11 @@ abstract: |
   This study introduces a robust methodology for crop type classification in Tanzania, utilizing a novel integration of time-series feature from Sentinel-2 satellite data and crowdsourced ground truth data collected by the YouthMappers network. By combining advanced remote sensing techniques with extensive local knowledge, the research addresses significant gaps in agricultural monitoring within resource-limited settings. The application of machine learning algorithms to analyze temporal and spectral data enables the precise identification of crop types, showcasing the enhanced accuracy and utility of combining technological and human resources. We achieve 0.80 kappa accuracy scores, across a diverse multi-class dataset including challenging crops including cassava, millet, sorghum, and cotton amongst other. This methodological innovation not only improves crop classification accuracy but also contributes to sustainable agricultural practices and policy-making in developing countries, making a significant impact on food security and land management.
 ---
 
-
-
-\newgeometry{margin=1in}  
+\linenumbers  
+\modulolinenumbers[1]  
+\pagewiselinenumbers  
+\newgeometry{margin=1in}
+  
 @stella add you details above
 
 # Introduction
@@ -250,42 +257,50 @@ pandoc writeup.md --template=mytemplate.tex -o output.pdf --bibliography=refs.bi
 
 
 
-# Appendix
+## Appendix
 
-## Time Series Features
+### Time Series Features Description
 
 The following table provides a comprehensive list of the time series features extracted from the satellite imagery using the `xr_fresh` module. These features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. The computed metrics encompass a wide range of statistical measures, changes over time, and distribution-based metrics, offering a detailed analysis of the temporal patterns in the study area.
 
+\renewcommand{\arraystretch}{1.5} % Increase the row height
 
-| Statistic | Description   |
-|-----------------------|-----------|
-| Absolute Energy                               | Sum of squared values of the time series                                 |
-| Absolute Sum of Changes                       | Sum of absolute differences between consecutive values                   |
-| Autocorrelation (1 & 2 month lag)             | Correlation between the time series and its lagged values                |
-| Count Above Mean                              | Number of values above the mean                                          |
-| Day of Year of Maximum Value                  | Day of the year when the maximum value occurs                            |
-| Day of Year of Minimum Value                  | Day of the year when the minimum value occurs                            |
-| Kurtosis                                      | Measure of the tailedness of the time series distribution                |
-| Linear Time Trend                             | Linear trend coefficient estimated over the entire time series           |
-| Longest Strike Above Mean                     | Longest consecutive sequence of values above the mean                    |
-| Longest Strike Below Mean                     | Longest consecutive sequence of values below the mean                    |
-| Maximum                                       | Maximum value of the time series                                         |
-| Mean                                          | Mean value of the time series                                            |
-| Mean Absolute Change                          | Mean of absolute differences between consecutive values                  |
-| Mean Change                                   | Mean of the differences between consecutive values                       |
-| Mean Second Derivative (Central)              | Mean of the second derivative of the time series                         |
-| Median                                        | Median value of the time series                                          |
-| Minimum                                       | Minimum value of the time series                                         |
-| Quantile (q = 0.05, 0.95)                     | Values representing the specified quantiles (5th and 95th percentiles)   |
-| Ratio Beyond r Sigma (r=1,2,3)                | Proportion of values beyond r standard deviations from the mean          |
-| Ratio of Value Number to Time Series Length   | Ratio of the number of values to the length of the time series           |
-| Skewness                                      | Measure of the asymmetry of the time series distribution                 |
-| Standard Deviation                            | Standard deviation of the time series                                    |
-| Sum Values                                    | Sum of all values in the time series                                     |
-| Symmetry Looking                              | Measures the similarity of the time series when flipped horizontally     |
-| Time Series Complexity (CID CE)               | Complexity of the time series using the Complexity-Invariant Distance    |
-| Variance                                      | Variance of the time series                                              |
-| Variance Larger than Standard Deviation       | Proportion of values with variance larger than the standard deviation    |
+\begin{longtable}{|p{4cm}|p{5cm}|p{6cm}|}
+\hline
+\textbf{Statistic} & \textbf{Description} & \textbf{Equation} \\
+\hline
+\endhead
+Absolute energy &  sum over the squared values & $E = \sum_{i=1}^n x_i^2$ \\
+Absolute Sum of Changes  & sum over the absolute value of consecutive changes in the series  & $ \sum_{i=1}^{n-1} \mid x_{i+1}- x_i \mid $ \\
+Autocorrelation (1 \& 2 month lag) & Correlation between the time series and its lagged values & $\frac{1}{(n-l)\sigma^{2}} \sum_{t=1}^{n-l}(X_{t}-\mu )(X_{t+l}-\mu)$\\
+Count Above Mean & Number of values above the mean & $N_{\text{above}} = \sum_{i=1}^n (x_i > \bar{x})$ \\
+Count Below Mean & Number of values below the mean & $N_{\text{below}} = \sum_{i=1}^n (x_i < \bar{x})$ \\Day of Year of Maximum Value & Day of the year when the maximum value occurs in series & --- \\
+Day of Year of Minimum Value & Day of the year when the minimum value occurs in series & --- \\
+Kurtosis & Measure of the tailedness of the time series distribution & $G_2 = \frac{\mu_4}{\sigma^4} - 3$ \\
+Linear Time Trend & Linear trend coefficient estimated over the entire time series & $b = \frac{\sum_{i=1}^n (x_i - \bar{x})(t_i - \bar{t})}{\sum_{i=1}^n (x_i - \bar{x})^2}$ \\
+Longest Strike Above Mean & Longest consecutive sequence of values above the mean & --- \\
+Longest Strike Below Mean & Longest consecutive sequence of values below the mean & --- \\
+Maximum & Maximum value of the time series & $x_{\text{max}}$ \\
+Mean & Mean value of the time series & $\bar{x} = \frac{1}{n}\sum_{i=1}^n x_i$ \\
+Mean Absolute Change & Mean of absolute differences between consecutive values & $\frac{1}{n-1} \sum_{i=1}^{n-1} | x_{i+1} - x_{i}|$ \\
+Mean Change & Mean of the differences between consecutive values & $ \frac{1}{n-1} \sum_{i=1}^{n-1}  x_{i+1} - x_{i} $ \\
+Mean Second Derivative Central & measure of acceleration of changes in a time series data & $\frac{1}{2(n-2)} \sum_{i=1}^{n-1}  \frac{1}{2} (x_{i+2} - 2 \cdot x_{i+1} + x_i)
+$ \\
+Median & Median value of the time series & $\tilde{x}$ \\
+Minimum & Minimum value of the time series & $x_{\text{min}}$ \\
+Quantile (q = 0.05, 0.95) & Values representing the specified quantiles (5th and 95th percentiles) & $Q_{0.05}, Q_{0.95}$ \\
+Ratio Beyond r Sigma (r=1,2,3) & Proportion of values beyond r standard deviations from the mean & $P_r = \frac{1}{n}\sum_{i=1}^{n} (|x_i - \bar{x}| > r\sigma_{x})$ \\
+Skewness & Measure of the asymmetry of the time series distribution & $\frac{n}{(n-1)(n-2)} \sum \left(\frac{X_i - \overline{X}}{s}\right)^3$ \\
+Standard Deviation & Standard deviation of the time series & $  \sqrt{\frac{1}{N}\sum_{i=1}^{n} (x_i - \bar{x})^2}$ \\
+Sum Values & Sum of all values in the time series & $S = \sum_{i=1}^{n} x_i$ \\
+Symmetry Looking & Measures the similarity of the time series when flipped horizontally & $| x_{\text{mean}}-x_{\text{median}} | < r * (x_{\text{max}} - x_{\text{min}} ) $ \\
+Time Series Complexity (CID CE) & measure of number of peaks and valleys & $\sqrt{ \sum_{i=1}^{n-1} ( x_{i} - x_{i-1})^2 }$\\
+Variance & Variance of the time series & $\sigma^2 = \frac{1}{N}\sum_{i=1}^{n} (x_i - \bar{x})^2$ \\
+Variance Larger than Standard Deviation & check if variance is larger than standard deviation & $\sigma^2 > 1$ \\
+\hline
+\end{longtable}
+ 
+ 
 
 ```{=latex}
 \newpage

@@ -512,6 +512,7 @@ final_study = optuna.load_study(
 )
 
 # %%
+
 get_oos_confusion_matrix(
     pipeline=pipeline_performance,
     X=X,
@@ -522,7 +523,7 @@ get_oos_confusion_matrix(
     weights=data.Field_size,
     n_splits=3,
     random_state=42,
-    save_path=f"../outputs/final_confusion_{study_name}.png",
+    save_path=f"../outputs/final_confusion_{study_name}_v_ignore.png",
 )
 
 

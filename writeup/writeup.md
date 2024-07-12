@@ -20,6 +20,7 @@ header-includes:
    - \usepackage{amsmath}
    - \usepackage{amsfonts}
    - \usepackage{lineno} 
+   - \usepackage{booktabs}
    - |
     ```{=latex}
     \pagestyle{fancy}
@@ -44,6 +45,8 @@ abstract: |
 \newgeometry{margin=1in}
   
 @stella add you details above
+<!-- 
+Look at https://mpastell.com/pweave/docs.html -->
 
 # Introduction
 ## Background and Context
@@ -239,6 +242,20 @@ Categories such as 'sorghum' and 'cotton' displayed moderate confusion with othe
     \caption{Out of Sample Confusion Matrix}
     \label{fig:oos_confusion} %can refer to in text with \ref{fig:lc_percentages}
 \end{figure}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+Metric              & Value                 \\ \midrule
+Balanced Accuracy   & 0.79    \\
+Kappa Accuracy      & 0.80    \\
+Accuracy            & 0.82    \\
+F1 Micro Accuracy   & 0.82    \\ \bottomrule
+\end{tabular}
+\caption{Summary of Classification Metrics}
+\label{tab:metrics}
+\end{table}
 
 The overall high performance across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.
 

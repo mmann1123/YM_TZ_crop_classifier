@@ -20,7 +20,15 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import balanced_accuracy_score, cohen_kappa_score, confusion_matrix
+from sklearn.metrics import (
+    balanced_accuracy_score,
+    cohen_kappa_score,
+    confusion_matrix,
+    accuracy_score,
+    recall_score,
+    precision_score,
+    f1_score,
+)
 from sklearn.model_selection import StratifiedGroupKFold
 from typing import Union, List, Dict, Set, Optional, Any, Tuple
 import os
@@ -563,6 +571,10 @@ def get_oos_confusion_matrix(
 
     list_balanced_accuracy = []
     list_kappa = []
+    list_F1 = []
+    list_accuracy = []
+    list_recall = []
+    list_precision = []
 
     for train_index, test_index in skf.split(X, y, groups):
         X_train, X_test = X[train_index], X[test_index]
@@ -574,6 +586,10 @@ def get_oos_confusion_matrix(
         # Performance metrics
         list_balanced_accuracy.append(balanced_accuracy_score(y_test, y_pred))
         list_kappa.append(cohen_kappa_score(y_test, y_pred))
+        list_F1.append(f1_score(y_test, y_pred, average="micro"))
+        list_accuracy.append(accuracy_score(y_test, y_pred))
+        list_recall.append(recall_score(y_test, y_pred, average="micro"))
+        list_precision.append(precision_score(y_test, y_pred, average="micro"))
 
         # Generate confusion matrix for the current fold
         conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)
@@ -588,6 +604,10 @@ def get_oos_confusion_matrix(
     agg_conf_matrix = global_conf_matrix_df.copy()
     balanced_accuracy = np.nanmean(np.array(list_balanced_accuracy))
     kappa_accuracy = np.nanmean(np.array(list_kappa))
+    accuracy = np.nanmean(np.array(list_accuracy))
+    F1_micro_accuracy = np.nanmean(np.array(list_F1))
+    recall_micro_accuracy = np.nanmean(np.array(list_recall))
+    precision_micro_accuracy = np.nanmean(np.array(list_precision))
 
     # Calculate the row-wise sums
     row_sums = agg_conf_matrix.sum(axis=1)
@@ -623,11 +643,23 @@ def get_oos_confusion_matrix(
         )
     plt.show()
 
-    return {
+    results_print = {
         "balanced_accuracy": balanced_accuracy,
         "kappa_accuracy": kappa_accuracy,
+        "accuracy": accuracy,
+        "F1_micro_accuracy": F1_micro_accuracy,
+        "recall_accuracy": recall_micro_accuracy,
+        "precision_accuracy": precision_micro_accuracy,
         # "confusion_matrix": agg_conf_matrix,
     }
+
+    # save results to csv
+    if save_path:
+        pd.DataFrame([results_print], index=["metrics"]).to_csv(
+            save_path.replace(".png", ".csv")
+        )
+
+    return results_print
 
 
 # %%

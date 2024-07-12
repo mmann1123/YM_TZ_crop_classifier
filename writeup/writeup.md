@@ -114,6 +114,10 @@ The study area is located in Tanzania, a country in East Africa known for its di
 
 Additional training data was collected utilizing high resolution imagery from Google Earth. This data was used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  
 
+#### Data Collection Methods
+
+__________ @StellaWava @RoryNealon @LColson____________
+
 ### Satellite Imagery
 
 Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area during the growing season, capturing the spectral characteristics of different crop types. The Sentinel-2 data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes.

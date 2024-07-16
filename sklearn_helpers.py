@@ -505,6 +505,19 @@ def feature_selection_study(
     # Create a study with SQLite storage
     storage = optuna.storages.RDBStorage(url=storage_name)
 
+    # prompt user to make sure they want to run a new study and overwrite the old one
+    # Delete any existing study
+    try:
+        study = optuna.load_study(study_name=studyname, storage=storage_name)
+        print("Study already exists, do you want to overwrite it?")
+        overwrite = input("y/n")
+        if overwrite == "y" or overwrite == "Y":
+            pass
+        else:
+            return None
+    except:
+        pass
+
     # Delete any existing study
     try:
         study = optuna.load_study(study_name=studyname, storage=storage)

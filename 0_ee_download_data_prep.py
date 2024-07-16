@@ -3,6 +3,7 @@
 # requires https://cloud.google.com/sdk/docs/install
 # and https://developers.google.com/earth-engine/guides/python_install-conda
 
+# NOTE: Make 0 the nodata value going forward. np.nan creates problems
 
 import pendulum
 import ee

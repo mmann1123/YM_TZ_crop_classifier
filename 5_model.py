@@ -457,7 +457,7 @@ X = data[list(select_images)].values
 storage_name = "sqlite:///study.db"
 study_name = f"final_model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
-
+# %% RUN STUDY================================================================================================
 # Create a study with SQLite storage
 feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scoring)
 
@@ -465,7 +465,6 @@ feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scorin
 #   optuna classifier study
 
 
-# %%
 storage_load = optuna.storages.RDBStorage(url=storage_name)
 
 study = optuna.load_study(
@@ -505,9 +504,12 @@ for summary in study_summaries:
 
 
 # %% Get out of sample confusion matrix for final model
+storage_name = "sqlite:///study.db"
+
+storage_load = optuna.storages.RDBStorage(url=storage_name)
 
 final_study = optuna.load_study(
-    study_name="model_selection_no_kbest_30_LGBM_kappa_3",
+    study_name="model_selection_feature_selection_LGBM_kappa_3",
     storage=storage_load,
 )
 
@@ -534,7 +536,6 @@ get_oos_confusion_matrix(
 
 from sklearn_helpers import best_classifier_pipe, find_selected_ranked_images
 
-# %%
 
 # get important image paths
 select_image_paths = find_selected_ranked_images(
@@ -548,6 +549,78 @@ select_image_paths = find_selected_ranked_images(
 # update keys to remove _0
 select_image_paths = {k.replace("_0", ""): v for k, v in select_image_paths.items()}
 select_image_paths
+
+
+# %% create images with 0s instead of nan for nodata
+# for k, v in select_image_paths.items():
+for image in select_image_paths["B2_minimum"]:
+    with gw.open(image) as src:
+        data = src.gw.set_nodata(src_nodata=np.nan, dst_nodata=0, dtype="float32")
+        data = data.fillna(0)
+
+        data.gw.save(
+            f"../final_model_inputs_no_nan/{os.path.basename(image)}",
+            compress="lzw",
+            overwrite=True,
+            bigtiff="YES",
+        )
+# %%
+
+b2 = sorted(glob("../final_model_inputs_no_nan/B2*.tif"))
+b2
+# %%
+
+with gw.open(b2[0:2], mosaic=True, bounds_by="union") as src:
+    display(src)
+    print(src.values)
+    src.gw.save(
+        f"../final_model_features/B2_minimum.tif",
+        compress="lzw",
+        overwrite=True,
+        bigtiff="YES",
+    )
+
+
+# %% create 10m images for final model
+# create ref image
+
+boundlist = glob("../features/B2/B2_doy_of_minimum*.tif")
+# %%
+import rasterio as rio
+
+# for bound, x in zip(boundlist, range(len(boundlist))):
+#     with gw.config.update(ref_image=bound, ref_bounds=bound):
+with gw.open(
+    [select_image_paths["B2_minimum"][0], select_image_paths["B2_minimum"][4]],  #
+    mosaic=True,
+    nodata=np.nan,
+) as src:
+    print(src.values)
+
+# %%
+with gw.open(boundlist[0]) as src:
+    display(src)
+# %%
+# attrs = src.attrs
+# # src = src.astype(np.float32)
+# src.attrs = attrs
+# display(src)
+
+# src.gw.save(
+#     f"../final_model_features/B2_minimum_{x}.tif",
+#     compress="lzw",
+#     overwrite=True,
+#     bigtiff="YES",
+# )
+# # gw.to_raster(
+#     src,
+#     f"../final_model_features/B2_minimum_{x}.tif",
+#     n_jobs=8,
+#     overviews=True,
+#     compress="lzw",
+#     kwargs={"BIGTIFF": "YES", "dtype": "rio.float32"},
+# )
+
 
 # %%
 from shapely.geometry import box

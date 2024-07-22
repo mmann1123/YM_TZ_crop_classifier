@@ -839,6 +839,18 @@ def classifier_objective(
     return scores.mean()  # Return the average balanced accuracy across folds
 
 
+import os
+import shutil
+
+
+def delete_folder_and_contents(folder_path):
+    if os.path.exists(folder_path):
+        shutil.rmtree(folder_path)
+        print(f"Deleted folder and contents: {folder_path}")
+    else:
+        print(f"Folder does not exist: {folder_path}")
+
+
 # %%
 # from sklearn.datasets import make_classification
 # from sklearn.pipeline import Pipeline

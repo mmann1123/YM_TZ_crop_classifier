@@ -14,7 +14,9 @@ from sklearn_helpers import (
     # remove_list_from_list,
     feature_selection_study,
     compute_shap_importance,
+    delete_folder_and_contents,
 )
+from helpers import delete_folder_and_contents
 import pickle
 import pandas as pd
 import numpy as np
@@ -449,6 +451,22 @@ select_images = set(
 
 select_images
 
+from sklearn_helpers import best_classifier_pipe, find_selected_ranked_images
+
+
+# get important image paths
+select_image_paths = find_selected_ranked_images(
+    ranked_features=[
+        x + "_0" for x in select_images
+    ],  # append _0 to avoid matching multipl uses of values like 'mean'
+    available_image_list=glob("../features/*/*.tif"),
+    # select_how_many=len(select_images), dont use doesn't make sense with multiple zones
+)
+
+# update keys to remove _0
+select_image_paths = {k.replace("_0", ""): v for k, v in select_image_paths.items()}
+select_image_paths
+
 # %% final model with subset of features
 
 y = data["lc"]
@@ -534,149 +552,105 @@ get_oos_confusion_matrix(
 ############ get 10m images for final model #############
 #########################################################
 
-from sklearn_helpers import best_classifier_pipe, find_selected_ranked_images
 
-
-# get important image paths
-select_image_paths = find_selected_ranked_images(
-    ranked_features=[
-        x + "_0" for x in select_images
-    ],  # append _0 to avoid matching multipl uses of values like 'mean'
-    available_image_list=glob("../features/*/*.tif"),
-    # select_how_many=len(select_images), dont use doesn't make sense with multiple zones
-)
-
-# update keys to remove _0
-select_image_paths = {k.replace("_0", ""): v for k, v in select_image_paths.items()}
-select_image_paths
-
-
-# %% create images with 0s instead of nan for nodata
-# for k, v in select_image_paths.items():
-for image in select_image_paths["B2_minimum"]:
-    with gw.open(image) as src:
-        data = src.gw.set_nodata(src_nodata=np.nan, dst_nodata=0, dtype="float32")
-        data = data.fillna(0)
-
-        data.gw.save(
-            f"../final_model_inputs_no_nan/{os.path.basename(image)}",
-            compress="lzw",
-            overwrite=True,
-            bigtiff="YES",
-        )
-# %%
-
-b2 = sorted(glob("../final_model_inputs_no_nan/B2*.tif"))
-b2
-# %%
-
-with gw.open(b2[0:2], mosaic=True, bounds_by="union") as src:
+# %% create tiles for reference
+with gw.open(
+    select_image_paths["EVI_minimum"],
+    mosaic=True,
+    bounds_by="union",
+    overlap="max",
+    chunks=32 * 400,
+) as src:
     display(src)
-    print(src.values)
-    src.gw.save(
-        f"../final_model_features/B2_minimum.tif",
+    src = src.gw.set_nodata(src_nodata=np.nan, dst_nodata=0, dtype="int8")
+
+    src.gw.to_raster(
+        f"../bounds_examples.tif",
         compress="lzw",
         overwrite=True,
+        separate=True,
         bigtiff="YES",
     )
-
-
-# %% create 10m images for final model
-# create ref image
-
-boundlist = glob("../features/B2/B2_doy_of_minimum*.tif")
 # %%
-import rasterio as rio
 
-# for bound, x in zip(boundlist, range(len(boundlist))):
-#     with gw.config.update(ref_image=bound, ref_bounds=bound):
-with gw.open(
-    [select_image_paths["B2_minimum"][0], select_image_paths["B2_minimum"][4]],  #
-    mosaic=True,
-    nodata=np.nan,
-) as src:
-    print(src.values)
-
-# %%
-with gw.open(boundlist[0]) as src:
-    display(src)
-# %%
-# attrs = src.attrs
-# # src = src.astype(np.float32)
-# src.attrs = attrs
-# display(src)
-
-# src.gw.save(
-#     f"../final_model_features/B2_minimum_{x}.tif",
-#     compress="lzw",
-#     overwrite=True,
-#     bigtiff="YES",
-# )
-# # gw.to_raster(
-#     src,
-#     f"../final_model_features/B2_minimum_{x}.tif",
-#     n_jobs=8,
-#     overviews=True,
-#     compress="lzw",
-#     kwargs={"BIGTIFF": "YES", "dtype": "rio.float32"},
-# )
-
-
-# %%
-from shapely.geometry import box
-
-# from shapely import bounds
 from rasterio.coords import BoundingBox
-import geopandas as gpd
 
-# create bounding box for images
-with gw.open(select_image_paths["B12_maximum"], mosaic=True) as src:
-    bbox = BoundingBox(*src.gw.bounds)
-    print(bbox)
+# bounds = BoundingBox(
+#     91080.0, 9135600.0, 1193520.0, 9890820.0
+# )  # (789960.0, 9135600.0, 1193520.0, 9890820.0)
 
-
-# Calculate the width and height of each quadrant
-width = (bbox.right - bbox.left) / 2
-height = (bbox.top - bbox.bottom) / 2
-
-# Create quadrants
-quadrants = [
-    box(bbox.left, bbox.bottom, bbox.left + width, bbox.bottom + height),  # Bottom Left
-    box(bbox.left, bbox.bottom + height, bbox.left + width, bbox.top),  # Top Left
-    box(
-        bbox.left + width, bbox.bottom, bbox.right, bbox.bottom + height
-    ),  # Bottom Right
-    box(bbox.left + width, bbox.bottom + height, bbox.right, bbox.top),  # Top Right
-]
-
-# Create a GeoDataFrame
-gdf = gpd.GeoDataFrame({"geometry": quadrants}, crs=src.crs)
-
-# Save to GeoJSON
-geojson_path = "../grids/quadrants.geojson"
-gdf.to_file(geojson_path, driver="GeoJSON")
+ref_images = glob("../bounds_examples/*.tif")
+ref_images
 
 # %%
+for k, v in select_image_paths.items():
+    for i, image in enumerate(ref_images[0:1]):
+        with gw.open(image) as ref_src:
+            bounds = ref_src.gw.bounds
+            print(bounds)
+        with gw.config.update(ref_res=(10, 10), ref_bounds=BoundingBox(*bounds)):
+            with gw.open(
+                v,
+                mosaic=True,
+                bounds_by="union",
+                overlap="max",
+            ) as src:
+                # display(src)
+                print(src.gw.bounds)
+                # src = src.gw.set_nodata(
+                #     src_nodata=np.nan, dst_nodata=0, dtype="float32"
+                # )
 
+                src.gw.save(
+                    f"../final_model_features/{k}_{i}.tif",
+                    compress="lzw",
+                    overwrite=True,
+                    bigtiff="IF_NEEDED",
+                )
+# %%
 
-# # %%
-# images = [
-#     "../features/B12/B12_kurtosis_0000000000-0000046592.tif",
-#     "../features/B12/B12_kurtosis_0000000000-0000000000.tif",
-# ]
-# # create vrt files for multiple images using gdal
-# import gdal
+ref_images = glob("../bounds_examples/*.tif")
+ref_images
 
-# # create vrt file
-# vrt_options = gdal.BuildVRTOptions(resampleAlg="nearest")
-# gdal.BuildVRT(
-#     f"outputs/selected_images_10m.vrt",
-#     images,
-#     options=vrt_options,
-# )
+for k, v in select_image_paths.items():
+    # resample if not 10m
+    with gw.open(v[0]) as test_src:
+        res = test_src.attrs["res"]
+        print(res)
+    if res != (10, 10):
+        for image30m in v:
 
-# with gw.open(f"outputs/selected_images_10m.vrt", nodata=9999) as src:
-#     display(src)
+            with gw.config.update(ref_res=(10, 10)):
+                with gw.open(image30m, chunks=32 * 500) as test_src:
+                    test_src.gw.to_raster(
+                        f"../temp/{k}.tif",
+                        compress="lzw",
+                        separate=True,
+                        kwargs={"BIGTIFF": "YES", "dtype": "rio.float32"},
+                    )
+    # update v to 10m images
+    v = sorted(glob(f"../temp/{k}/*.tif"))
+    # delete folder
+    for i, image in enumerate(ref_images):
+        # union
+        with gw.open(image) as ref_src:
+            bounds = ref_src.gw.bounds
+            print(bounds)
+        with gw.config.update(ref_res=(10, 10), ref_bounds=BoundingBox(*bounds)):
+            with gw.open(
+                v,
+                mosaic=True,
+                bounds_by="union",
+                overlap="max",
+            ) as src:
+                display(src)
+                src.gw.save(
+                    f"../final_model_features/{k}_{i}.tif",
+                    compress="lzw",
+                    overwrite=True,
+                    bigtiff="IF_NEEDED",
+                )
+    delete_folder_and_contents(f"../temp/{k}")
 
 # %%
 ########################################################

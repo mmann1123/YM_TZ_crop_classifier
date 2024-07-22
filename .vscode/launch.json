@@ -10,6 +10,8 @@
             "request": "launch",
             "module": "xr_fresh",
             "justMyCode": false
+            "python":"/home/mmann1123/miniconda3/envs/crop_pred/bin/python"
+
         }
     ]
 }

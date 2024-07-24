@@ -16,7 +16,6 @@ from sklearn_helpers import (
     compute_shap_importance,
     delete_folder_and_contents,
 )
-from helpers import delete_folder_and_contents
 import pickle
 import pandas as pd
 import numpy as np
@@ -573,84 +572,79 @@ with gw.open(
     )
 # %%
 
+
+import logging
 from rasterio.coords import BoundingBox
 
-# bounds = BoundingBox(
-#     91080.0, 9135600.0, 1193520.0, 9890820.0
-# )  # (789960.0, 9135600.0, 1193520.0, 9890820.0)
+# Configure logging
+logging.basicConfig(
+    level=logging.ERROR,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("../errors.log"), logging.StreamHandler()],
+)
+logger = logging.getLogger(__name__)
+
 
 ref_images = glob("../bounds_examples/*.tif")
 ref_images
-
+os.mkdir("../temp2")
 # %%
 for k, v in select_image_paths.items():
-    for i, image in enumerate(ref_images[0:1]):
-        with gw.open(image) as ref_src:
-            bounds = ref_src.gw.bounds
-            print(bounds)
-        with gw.config.update(ref_res=(10, 10), ref_bounds=BoundingBox(*bounds)):
-            with gw.open(
-                v,
-                mosaic=True,
-                bounds_by="union",
-                overlap="max",
-            ) as src:
-                # display(src)
-                print(src.gw.bounds)
-                # src = src.gw.set_nodata(
-                #     src_nodata=np.nan, dst_nodata=0, dtype="float32"
-                # )
+    if k == "B6_mean_change":
+        print("skipping", k)
+        logger.info(f"Skipping {k}")
+        continue
+    try:
+        # resample if not 10m
+        with gw.open(v[0]) as test_src:
+            res = test_src.attrs["res"]
+            logger.info(f"Resolution for {v[0]}: {res}")
+        if res != (10, 10):
+            for image30m in v:
 
-                src.gw.save(
-                    f"../final_model_features/{k}_{i}.tif",
-                    compress="lzw",
-                    overwrite=True,
-                    bigtiff="IF_NEEDED",
-                )
-# %%
+                with gw.config.update(ref_res=(10, 10)):
+                    with gw.open(image30m, chunks=32 * 500) as test_src:
+                        test_src.gw.to_raster(
+                            f"../temp/{k}.tif",
+                            compress="lzw",
+                            separate=True,
+                            overwrite=True,
+                            kwargs={"BIGTIFF": "YES", "dtype": "rio.float32"},
+                        )
+                        logger.info(
+                            f"Resampled and saved {image30m} to ../temp/{k}.tif"
+                        )
 
-ref_images = glob("../bounds_examples/*.tif")
-ref_images
-
-for k, v in select_image_paths.items():
-    # resample if not 10m
-    with gw.open(v[0]) as test_src:
-        res = test_src.attrs["res"]
-        print(res)
-    if res != (10, 10):
-        for image30m in v:
-
-            with gw.config.update(ref_res=(10, 10)):
-                with gw.open(image30m, chunks=32 * 500) as test_src:
-                    test_src.gw.to_raster(
-                        f"../temp/{k}.tif",
-                        compress="lzw",
-                        separate=True,
-                        kwargs={"BIGTIFF": "YES", "dtype": "rio.float32"},
-                    )
-    # update v to 10m images
-    v = sorted(glob(f"../temp/{k}/*.tif"))
-    # delete folder
-    for i, image in enumerate(ref_images):
-        # union
-        with gw.open(image) as ref_src:
-            bounds = ref_src.gw.bounds
-            print(bounds)
-        with gw.config.update(ref_res=(10, 10), ref_bounds=BoundingBox(*bounds)):
-            with gw.open(
-                v,
-                mosaic=True,
-                bounds_by="union",
-                overlap="max",
-            ) as src:
-                display(src)
-                src.gw.save(
-                    f"../final_model_features/{k}_{i}.tif",
-                    compress="lzw",
-                    overwrite=True,
-                    bigtiff="IF_NEEDED",
-                )
-    delete_folder_and_contents(f"../temp/{k}")
+        # update v to 10m images
+        v = sorted(glob(f"../temp/{k}/*.tif"))
+        # delete folder
+        for i, image in enumerate(ref_images):
+            try:
+                # union
+                with gw.open(image) as ref_src:
+                    bounds = ref_src.gw.bounds
+                    print(bounds)
+                with gw.config.update(
+                    ref_res=(10, 10), ref_bounds=BoundingBox(*bounds)
+                ):
+                    with gw.open(
+                        v,
+                        mosaic=True,
+                        bounds_by="union",
+                        overlap="max",
+                    ) as src:
+                        # display(src)
+                        src.gw.save(
+                            f"../final_model_features/{k}_{i}.tif",
+                            compress="lzw",
+                            overwrite=True,
+                            bigtiff="IF_NEEDED",
+                        )
+            except Exception as e:
+                logger.error(f"Error processing {image} for {k}: {e}")
+    except Exception as e:
+        logger.error(f"Error processing {k}: {e}")
+    # delete_folder_and_contents(f"../temp/{k}")
 
 # %%
 ########################################################

@@ -464,8 +464,11 @@ select_image_paths = find_selected_ranked_images(
 
 # update keys to remove _0
 select_image_paths = {k.replace("_0", ""): v for k, v in select_image_paths.items()}
-select_image_paths
 
+
+# replace . in B11_quantile_q.95 with _ for all select_image_paths keys:
+select_image_paths = {k.replace(".", "_"): v for k, v in select_image_paths.items()}
+select_image_paths
 # %% final model with subset of features
 
 y = data["lc"]
@@ -553,23 +556,26 @@ get_oos_confusion_matrix(
 
 
 # %% create tiles for reference
-with gw.open(
-    select_image_paths["EVI_minimum"],
-    mosaic=True,
-    bounds_by="union",
-    overlap="max",
-    chunks=32 * 400,
-) as src:
-    display(src)
-    src = src.gw.set_nodata(src_nodata=np.nan, dst_nodata=0, dtype="int8")
+with gw.config.update(ref_res=(10, 10)):
+    with gw.open(
+        select_image_paths["B11_maximum"],
+        # mosaic=True,  # ref_res doesn't work with mosaic
+        # bounds_by="union",
+        # overlap="max",
+        chunks=32 * 400,
+    ) as src:
+        display(src)
+        src = src.where(src > 0)
+        src = src.where(src <= 0)
+        src = src.gw.set_nodata(src_nodata=np.nan, dst_nodata=0, dtype="int8")
 
-    src.gw.to_raster(
-        f"../bounds_examples.tif",
-        compress="lzw",
-        overwrite=True,
-        separate=True,
-        bigtiff="YES",
-    )
+        src.gw.to_raster(
+            f"../bounds_examples_v2.tif",
+            compress="lzw",
+            overwrite=True,
+            separate=True,
+            bigtiff="YES",
+        )
 # %%
 
 
@@ -585,15 +591,31 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-ref_images = glob("../bounds_examples/*.tif")
-ref_images
-os.mkdir("../temp2")
+ref_images = glob("../bounds_examples_v2/*.tif")
+print(ref_images)
+
 # %%
+temp_dir = "../temp2"
+out_dir = "../final_model_features_v2"
+os.makedirs("../temp2", exist_ok=True)
+os.makedirs("../final_model_features_v2/", exist_ok=True)
 for k, v in select_image_paths.items():
-    if k == "B6_mean_change":
-        print("skipping", k)
-        logger.info(f"Skipping {k}")
-        continue
+    # if k not in [
+    #     "B6_abs_energy",
+    #     "B6_median",
+    #     "B6_quantile_q_05",
+    #     "B11_quantile_q_05",
+    #     "B11_quantile_q_95",
+    #     "B12_maximum",
+    #     "B12_mean_second_derivative_central",
+    #     "B12_quantile_q_95",
+    #     "hue_minimum",
+    #     "hue_quantile_q_05",
+    # ]:
+    #     print("skipping", k)
+    #     logger.info(f"Skipping {k}")
+    #     continue
+
     try:
         # resample if not 10m
         with gw.open(v[0]) as test_src:
@@ -602,21 +624,21 @@ for k, v in select_image_paths.items():
         if res != (10, 10):
             for image30m in v:
 
-                with gw.config.update(ref_res=(10, 10)):
+                with gw.config.update(ref_res=(10, 10), ref_image=image30m):
                     with gw.open(image30m, chunks=32 * 500) as test_src:
                         test_src.gw.to_raster(
-                            f"../temp/{k}.tif",
+                            f"{temp_dir}/{k}.tif",
                             compress="lzw",
                             separate=True,
                             overwrite=True,
                             kwargs={"BIGTIFF": "YES", "dtype": "rio.float32"},
                         )
                         logger.info(
-                            f"Resampled and saved {image30m} to ../temp/{k}.tif"
+                            f"Resampled and saved {image30m} to {temp_dir}{k}.tif"
                         )
 
         # update v to 10m images
-        v = sorted(glob(f"../temp/{k}/*.tif"))
+        v = sorted(glob(f"{temp_dir}/{k}/*.tif"))
         # delete folder
         for i, image in enumerate(ref_images):
             try:
@@ -635,7 +657,7 @@ for k, v in select_image_paths.items():
                     ) as src:
                         # display(src)
                         src.gw.save(
-                            f"../final_model_features/{k}_{i}.tif",
+                            f"{out_dir}/{k}_{i}.tif",
                             compress="lzw",
                             overwrite=True,
                             bigtiff="IF_NEEDED",
@@ -644,7 +666,7 @@ for k, v in select_image_paths.items():
                 logger.error(f"Error processing {image} for {k}: {e}")
     except Exception as e:
         logger.error(f"Error processing {k}: {e}")
-    # delete_folder_and_contents(f"../temp/{k}")
+    # delete_folder_and_contents(f"{temp_dir}/{k}")
 
 # %%
 ########################################################

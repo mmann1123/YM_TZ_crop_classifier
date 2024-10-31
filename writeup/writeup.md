@@ -180,6 +180,10 @@ In addressing the significant gap in available crop type datasets, particularly 
 
 By leveragign the YouthMappers student organization, with over 400 active chapter in _____ countries, we were able to collect a large dataset of crop type observations in Tanzania. Moreover this exercise provided an important opportunity for students to gain practical experience in data collection, analysis, and interpretation, contributing to their professional development and capacity building in the geospatial domain.
 
+ \begin{table}[h!] \centering \begin{tabular}{|>{\bfseries}c|m{4cm}|m{4cm}|m{4cm}|} \hline \textbf{} & \textbf{Arusha} & \textbf{Mwanza} & \textbf{Dodoma} \\ \hline \begin{itemize} \item Maize \item Rice \item Sorghum \& Millet \end{itemize} & \begin{itemize} \item Maize \item Cotton \item Rice \item Peanuts or Groundnut \end{itemize} & \begin{itemize} \item Sorghum \item Maize \item Millet \item Sunflower \item Peanuts or Groundnut \item Cotton Fields \end{itemize} \\ \hline \end{tabular} \caption{Main Crops by Region in Tanzania} \end{table}
+Table XX: Main Crops by Region in Tanzania
+
+
 @ Someone finish ___________ 
 
 #### Challenges and Lessons Learned

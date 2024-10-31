@@ -259,6 +259,7 @@ F1 Micro Accuracy   & 0.82    \\ \bottomrule
 \end{tabular}
 \caption{Summary of Classification Metrics}
 \label{tab:metrics}
+\ref{tab:metrics}
 \end{table}
 
 The overall high performance across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.

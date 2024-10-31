@@ -220,7 +220,7 @@ storage_name = "sqlite:///study.db"
 study_name = (
     f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
 )
-
+# %%
 # Run study
 feature_selection_study(
     study_name, storage_name, X, y, groups, n_splits, scoring, n_trials=500
@@ -343,7 +343,7 @@ lgbm_pipe = best_classifier_pipe(
     desired_classifier="LGBM",
 )
 params_lgbm_dict = lgbm_pipe["classifier"].get_params()
-
+params_lgbm_dict
 # %% get shaps importance
 
 
@@ -532,6 +532,8 @@ final_study = optuna.load_study(
     study_name="model_selection_feature_selection_LGBM_kappa_3",
     storage=storage_load,
 )
+final_study.best_trial.values
+final_study.best_trial.params
 
 # %%
 

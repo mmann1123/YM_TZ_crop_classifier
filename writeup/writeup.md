@@ -1,17 +1,17 @@
 ---
-title: "Turning Back the Clock on Deep Learning: Efficient Crop Classification in Tanzania Using Traditional Machine Learning & Crowd Sourcing"
+title: "Lite Learning: Efficient Crop Classification in Tanzania Using Traditional Machine Learning & Crowd Sourcing"
 author:
 - name: Michael L. Mann
- affiliation: The George Washington University, Washington DC 20052
- thanks: Corresponding author. Email mmann1123@gmail.com
+  affiliation: The George Washington University, Washington DC 20052
+  thanks: Corresponding author. Email mmann1123@gmail.com
 - name: Lisa Colson
- affiliation: USDA Foreign Agricultural Service, Washington DC 20250
+  affiliation: USDA Foreign Agricultural Service, Washington DC 20250
 - name: Rory Nealon
- affiliation: USAID GeoCenter, Washington DC 20523
+  affiliation: USAID GeoCenter, Washington DC 20523
 - name: Ryan Engstrom
- affiliation: The George Washington University, Washington DC 20052
+  affiliation: The George Washington University, Washington DC 20052
 - name: Stellamaris Nakacwa
- affiliation: YouthMappers, Texas Tech University, Lubbock TX 79409
+  affiliation: YouthMappers, Texas Tech University, Lubbock TX 79409
 header-includes:
   - \usepackage{geometry}
   - \usepackage{pdflscape}
@@ -22,6 +22,9 @@ header-includes:
   - \usepackage{amsmath}
   - \usepackage{amsfonts}
   - \usepackage{lineno}
+  - \usepackage{array}
+  - \usepackage{booktabs}
+  - \usepackage{caption}
   - |
    ```{=latex}
    \pagestyle{fancy}
@@ -39,12 +42,13 @@ header-includes:
 
 abstract: |
   This study introduces a novel methodology for crop type classification in Tanzania by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.80 and an F1-micro score of 0.82. The model outperformed broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
----
+--- 
 
 \linenumbers  
 \modulolinenumbers[1]  
 \pagewiselinenumbers  
 \newgeometry{margin=1in}
+\captionsetup{justification=raggedright, singlelinecheck=false}
   
 <!-- compile working with:
 pandoc writeup.md --template=mytemplate.tex -o output.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc 
@@ -115,8 +119,8 @@ Data for this study were collected from multiple sources, including satellite im
 The study was conducted in 50 wards within three major districts of Arusha, Dodoma and Mwanza in Tanzania as seen in \ref{fig:study_area}. Tanzania, a country in East Africa, is known for its diverse agricultural landscape.  The region is characterized by a mix of smallholder farms, commercial plantations, and natural vegetation, making it an ideal yet challenging location for studying crop type classification. Our choice of these three districts was driven by the distinct variation in the major crop types that possibly dominated in each district,among oil seeds, grains and commercial crops such as cotton.
 
 \begin{figure}[H]
-   \centering   \includegraphics[width=0.8\linewidth]{writeup/figures/tz_ym_crop_target_provinces.png} 
-   \caption{Study area map of districts in Northern Tanzania where field visits were carried out (green).}
+   \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/tz_ym_crop_target_provinces.png} 
+   \caption{Study area map \newline Districts in Northern Tanzania where field visits were carried out (green)}
    \label{fig:study_area} %can refer to in text with \ref{fig:study_area}
 \end{figure}
 
@@ -133,18 +137,32 @@ To ensure the success of our project, we focused heavily on the design of our da
 Young crops exhibit significant differences compared to mature crops in terms of color, density, and phenological development. Variations in the crop cycle across different fields could lead to heteroscedasticity in the spectral reflectance measurements used for machine learning (ML) training, thereby affecting the precision and accuracy of the model. By targeting the period of April through May we aimed to capture crops late in the growing season and yet before harvest as seen in the crop calendar \ref{fig:crop_cal} below.
 
 \begin{figure}[H]
-   \centering   \includegraphics[width=0.8\linewidth]{writeup/figures/plant_ghant.png} 
-   \caption{Tanzania Crop Calendar [source: @cc_tanzania]}
+   \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/plant_ghant.png}
+   \caption{Tanzania Crop Calendar }
    \label{fig:crop_cal} %can refer to in text with \ref{fig:crop_cal}
-\end{figure}
+\end{figure} Source: [@cc_tanzania]
 
 USDA’s Foreign Agricultural Service compiles information on planting and harvest windows for grain, oilseed, and cotton crops as an important tool to support crop condition assessments with satellite imagery. Tanzania’s crop planting seasons are shaped by its bimodal and unimodal rainfall patterns, which vary by region. In the north and northeast, bimodal areas experience the short rains (Vuli) from late-October to mid-January, during which crops like maize, beans, and vegetables are planted in October and November, and the long rains (Masika) from March to May, supporting crops like maize, rice, sorghum, and cassava, typically planted in February and March. In the central, southern, and western regions with unimodal rainfall, there is a single rainy season from November to April, when crops such as cotton, maize, millet, rice, and sunflower are planted in November and December. This diversity in rainfall patterns allows for a wide variety of crops suited to the local climate and seasonal conditions.
 
 The data collection took place between late April and May as shown in figure X to align with mid-season for many crops. YouthMappers were advised to focus on a set of target crops, ones known to be present in the region and at appropriate crop growth stages. Before embarking on data collection, discussions covered several factors to consider in selecting field collection sites. Factors included field size to establish a minimum detectable by the satellite imagery, clear and open fields to enhance clean spectra sampling, prioritizing areas covered by a single crop to reduce confusion, sampling distribution of at least one kilometer between stops, and even crop maturity and health. YouthMappers were advised to identify only fields 30 meters or greater across to ensure a minimum size detectable by the satellite imagery. When picking between fields for data collection, defining clear and open fields was discussed with several examples, as agriculture can include mixed land cover types with tree cover, power lines, buildings, and other obstructions that prevent the satellite from cleanly capturing spectra of only the crop. YouthMappers were advised to only pick clear and open fields and prioritize those growing only one crop. The recommendation to have a sampling distribution of at least one kilometer was a compromise between the amount of time available for data collection, the expense of travel, and a sufficient distribution to reduce spatial autocorrelation. It was permitted for YouthMappers to identify adjacent fields growing different types of crops, but otherwise highly encouraged for them to return to the vehicle and drive the 1 km to collect more data. The most important factors driving the timing for data collection were crop maturity and health. The fieldwork was conducted between late-April to May 2023 because the target crops typically reach reproductive stages with maximum canopy cover during this time of year. This crop stage is best suited for discerning different crop types with satellite imagery. While most fields were found in late reproductive stages, drought conditions impacted the health of some fields. YouthMappers were advised to prioritize and identify mature, lush green fields, as ideal data collection sites. By thoroughly discussing each of these factors, we trained YouthMappers to select fields best suited as in-situ training data for satellite imagery analysis.
 
 The data collection was managed through KoboCollect, hosted on the KoboToolBox infrastructure, which provided an effective platform for gathering and organizing data. This approach enabled a collection of the desired volume of data points necessary for model training and evaluation, as summarized in Table \ref{tab:data_n}.
-
- \begin{table}[h!] \centering \begin{tabular}{|>{\bfseries}c|m{4cm}|m{4cm}|m{4cm}|} \hline \textbf{} & \textbf{Arusha} & \textbf{Mwanza} & \textbf{Dodoma} \\ \hline \textbf{Desired points:} & \textbf{300} & \textbf{1000} & \textbf{800} \\\hline \begin{itemize} \item Maize \item Rice \item Sorghum \& Millet \end{itemize} & \begin{itemize} \item Maize \item Cotton \item Rice \item Peanuts or Groundnut \end{itemize} & \begin{itemize} \item Sorghum \item Maize \item Millet \item Sunflower \item Peanuts or Groundnut \item Cotton Fields \end{itemize} \\ \hline \end{tabular} \caption{Main Crops by Region in Tanzania} \label{tab:data_n} \end{table}
+ 
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}lp{4cm}p{4cm}p{4cm}@{}}
+\toprule
+& \textbf{Arusha} & \textbf{Mwanza} & \textbf{Dodoma} \\ \midrule
+\textbf{Desired points:} & \textbf{300} & \textbf{1000} & \textbf{800} \\ 
+\midrule \\
+\textbf{Crops:} & Maize \newline Rice \newline Sorghum \& Millet 
+               & Maize \newline Cotton \newline Rice \newline Peanuts or Groundnut 
+               & Sorghum \newline Maize \newline Millet \newline Sunflower \newline Peanuts or Groundnut \newline Cotton Fields \\ 
+\bottomrule
+\end{tabular}
+\caption{Collection Targets and Primary Crops by Region in Tanzania}
+\label{tab:data_n}
+\end{table}
 
 ### Satellite Imagery
 
@@ -213,8 +231,8 @@ There were a number of challenges involved with planning, and implementing a lar
 The distribution of primary land cover types within the training dataset used for the model are represented in Figure \ref{fig:lc_percentages}. The dataset consists of a diverse range of land cover types, each contributing differently to the total number of observations. Maize is the most prevalent land cover type, accounting for the highest percentage of the observations, followed by rice and sunflower. This is indicative of the agricultural dominance in the region being studied. Less common land covers such as millet, sorghum, and urban areas represent intermediate percentages, reflecting the  heterogeneous landscape that includes both agricultural and urbanized zones.
 
 \begin{figure}[H]
-   \centering   \includegraphics[width=0.8\linewidth]{writeup/figures/primary_land_cover.png} % Adjust the path and options
-   \caption{Land Cover Percentages}
+   \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/primary_land_cover.png} % Adjust the path and options
+   \caption{Land Cover by Percentage of Observations}
    \label{fig:lc_percentages} %can refer to in text with \ref{fig:lc_percentages}
 \end{figure}
 
@@ -255,9 +273,9 @@ Optuna trials tuning results selected LightGBM [@ke2017lightgbm]is a gradient bo
 
 ### Model Performance
 
-The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.800 and F1-micro score of 0.822 (Table \ref{tab:metrics}, indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, 'rice' and 'urban' categories achieved classification accuracies of 90% and 94%, respectively. Other well-classified categories included 'millet', ’maize’, ‘sunflower’, ‘tidal’, ‘water’, ‘shrubs’, and 'forest', each with over 70% accuracy. However 'forest' is primarily confused with the category 'shrub', which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
+The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.800 and F1-micro score of 0.822 (Table \ref{tab:metrics}, indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, rice and urban categories achieved classification accuracies of 90% and 94%, respectively. Other well-classified categories included millet, maize, sunflower, tidal, water, shrubs, and forest, each with over 70% accuracy. However forest is primarily confused with the category shrub, which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
 
-Categories such as 'sorghum', 'sunflower' and 'cotton' displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types. Notably, the 'other' category showed a broader distribution of misclassifications, likely due to its encompassing a diverse range of less frequent land covers, achieving a lower accuracy of 40%. However this class is irrelevant to the objectives of this paper. 
+Categories such as sorghum, sunflower and cotton displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types. Notably, the 'other' category showed a broader distribution of misclassifications, likely due to its encompassing a diverse range of less frequent land covers, achieving a lower accuracy of 40%. However this class is irrelevant to the objectives of this paper.
 
 \begin{figure}[H]
     \centering
@@ -281,13 +299,14 @@ F1 Micro Accuracy   & 0.82    \\ \bottomrule
 \ref{tab:metrics}
 \end{table}
 
-The overall high out-of-sample performance \ref{tab:metrics} across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.
-
-\includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/model_performance.png}  
-   \caption{Tanzanian Land Cover Model Performance Comparison - source \cite{kerner2024accurate}}
-   \label{fig:model_compare} %can refer to in text with \ref{fig:model_compare}
+The overall high out-of-sample performance in Table \ref{tab:metrics} across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/model_performance.png}  
+    \caption{Tanzanian Land Cover Model Performance Comparison - source  \newline Land cover model performance metrics for Tanzania - dashed line indicates this paper’s model out-of-sample performance across all land covers}
+    \label{fig:model_compare} %can refer to in text with \ref{fig:model_compare}
 \end{figure}
-Caption: Land cover model performance metrics for Tanzania - dashed line indicates this paper’s model out-of-sample performance across all land covers. Source:[@kerner2024accurate]
+Source: [@kerner2024accurate]
 
 The integration of crowdsourced data with traditional machine learning and engineered time-series features yielded a robust model for crop classification in Tanzania. While the model performed exceptionally well for crops like maize and rice, some confusion persisted among similar crop types such as sorghum and cotton. This suggests that additional discriminative features or more extensive training data may be necessary to further enhance classification accuracy for these crops. The challenges encountered, such as variability in crop cycles and challenges of crop identification, highlight the complexities of agricultural monitoring in resource-limited settings. Addressing these issues in future research could improve model performance and generalizability. Overall, our findings demonstrate the practicality of using efficient, interpretable machine learning methods in conjunction with community-driven data collection to advance agricultural monitoring in developing regions.
 

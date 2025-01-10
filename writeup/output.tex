@@ -120,20 +120,20 @@ cotton across a range of agricultural areas. Traditional machine
 learning algorithms, augmented with carefully engineered time-series
 features, were employed to map the different crop classes. Our approach
 achieved high classification accuracy, evidenced by a Cohen's Kappa
-score of 0.80 and an F1-micro score of 0.82. The model outperformed
-broadly used land cover models which simply classify `agriculture'
-without specifying crop types. By interpreting feature importance using
-SHAP values, we identified key time-series features driving the model's
-performance, enhancing both interpretability and reliability. Our
-findings demonstrate that traditional machine learning techniques,
-combined with computationally efficient feature extraction methods,
-offer a practical and effective ``lite learning'' approach for mapping
-crop types in data-scarce environments. This methodology facilitates
-accurate crop type classification using a low-cost, resource-limited
-approach that contributes valuable insights for sustainable agricultural
-practices and informed policy-making, ultimately impacting food security
-and land management in resource-limited contexts, such as sub-Saharan
-Africa.
+score of 0.80 and an F1-micro score of 0.82. The model often match or
+outperform broadly used land cover models which simply classify
+`agriculture' without specifying crop types. By interpreting feature
+importance using SHAP values, we identified key time-series features
+driving the model's performance, enhancing both interpretability and
+reliability. Our findings demonstrate that traditional machine learning
+techniques, combined with computationally efficient feature extraction
+methods, offer a practical and effective ``lite learning'' approach for
+mapping crop types in data-scarce environments. This methodology
+facilitates accurate crop type classification using a low-cost,
+resource-limited approach that contributes valuable insights for
+sustainable agricultural practices and informed policy-making,
+ultimately impacting food security and land management in
+resource-limited contexts, such as sub-Saharan Africa.
 \end{abstract}
 
 \linenumbers  
@@ -169,15 +169,15 @@ particular locations. Machine learning algorithms, including decision
 trees, random forests, support vector machines (SVM), and k-nearest
 neighbors (KNN), have been successfully used to classify imagery into
 unique agricultural types (Ibrahim et al. (2021); Bégué, Arvor, Bellon,
-Betbeder, De Abelleyra, PD Ferraz, et al. (2018); Delince et al. (2017)
-). These algorithms leverage the rich spectral information captured by
-satellite sensors, allowing them to identify distinctive patterns
-associated with different crop types. By training on large labeled
-datasets where ground-validation information on crop types is linked to
-corresponding image patches, these models can effectively learn the
-relationships between the spectral characteristics of crops and their
-respective classes (Bégué, Arvor, Bellon, Betbeder, De Abelleyra, P. D.
-Ferraz, et al. (2018)).
+Betbeder, De Abelleyra, PD Ferraz, et al. (2018); Delince et al.
+(2017)). These algorithms leverage the rich spectral information
+captured by satellite sensors, allowing them to identify distinctive
+patterns associated with different crop types. By training on large
+labeled datasets where ground-validation information on crop types is
+linked to corresponding image pixels, these models can effectively learn
+the relationships between the spectral characteristics of crops and
+their respective classes (Bégué, Arvor, Bellon, Betbeder, De Abelleyra,
+P. D. Ferraz, et al. (2018)).
 
 The strength of traditional machine learning approaches lies in their
 ability to exploit both the spectral and time-series patterns within the
@@ -223,18 +223,21 @@ of time-series imagery, significantly improving crop type classification
 outcomes especially in data rich environments {[}Teixeira et al. (2023);
 camps2021deep{]}. Deep learning approaches however typically require
 much larger sets of training data, may be more prone to overfitting
-especially with small sample sizes, and have significant limitations to
-interpretability (Höhl et al. 2024; Maxwell, Warner, and Guillén 2021;
-Teixeira et al. 2023; Y. Li et al. 2023; Ma et al. 2019). The lack of
-readily available and reliable ground truth data or benchmark datasets
-for training, as discussed earlier, may limit the applicability of deep
-learning for a variety of tasks including crop classification and make
-researchers more reliant of less reliable techniques like transfer
-learning or zero-shot or low shot methods (Owusu et al. 2024; Y. Li et
-al. 2023; Ma et al. 2019). Interpretability is also a salient weakness
-as interpretation of models allows us to gain scientific insight and
-assess trustworthiness and fairness in so far as outputs affect policy
-decisions.
+especially with small sample sizes, have significant limitations to
+interpretability, and require expensive compute (Höhl et al. 2024;
+Maxwell, Warner, and Guillén 2021; Teixeira et al. 2023; Y. Li et al.
+2023; Ma et al. 2019). Although recent efforts have closed the gap e.g.
+(Tseng et al. 2021), the lack of readily available and reliable ground
+truth data or benchmark datasets for training, as discussed earlier, may
+limit the applicability of deep learning for a variety of tasks
+including crop classification and make researchers more reliant of less
+reliable techniques like transfer learning or zero-shot or low shot
+methods (Owusu et al. 2024; Y. Li et al. 2023; Ma et al. 2019).
+Moreover, training data for extreme events, like crop losses, disease,
+and lodging are largely non-existant. Interpretability is also a salient
+weakness as interpretation of models allows us to gain scientific
+insight and assess trustworthiness and fairness in so far as outputs
+affect policy decisions.
 
 An alternative approach turns back the clock on deep learning
 approaches. For instance CNN classifiers, through the exertion of

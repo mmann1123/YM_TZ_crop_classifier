@@ -601,8 +601,8 @@ def get_oos_confusion_matrix(
         list_kappa.append(cohen_kappa_score(y_test, y_pred))
         list_F1.append(f1_score(y_test, y_pred, average="micro"))
         list_accuracy.append(accuracy_score(y_test, y_pred))
-        list_recall.append(recall_score(y_test, y_pred, average="micro"))
-        list_precision.append(precision_score(y_test, y_pred, average="micro"))
+        list_recall.append(recall_score(y_test, y_pred, average="macro"))
+        list_precision.append(precision_score(y_test, y_pred, average="macro"))
 
         # Generate confusion matrix for the current fold
         conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)

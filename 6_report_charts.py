@@ -226,3 +226,5 @@ plt.xticks(
 plt.tight_layout()
 plt.subplots_adjust(hspace=0.1)  # Reduce space between y-axis ticks
 plt.show()
+
+# %%

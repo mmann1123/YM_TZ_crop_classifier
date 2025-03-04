@@ -151,6 +151,8 @@ drop = [
 # apply keep/drop
 data.drop(data[data["lc_name"].isin(drop)].index, inplace=True)
 data.loc[data["lc_name"].isin(keep) == False, "lc_name"] = "Other"
+data.drop(data[data["lc_name"].isin(["Other"])].index, inplace=True)
+
 data.reset_index(drop=True, inplace=True)
 
 # drop two missing values
@@ -213,20 +215,17 @@ os.chdir(
     "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data/models"
 )
 
-# %%
+# %% Study to get parameters for feature selection
 
 # Create a study with SQLite storage
 storage_name = "sqlite:///study.db"
-study_name = (
-    f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
-)
+study_name = f"model_selection_feature_selection_no_other{'_'.join([classifier])}_{scoring}_{n_splits}"
 # %%
 # Run study
 feature_selection_study(
     study_name, storage_name, X, y, groups, n_splits, scoring, n_trials=500
 )
-
-
+# %%
 # Try to load the study from the storage
 try:
     study = optuna.load_study(
@@ -250,7 +249,6 @@ for key, value in trial.params.items():
 
 # %%
 #  Open results after restarting kernel
-
 
 storage = optuna.storages.RDBStorage(url="sqlite:///study.db")
 
@@ -305,7 +303,7 @@ X_columns = X_columns[kept_features]
 y = data["lc"]
 pipeline_performance = best_classifier_pipe(
     "study.db",
-    f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    study_name,
 )
 class_names = np.unique(y)
 le2 = LabelEncoder()
@@ -321,7 +319,7 @@ get_oos_confusion_matrix(
     weights=data.Field_size,
     n_splits=3,
     random_state=42,
-    save_path=f"../outputs/final_class_perfomance_rf_kbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
+    save_path=f"../outputs/final_class_perfomance_rf_kbest_no_other{'_'.join([classifier])}_{scoring}_{n_splits}.png",
 )
 
 
@@ -339,7 +337,7 @@ os.chdir(
 
 lgbm_pipe = best_classifier_pipe(
     db_loc="study.db",
-    study_name=f"model_selection_feature_selection_{'_'.join([classifier])}_{scoring}_{n_splits}",
+    study_name=study_name,
     desired_classifier="LGBM",
 )
 params_lgbm_dict = lgbm_pipe["classifier"].get_params()
@@ -353,7 +351,8 @@ shaps_importance_list = compute_shap_importance(
 
 #  save pickle of shaps_importance_list
 with open(
-    f"shaps_importance_list_{'_'.join([classifier])}_{scoring}_{n_splits}.pkl", "wb"
+    f"shaps_importance_list_no_other_{'_'.join([classifier])}_{scoring}_{n_splits}.pkl",
+    "wb",
 ) as f:
     pickle.dump(shaps_importance_list, f)
 
@@ -375,7 +374,7 @@ summary = shap.summary_plot(
 )
 
 plt.savefig(
-    f"../outputs/mean_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
+    f"../outputs/mean_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
     bbox_inches="tight",
 )
 
@@ -401,7 +400,7 @@ summary = shap.summary_plot(
     show=False,
 )
 plt.savefig(
-    f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
+    f"../outputs/max_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
     bbox_inches="tight",
 )
 
@@ -417,7 +416,7 @@ extract_top_from_shaps(
     remove_containing=None,
     file_prefix="mean",
     data_dir_tif_glob=None,
-    out_path=f"../outputs/mean_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
+    out_path=f"../outputs/mean_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
 )
 
 
@@ -427,15 +426,15 @@ extract_top_from_shaps(
     select_how_many=select_how_many,
     remove_containing=None,
     data_dir_tif_glob=None,
-    out_path=f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
+    out_path=f"../outputs/max_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv",
 )
 # %%
 
 # ##############################################################
 # # %% find final selected images
 # ##############################################################
-mean_shaps_file = f"../outputs/mean_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-max_shaps_file = f"../outputs/max_shaps_importance_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+mean_shaps_file = f"../outputs/mean_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+max_shaps_file = f"../outputs/max_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
 
 select_images = set(
     list(pd.read_csv(mean_shaps_file)[f"top{select_how_many}names"].values)
@@ -475,11 +474,11 @@ y = data["lc"]
 
 X = data[list(select_images)].values
 storage_name = "sqlite:///study.db"
-study_name = f"final_model_selection_no_kbest_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
+study_name_final = f"final_model_selection_no_kbest_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
 # %% RUN STUDY================================================================================================
 # Create a study with SQLite storage
-feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scoring)
+feature_selection_study(study_name_final, storage_name, X, y, groups, n_splits, scoring)
 
 # %% retrieve results from final model
 #   optuna classifier study
@@ -488,7 +487,7 @@ feature_selection_study(study_name, storage_name, X, y, groups, n_splits, scorin
 storage_load = optuna.storages.RDBStorage(url=storage_name)
 
 study = optuna.load_study(
-    study_name=study_name,
+    study_name=study_name_final,
     storage=storage_name,
 )
 
@@ -514,7 +513,7 @@ print(sorted_trials[["number", "value", "params_classifier"]])
 
 study_summaries = optuna.study.get_all_study_summaries(storage=storage_load)
 for summary in study_summaries:
-    print(summary.study_name)
+    print(summary.study_name_final)
     print(summary.best_trial.values)
 
     # # grab results
@@ -529,14 +528,17 @@ storage_name = "sqlite:///study.db"
 storage_load = optuna.storages.RDBStorage(url=storage_name)
 
 final_study = optuna.load_study(
-    study_name="model_selection_feature_selection_LGBM_kappa_3",
+    study_name=study_name_final,
     storage=storage_load,
 )
 final_study.best_trial.values
 final_study.best_trial.params
 
 # %%
-
+pipeline_performance = best_classifier_pipe(
+    "study.db",
+    study_name=study_name_final,
+)
 get_oos_confusion_matrix(
     pipeline=pipeline_performance,
     X=X,
@@ -547,7 +549,7 @@ get_oos_confusion_matrix(
     weights=data.Field_size,
     n_splits=3,
     random_state=42,
-    save_path=f"../outputs/final_confusion_{study_name}_v_ignore.png",
+    save_path=f"../outputs/final_confusion_no_other_{study_name}.png",
 )
 
 

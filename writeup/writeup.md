@@ -41,7 +41,7 @@ header-includes:
    ```
 
 abstract: |
-  This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.80 and an F1-micro score of 0.82. The model often match or outperform broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
+  This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85. The model often match or outperform broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
 --- 
 
 \linenumbers  
@@ -254,7 +254,7 @@ In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights into the a
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
+    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_no_other_30_LGBM_kappa_3.png} % Adjust the path and options
     \caption{Top 20 Mean SHAP Feature Importance by Land Cover Type}
     \label{fig:mean_shaps} %can refer to in text with \ref{fig:mean_shaps}
 \end{figure}
@@ -262,11 +262,11 @@ In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights into the a
 
 ### Maximum SHAP Values
 
-On the other hand, Figure \ref{fig:max_shaps}, maximum SHAP values uncover features that, while perhaps not consistently influential, have high impacts under particular conditions. This aspect of the analysis is crucial for identifying features that can cause significant shifts in model output, potentially corresponding to specific agricultural or environmental contexts. Features such as "hue.median" and "B11.maximum" show high maximum SHAP values, indicating their pivotal roles in determining certain classes. For instance,  "B11.maximum" reflects peak reflectance in the Short-Wavelength Infrared (SWIR), which could be critical in identifying crops at their maximum biomass, like sunflower at full bloom compared to other crops at different stages of growth. 
+On the other hand, Figure \ref{fig:max_shaps}, maximum SHAP values uncover features that, while perhaps not consistently influential, have high impacts under particular conditions. This aspect of the analysis is crucial for identifying features that can cause significant shifts in model output, potentially corresponding to specific agricultural or environmental contexts. Features such as "hue.median" and "B11.quantial.q.0.95" show high maximum SHAP values, indicating their pivotal roles in determining certain classes. For instance,  "B11.maximum" reflects peak reflectance in the Short-Wavelength Infrared (SWIR), which could be critical in identifying crops at their maximum biomass, like sunflower at full bloom compared to other crops at different stages of growth. 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/mean_shaps_importance_30_LGBM_kappa_3.png} % Adjust the path and options
+    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/max_shaps_importance_no_other_30_LGBM_kappa_3.png} % Adjust the path and options
     \caption{Top 20 Max SHAP Feature Importance by Land Cover Type}
     \label{fig:max_shaps} %can refer to in text with \ref{fig:max_shaps}
 \end{figure}
@@ -275,17 +275,17 @@ The final selection of features for model training was carefully curated to incl
 
 ### Model Selection
 
-Optuna trials tuning results selected LightGBM [@ke2017lightgbm]is a gradient boosting algorithm that combines many simple decision trees to produce a stronger single model, improving the model at each step. LightGBM grows decision trees leaf-wise rather than adding different levels, thereby targeting branches that most need refining. Here we find an optimal bagging fraction of approximately 0.58, bagging frequency of 3, learning rate of 0.025, max depth of 35, minimum data in each leaf of 154, and the number of leaves set at 51.
+Optuna trials tuning results selected LightGBM [@ke2017lightgbm]is a gradient boosting algorithm that combines many simple decision trees to produce a stronger single model, improving the model at each step. LightGBM grows decision trees leaf-wise rather than adding different levels, thereby targeting branches that most need refining.  
 
 ### Model Performance
 
-The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.800 and F1-micro score of 0.822 (Table \ref{tab:metrics}, indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, rice and urban categories achieved classification accuracies of 90% and 94%, respectively. Other well-classified categories included millet, maize, sunflower, tidal, water, shrubs, and forest, each with over 70% accuracy. However forest is primarily confused with the category shrub, which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
+The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.82 and F1-micro score of 0.85 (Table \ref{tab:metrics}, indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, rice and maize achieved out-of-sample classification accuracies of 92% and 82%, respectively. Other well-classified categories included millet, sunflower, tidal, water, shrubs, and forest, each with over 73% accuracy. However forest is primarily confused with the category shrub, which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
 
-Categories such as sorghum, sunflower and cotton displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types. Notably, the 'other' category showed a broader distribution of misclassifications, likely due to its encompassing a diverse range of less frequent land covers, achieving a lower accuracy of 40%. However this class is irrelevant to the objectives of this paper.
+Categories such as sorghum, cassava and cotton displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types.  Confusion between cassava and maize might reflect intercropping practices, where cassava is grown alongside other crops, making it difficult to isolate in the satellite imagery. The model's performance on these classes suggests that additional discriminative features or more extensive training data may be necessary to further enhance classification accuracy for these crops.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/final_confusion_final_model_selection_no_kbest_30_LGBM_kappa_3.png} % Adjust the path and options
+    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/final_confusion_no_other_model_selection_feature_selection_no_otherLGBM_kappa_3.png} % Adjust the path and options
     \caption{Out of Sample Confusion Matrix}
     \label{fig:oos_confusion} %can refer to in text with \ref{fig:oos_confusion}
 \end{figure}
@@ -295,10 +295,13 @@ Categories such as sorghum, sunflower and cotton displayed moderate confusion wi
 \begin{tabular}{@{}ll@{}}
 \toprule
 Metric              & Value                 \\ \midrule
-Balanced Accuracy   & 0.79    \\
-Kappa Accuracy      & 0.80    \\
-Accuracy            & 0.82    \\
-F1 Micro Accuracy   & 0.82    \\ \bottomrule
+Balanced Accuracy   & 0.84    \\
+Kappa Accuracy      & 0.82    \\
+Accuracy            & 0.85    \\
+F1 Micro Accuracy   & 0.85    \\ 
+Precision (UA)   & 0.86    \\ 
+Recall (PA)   & 0.84    \\ 
+\bottomrule
 \end{tabular}
 \caption{Summary of Classification Metrics}
 \label{tab:metrics}
@@ -324,7 +327,7 @@ The integration of crowdsourced data with traditional machine learning and engin
 
 In this study, we introduced a novel methodology for crop type classification in Tanzania by leveraging crowdsourced data and time-series features extracted from Sentinel-2 satellite imagery. By combining advanced remote sensing techniques with local knowledge, we addressed significant gaps in agricultural monitoring within resource- and data-limited settings. Our approach gathered a new dataset and successfully applied it to a real-world task at very low cost, using traditional machine learning algorithms augmented with carefully engineered time-series features to precisely identify crop types.
 
-Our results demonstrated the effectiveness of the proposed methodology, achieving a Cohen's Kappa score of 0.80 and an F1-micro score of 0.82 across a diverse multi-class dataset. The model accurately classified challenging crops such as cassava, millet, sorghum, and cotton. The integration of crowdsourced data and time-series features provided valuable insights into the temporal dynamics of crop growth, enhancing the model's accuracy and reliability. Notably, our model—although trained specifically on Tanzanian data—outperforms broadly used land cover models that perform the simpler task of classifying 'agriculture' without specifying the crop type. This highlights the need for better and more frequent crop type classification data.
+Our results demonstrated the effectiveness of the proposed methodology, achieving a Cohen's Kappa score of 0.82 and an F1-micro score of 0.84 across a diverse and multi-class dataset. The model accurately classified challenging crops such as cassava, millet, sorghum, and cotton. The integration of crowdsourced data and time-series features provided valuable insights into the temporal dynamics of crop growth, enhancing the model's accuracy and reliability. Notably, our model—although trained specifically on Tanzanian data—outperforms broadly used land cover models that perform the simpler task of classifying 'agriculture' without specifying the crop type. This highlights the need for better and more frequent crop type classification data.
 
 By interpreting feature importance using SHAP values, we gained a deeper understanding of the model's behavior and the key predictors driving its predictions. Identifying the most influential features across different land cover types allowed us to refine the feature selection process, ensuring that the selected features were both consistently influential and impactful under specific conditions.
 

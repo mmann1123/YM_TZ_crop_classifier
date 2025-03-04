@@ -528,7 +528,7 @@ storage_name = "sqlite:///study.db"
 storage_load = optuna.storages.RDBStorage(url=storage_name)
 
 final_study = optuna.load_study(
-    study_name="final_model_selection_no_kbest_no_other_30_LGBM_kappa_3",
+    study_name=study_name_final,
     storage=storage_load,
 )
 final_study.best_trial.values
@@ -537,7 +537,7 @@ final_study.best_trial.params
 # %%
 pipeline_performance = best_classifier_pipe(
     "study.db",
-    study_name="final_model_selection_no_kbest_no_other_30_LGBM_kappa_3",
+    study_name=study_name_final,
 )
 get_oos_confusion_matrix(
     pipeline=pipeline_performance,

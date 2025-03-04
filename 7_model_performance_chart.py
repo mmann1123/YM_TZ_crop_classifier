@@ -113,12 +113,12 @@ colors = {model: color_map(i) for i, model in enumerate(models)}
 
 # Target lines for each metric
 target_lines = {
-    "Balanced Accuracy": 0.829,
-    "Kappa Accuracy": 0.816,
-    "Accuracy": 0.841,
-    "F1": 0.841,
-    "Precision (UA)": 0.859,
-    "Recall (PA)": 0.8346,
+    "Balanced Accuracy": 0.8369,
+    "Kappa Accuracy": 0.8239,
+    "Accuracy": 0.84757,
+    "F1": 0.847579,
+    "Precision (UA)": 0.8568,
+    "Recall (PA)": 0.8369,
 }
 
 # Create a figure with subplots

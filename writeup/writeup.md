@@ -41,7 +41,7 @@ header-includes:
    ```
 
 abstract: |
-  This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.84. The model often match or outperform broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
+  This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85. The model often match or outperform broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
 --- 
 
 \linenumbers  
@@ -279,13 +279,13 @@ Optuna trials tuning results selected LightGBM [@ke2017lightgbm]is a gradient bo
 
 ### Model Performance
 
-The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.82 and F1-micro score of 0.84 (Table \ref{tab:metrics}, indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, rice, maize and urban categories achieved classification accuracies of 92%, 82% and 94%, respectively. Other well-classified categories included millet, sunflower, tidal, water, shrubs, and forest, each with over 74% accuracy. However forest is primarily confused with the category shrub, which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
+The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.82 and F1-micro score of 0.85 (Table \ref{tab:metrics}, indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, rice and maize achieved out-of-sample classification accuracies of 92% and 82%, respectively. Other well-classified categories included millet, sunflower, tidal, water, shrubs, and forest, each with over 73% accuracy. However forest is primarily confused with the category shrub, which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
 
-Categories such as sorghum, sunflower and cotton displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types.  
+Categories such as sorghum, cassava and cotton displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types.  Confusion between cassava and maize might reflect intercropping practices, where cassava is grown alongside other crops, making it difficult to isolate in the satellite imagery. The model's performance on these classes suggests that additional discriminative features or more extensive training data may be necessary to further enhance classification accuracy for these crops.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/final_confusion_no_other_final_model_selection_no_kbest_no_other_30_LGBM_kappa_3.png} % Adjust the path and options
+    \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/final_confusion_no_other_model_selection_feature_selection_no_otherLGBM_kappa_3.png} % Adjust the path and options
     \caption{Out of Sample Confusion Matrix}
     \label{fig:oos_confusion} %can refer to in text with \ref{fig:oos_confusion}
 \end{figure}
@@ -295,10 +295,13 @@ Categories such as sorghum, sunflower and cotton displayed moderate confusion wi
 \begin{tabular}{@{}ll@{}}
 \toprule
 Metric              & Value                 \\ \midrule
-Balanced Accuracy   & 0.83    \\
+Balanced Accuracy   & 0.84    \\
 Kappa Accuracy      & 0.82    \\
-Accuracy            & 0.84    \\
-F1 Micro Accuracy   & 0.84    \\ \bottomrule
+Accuracy            & 0.85    \\
+F1 Micro Accuracy   & 0.85    \\ 
+Precision (UA)   & 0.86    \\ 
+Recall (PA)   & 0.84    \\ 
+\bottomrule
 \end{tabular}
 \caption{Summary of Classification Metrics}
 \label{tab:metrics}

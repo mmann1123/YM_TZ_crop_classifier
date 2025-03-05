@@ -1,5 +1,6 @@
 ---
-title: "Lite Learning: Efficient Crop Classification in Tanzania Using Traditional Machine Learning & Crowd Sourcing"
+
+title: "Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing"
 author:
 - name: Michael L. Mann
   affiliation: The George Washington University, Washington DC 20052
@@ -130,7 +131,7 @@ The study was conducted in 50 wards within three major districts of Arusha, Dodo
    \label{fig:study_area} %can refer to in text with \ref{fig:study_area}
 \end{figure}
 
-### Crowd Sourced Crop Data
+### Crowd Sourced Data Collection
 
 Crop type data collection was designed and executed by YouthMappers through a crowdsourced GIS approach. The method was designed in 3 steps where: 1) Development of and training all intended student participants. 2) Data collection using KoboToolbox hosting a well developed data model. The exercise lasted 14 days with 7 days of iterative pilot testing on different farms, crops and landscapes. Finally the last step, 3) was the data review and cleaning phase to generate a sample for training.
 
@@ -260,7 +261,7 @@ In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights into the a
 \end{figure}
 
 
-### Maximum SHAP Values
+#### Maximum SHAP Values
 
 On the other hand, Figure \ref{fig:max_shaps}, maximum SHAP values uncover features that, while perhaps not consistently influential, have high impacts under particular conditions. This aspect of the analysis is crucial for identifying features that can cause significant shifts in model output, potentially corresponding to specific agricultural or environmental contexts. Features such as "hue.median" and "B11.quantial.q.0.95" show high maximum SHAP values, indicating their pivotal roles in determining certain classes. For instance,  "B11.maximum" reflects peak reflectance in the Short-Wavelength Infrared (SWIR), which could be critical in identifying crops at their maximum biomass, like sunflower at full bloom compared to other crops at different stages of growth. 
 
@@ -279,7 +280,7 @@ Optuna trials tuning results selected LightGBM [@ke2017lightgbm]is a gradient bo
 
 ### Model Performance
 
-The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.82 and F1-micro score of 0.85 (Table \ref{tab:metrics}, indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, rice and maize achieved out-of-sample classification accuracies of 92% and 82%, respectively. Other well-classified categories included millet, sunflower, tidal, water, shrubs, and forest, each with over 73% accuracy. However forest is primarily confused with the category shrub, which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
+The classification model demonstrated robust performance across multiple land cover classes, as evidenced by the out-of-sample mean confusion matrix with a Cohen's Kappa score of 0.82 and F1-micro score of 0.85 (Table \ref{tab:metrics}), indicating substantial agreement between predicted and actual classifications. Remember that each field is treated as a ‘group’ in the group k-fold procedure to ensure that pixels from the same field are not split between the testing and training groups.  The confusion matrix (Figure \ref{fig:oos_confusion}) shows high diagonal values for most classes, highlighting the model's ability to accurately identify specific land covers. For instance, rice and maize achieved out-of-sample classification accuracies of 92% and 82%, respectively. Other well-classified categories included millet, sunflower, tidal, water, shrubs, and forest, each with over 73% accuracy. However forest is primarily confused with the category shrub, which is likely a result of poor training data and the difficulty of visually determining trees versus shrubs from high-res imagery without the benefit of field visits.
 
 Categories such as sorghum, cassava and cotton displayed moderate confusion with other classes, indicating potential areas for model improvement, especially in distinguishing features that are common between similar crop types.  Confusion between cassava and maize might reflect intercropping practices, where cassava is grown alongside other crops, making it difficult to isolate in the satellite imagery. The model's performance on these classes suggests that additional discriminative features or more extensive training data may be necessary to further enhance classification accuracy for these crops.
 

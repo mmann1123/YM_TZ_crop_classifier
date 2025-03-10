@@ -122,7 +122,7 @@ target_lines = {
 }
 
 # Create a figure with subplots
-fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharex=True)
+fig, axes = plt.subplots(4, 1, figsize=(10, 20), sharex=True)
 axes = axes.flatten()
 
 for i, metric in enumerate(metrics):

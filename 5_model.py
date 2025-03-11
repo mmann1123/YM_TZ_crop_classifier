@@ -1,4 +1,4 @@
-# %% env:crop_class
+# %% env:crop_pred
 # import other necessary modules...
 from glob import glob
 import dask.dataframe as dd
@@ -221,10 +221,11 @@ os.chdir(
 storage_name = "sqlite:///study.db"
 study_name = f"model_selection_feature_selection_no_other{'_'.join([classifier])}_{scoring}_{n_splits}"
 # %%
-# Run study
-feature_selection_study(
-    study_name, storage_name, X, y, groups, n_splits, scoring, n_trials=500
-)
+# RUN STUDY 
+
+# feature_selection_study(
+#     study_name, storage_name, X, y, groups, n_splits, scoring, n_trials=500
+# )
 # %%
 # Try to load the study from the storage
 try:
@@ -457,7 +458,7 @@ select_image_paths = find_selected_ranked_images(
     ranked_features=[
         x + "_0" for x in select_images
     ],  # append _0 to avoid matching multipl uses of values like 'mean'
-    available_image_list=glob("../features/*/*.tif"),
+    available_image_list=glob("../features/**/*.tif"),
     # select_how_many=len(select_images), dont use doesn't make sense with multiple zones
 )
 
@@ -477,8 +478,10 @@ storage_name = "sqlite:///study.db"
 study_name_final = f"final_model_selection_no_kbest_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}"
 
 # %% RUN STUDY================================================================================================
+
 # Create a study with SQLite storage
-feature_selection_study(study_name_final, storage_name, X, y, groups, n_splits, scoring)
+
+# feature_selection_study(study_name_final, storage_name, X, y, groups, n_splits, scoring)
 
 # %% retrieve results from final model
 #   optuna classifier study
@@ -559,27 +562,39 @@ get_oos_confusion_matrix(
 #########################################################
 
 
-# %% create tiles for reference
-with gw.config.update(ref_res=(10, 10)):
-    with gw.open(
-        select_image_paths["B11_maximum"],
-        # mosaic=True,  # ref_res doesn't work with mosaic
-        # bounds_by="union",
-        # overlap="max",
-        chunks=32 * 400,
-    ) as src:
-        display(src)
-        src = src.where(src > 0)
-        src = src.where(src <= 0)
-        src = src.gw.set_nodata(src_nodata=np.nan, dst_nodata=0, dtype="int8")
+    # %% create tiles for reference
+# from geowombat.backends.dask_ import Cluster
 
-        src.gw.to_raster(
-            f"../bounds_examples_v2.tif",
-            compress="lzw",
-            overwrite=True,
-            separate=True,
-            bigtiff="YES",
-        )
+# cluster = Cluster(
+#              n_workers=8,
+#              threads_per_worker=2,
+#              scheduler_port=0,
+#              processes=False
+#          )
+# cluster.start()
+
+# with gw.config.update(ref_res=(10, 10)):
+#     with gw.open(
+#         select_image_paths["B11_maximum"],
+#         # mosaic=True,  # ref_res doesn't work with mosaic
+#         # bounds_by="union",
+#         # overlap="max",
+#         chunks=32 * 400,
+#     ) as src:
+#         display(src)
+#         src = src.where(src > 0)
+#         src = src.where(src <= 0)
+#         src = src.gw.set_nodata(src_nodata=np.nan, dst_nodata=0, dtype="int8")
+
+#         src.gw.to_raster(
+#             f"../bounds_examples_v2.tif",
+#             compress="lzw",
+#             overwrite=True,
+#             separate=True,
+#             bigtiff="YES",
+#         )
+# cluster.stop()
+
 # %%
 
 
@@ -599,26 +614,22 @@ ref_images = glob("../bounds_examples_v2/*.tif")
 print(ref_images)
 
 # %%
-temp_dir = "../temp2"
-out_dir = "../final_model_features_v2"
-os.makedirs("../temp2", exist_ok=True)
-os.makedirs("../final_model_features_v2/", exist_ok=True)
-for k, v in select_image_paths.items():
-    # if k not in [
-    #     "B6_abs_energy",
-    #     "B6_median",
-    #     "B6_quantile_q_05",
-    #     "B11_quantile_q_05",
-    #     "B11_quantile_q_95",
-    #     "B12_maximum",
-    #     "B12_mean_second_derivative_central",
-    #     "B12_quantile_q_95",
-    #     "hue_minimum",
-    #     "hue_quantile_q_05",
-    # ]:
-    #     print("skipping", k)
-    #     logger.info(f"Skipping {k}")
-    #     continue
+from geowombat.backends.dask_ import Cluster
+import tqdm
+
+temp_dir = "../temp3"
+out_dir = "../final_model_features_v3"
+os.makedirs("../temp3", exist_ok=True)
+os.makedirs("../final_model_features_v3/", exist_ok=True)
+
+for k, v in tqdm(select_image_paths.items(), desc="Processing images"):
+    cluster = Cluster(
+            n_workers=8,
+            threads_per_worker=2,
+            scheduler_port=0,
+            processes=False
+        )
+    cluster.start() 
 
     try:
         # resample if not 10m
@@ -627,7 +638,6 @@ for k, v in select_image_paths.items():
             logger.info(f"Resolution for {v[0]}: {res}")
         if res != (10, 10):
             for image30m in v:
-
                 with gw.config.update(ref_res=(10, 10), ref_image=image30m):
                     with gw.open(image30m, chunks=32 * 500) as test_src:
                         test_src.gw.to_raster(
@@ -641,9 +651,9 @@ for k, v in select_image_paths.items():
                             f"Resampled and saved {image30m} to {temp_dir}{k}.tif"
                         )
 
-        # update v to 10m images
-        v = sorted(glob(f"{temp_dir}/{k}/*.tif"))
-        # delete folder
+            # update v to 10m images
+            v = sorted(glob(f"{temp_dir}/{k}/*.tif"))
+
         for i, image in enumerate(ref_images):
             try:
                 # union
@@ -668,8 +678,14 @@ for k, v in select_image_paths.items():
                         )
             except Exception as e:
                 logger.error(f"Error processing {image} for {k}: {e}")
+                cluster.stop()
+        try:
+            cluster.stop()
+        except:
+            pass 
     except Exception as e:
         logger.error(f"Error processing {k}: {e}")
+        cluster.stop()
     # delete_folder_and_contents(f"{temp_dir}/{k}")
 
 # %%
@@ -1309,6 +1325,7 @@ plt.ylabel("predicted label")
 # %%
 
 from sklearn.model_selection import cross_val_predict
+from tqdm import tqdm
 
 y_pred = cross_val_predict(pl, *Xy, cv=3)
 

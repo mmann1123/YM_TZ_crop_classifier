@@ -470,7 +470,7 @@ select_image_paths = {k.replace("_0", ""): v for k, v in select_image_paths.item
 select_image_paths = {k.replace(".", "_"): v for k, v in select_image_paths.items()}
 select_image_paths
 # %% final model with subset of features
-
+ #%%
 y = data["lc"]
 
 X = data[list(select_images)].values
@@ -696,160 +696,28 @@ for k, v in tqdm(select_image_paths.items(), desc="Processing images"):
 # get optimal parameters
 pipeline_performance = best_classifier_pipe(
     "study.db",
-    studyname,
+    study_name_final,
 )
 print(pipeline_performance)
 
-# get important image paths
-select_images = get_selected_ranked_images(
-    original_rank_images=select_images,
-    available_image_list=glob("./outputs/selected_images_10m/*.tif"),
-)
+# # get important image paths
+# select_images = get_selected_ranked_images(
+#     original_rank_images=select_images,
+#     available_image_list=glob("./outputs/selected_images_10m/*.tif"),
+# )
 
-# select_images = glob("./outputs/selected_images_10m/*.tif")
-
-# select_images = select_images
-
+select_images = sorted(glob("/mnt/bigdrive/final_model_features_v3/*.tif"))
+ 
 # # Get the image names
-# image_names = [os.path.basename(f).split(".")[0] for f in select_images]
-# select_images
+image_names = [os.path.basename(f).split(".")[0].rsplit('_', 1)[0] for f in select_images]
+from collections import Counter
+Counter(image_names)
+#%%
+image_names = list(set(image_names))
+image_names
 
+#############################################
 
-# %% Create out of sample confusion matrix
-
-# get optimal parameters
-pipeline_performance = best_classifier_pipe(
-    "study.db", "model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
-)
-print(pipeline_performance)
-# generate confusion matrix out of sample
-conf_matrix_list_of_arrays = []
-list_balanced_accuracy = []
-list_kappa = []
-weights = data.Field_size
-# skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
-skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
-
-
-# Initialize global confusion matrix as a DataFrame
-class_names = np.unique(y)  # Adjust based on how you obtain class names
-
-global_conf_matrix_df = pd.DataFrame(
-    np.zeros((len(class_names), len(class_names))),
-    index=class_names,
-    columns=class_names,
-)
-
-for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
-    X_train, X_test = X[train_index], X[test_index]
-    y_train, y_test = y[train_index], y[test_index]
-
-    pipeline_performance.fit(
-        X_train, y_train, classifier__sample_weight=weights[train_index]
-    )
-    y_pred = pipeline_performance.predict(X_test)
-
-    # Performance metrics
-    list_balanced_accuracy.append(balanced_accuracy_score(y_test, y_pred))
-    list_kappa.append(cohen_kappa_score(y_test, y_pred))
-
-    # Generate confusion matrix for the current fold
-    conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)
-    print(conf_matrix.shape)
-    class_name_in_round = [x for x in class_names if x in np.unique(y_pred)]
-    conf_matrix_df = pd.DataFrame(conf_matrix, index=class_names, columns=class_names)
-
-    # Update the global confusion matrix
-    global_conf_matrix_df = global_conf_matrix_df.add(conf_matrix_df, fill_value=0)
-
-# get aggregate confusion matrix
-agg_conf_matrix = global_conf_matrix_df.copy()
-balanced_accuracy = np.array(list_balanced_accuracy).mean()
-kappa_accuracy = np.array(list_kappa).mean()
-
-# Calculate the row-wise sums
-row_sums = agg_conf_matrix.sum(axis=1)
-
-# Convert counts to percentages by row
-conf_matrix_percent = agg_conf_matrix / row_sums.values.reshape(-1, 1)
-
-# Get the class names
-class_names = le.inverse_transform(pipeline_performance["classifier"].classes_)
-# Create a heatmap using seaborn
-plt.figure(figsize=(10, 8))
-
-sns.heatmap(
-    conf_matrix_percent,
-    annot=True,
-    cmap="Blues",
-    fmt=".0%",
-    xticklabels=class_names,
-    yticklabels=class_names,
-)
-
-# Set labels and title
-plt.xlabel("Predicted")
-plt.ylabel("True")
-# plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
-plt.title(f"Out of Sample Mean Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
-plt.savefig(
-    f"../outputs/final_class_perfomance_rf_kbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
-    bbox_inches="tight",
-)
-
-# Show the plot
-plt.show()
-
-
-# %%
-# # %%
-# # generate in sample confusion matrix
-
-# pipeline_performance.fit(X, y, classifier__sample_weight=weights)
-# y_pred = pipeline_performance.predict(X)
-# # %%
-# # get performance metrics
-# balanced_accuracy = balanced_accuracy_score(y, y_pred)
-# kappa_accuracy = cohen_kappa_score(y, y_pred)
-
-# # Get the class names
-# class_names = pipeline_performance[
-#     "classifier"
-# ].classes_  # le.inverse_transform(pipeline_performance["classifier"].classes_)
-
-# # Create the confusion matrix with class names as row and column index
-# conf_matrix = confusion_matrix(y, y_pred, labels=class_names)
-
-# # Calculate the row-wise sums
-# row_sums = agg_conf_matrix.sum(axis=1, keepdims=True)
-
-# # Convert counts to percentages by row
-# conf_matrix_percent = conf_matrix / row_sums
-
-# # Create a heatmap using seaborn
-# plt.figure(figsize=(10, 8))
-
-# sns.heatmap(
-#     conf_matrix_percent,
-#     annot=True,
-#     cmap="Blues",
-#     fmt=".0%",
-#     xticklabels=class_names,
-#     yticklabels=class_names,
-# )
-
-# # Set labels and title
-# plt.xlabel("Predicted")
-# plt.ylabel("True")
-# # plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
-# plt.title(f"In Sample Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
-# plt.savefig(
-#     f"outputs/final_class_perfomance_rf_kbest_{select_how_many}.png",
-#     bbox_inches="tight",
-# )
-
-# # Show the plot
-# plt.show()
 
 # %%
 ##################################################################
@@ -858,7 +726,7 @@ plt.show()
 # # %%
 
 # %% Create a prediction stack
-select_images = glob("./outputs/selected_images_10m/*.tif")
+
 pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
 
 # %%
@@ -962,6 +830,145 @@ ax.set_xlabel("Land Use Class")
 plt.savefig("outputs/final_model_lgbm_distribution.png", dpi=300, bbox_inches="tight")
 plt.show()
 # %%
+
+
+#############################################
+# # %% Create out of sample confusion matrix
+
+# # get optimal parameters
+# pipeline_performance = best_classifier_pipe(
+#     "study.db", "model_selection_{'_'.join([classifier])}_{scoring}_{n_splits}"
+# )
+# print(pipeline_performance)
+# # generate confusion matrix out of sample
+# conf_matrix_list_of_arrays = []
+# list_balanced_accuracy = []
+# list_kappa = []
+# weights = data.Field_size
+# # skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+# skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+
+
+# # Initialize global confusion matrix as a DataFrame
+# class_names = np.unique(y)  # Adjust based on how you obtain class names
+
+# global_conf_matrix_df = pd.DataFrame(
+#     np.zeros((len(class_names), len(class_names))),
+#     index=class_names,
+#     columns=class_names,
+# )
+
+# for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
+#     X_train, X_test = X[train_index], X[test_index]
+#     y_train, y_test = y[train_index], y[test_index]
+
+#     pipeline_performance.fit(
+#         X_train, y_train, classifier__sample_weight=weights[train_index]
+#     )
+#     y_pred = pipeline_performance.predict(X_test)
+
+#     # Performance metrics
+#     list_balanced_accuracy.append(balanced_accuracy_score(y_test, y_pred))
+#     list_kappa.append(cohen_kappa_score(y_test, y_pred))
+
+#     # Generate confusion matrix for the current fold
+#     conf_matrix = confusion_matrix(y_test, y_pred, labels=class_names)
+#     print(conf_matrix.shape)
+#     class_name_in_round = [x for x in class_names if x in np.unique(y_pred)]
+#     conf_matrix_df = pd.DataFrame(conf_matrix, index=class_names, columns=class_names)
+
+#     # Update the global confusion matrix
+#     global_conf_matrix_df = global_conf_matrix_df.add(conf_matrix_df, fill_value=0)
+
+# # get aggregate confusion matrix
+# agg_conf_matrix = global_conf_matrix_df.copy()
+# balanced_accuracy = np.array(list_balanced_accuracy).mean()
+# kappa_accuracy = np.array(list_kappa).mean()
+
+# # Calculate the row-wise sums
+# row_sums = agg_conf_matrix.sum(axis=1)
+
+# # Convert counts to percentages by row
+# conf_matrix_percent = agg_conf_matrix / row_sums.values.reshape(-1, 1)
+
+# # Get the class names
+# class_names = le.inverse_transform(pipeline_performance["classifier"].classes_)
+# # Create a heatmap using seaborn
+# plt.figure(figsize=(10, 8))
+
+# sns.heatmap(
+#     conf_matrix_percent,
+#     annot=True,
+#     cmap="Blues",
+#     fmt=".0%",
+#     xticklabels=class_names,
+#     yticklabels=class_names,
+# )
+
+# # Set labels and title
+# plt.xlabel("Predicted")
+# plt.ylabel("True")
+# # plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
+# plt.title(f"Out of Sample Mean Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
+# plt.savefig(
+#     f"../outputs/final_class_perfomance_rf_kbest_{'_'.join([classifier])}_{scoring}_{n_splits}.png",
+#     bbox_inches="tight",
+# )
+
+# # Show the plot
+# plt.show()
+
+
+# %%
+# # %%
+# # generate in sample confusion matrix
+
+# pipeline_performance.fit(X, y, classifier__sample_weight=weights)
+# y_pred = pipeline_performance.predict(X)
+# # %%
+# # get performance metrics
+# balanced_accuracy = balanced_accuracy_score(y, y_pred)
+# kappa_accuracy = cohen_kappa_score(y, y_pred)
+
+# # Get the class names
+# class_names = pipeline_performance[
+#     "classifier"
+# ].classes_  # le.inverse_transform(pipeline_performance["classifier"].classes_)
+
+# # Create the confusion matrix with class names as row and column index
+# conf_matrix = confusion_matrix(y, y_pred, labels=class_names)
+
+# # Calculate the row-wise sums
+# row_sums = agg_conf_matrix.sum(axis=1, keepdims=True)
+
+# # Convert counts to percentages by row
+# conf_matrix_percent = conf_matrix / row_sums
+
+# # Create a heatmap using seaborn
+# plt.figure(figsize=(10, 8))
+
+# sns.heatmap(
+#     conf_matrix_percent,
+#     annot=True,
+#     cmap="Blues",
+#     fmt=".0%",
+#     xticklabels=class_names,
+#     yticklabels=class_names,
+# )
+
+# # Set labels and title
+# plt.xlabel("Predicted")
+# plt.ylabel("True")
+# # plt.title(f"RF Confusion Matrix: Balance Accuracy = {round(balanced_accuracy, 2)}")
+# plt.title(f"In Sample Confusion Matrix: Kappa = {round(kappa_accuracy, 2)}")
+# plt.savefig(
+#     f"outputs/final_class_perfomance_rf_kbest_{select_how_many}.png",
+#     bbox_inches="tight",
+# )
+
+# # Show the plot
+# plt.show()
+
 
 # %%
 ###############################################

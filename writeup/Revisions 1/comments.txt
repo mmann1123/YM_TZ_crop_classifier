@@ -1,0 +1,81 @@
+ 
+Your manuscript JSTARS-2025-00807 Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing has been reviewed by the J-STARS Editorial Review Board and recommended for publication subject to satisfactory response to major revisions suggested. It is recommended that you resubmit your manuscript as revised in accordance with the Editorial Review Board comments given below.
+
+***Any supplementary files a reviewer may have attached containing additional comments will NOT appear in the letter delivered to your personal e-mail inbox.  They will, however, appear in a copy of this letter.   Please review both copies to make sure you have received all of the comments***
+
+Along with the revised manuscript, please provide an item-by-item response to reviewers' comments, including:
+
+* Which suggested changes were accepted and made.
+* Which were ignored (these should be indicated and justified).
+* Where the changes were made in the manuscript (this should  include all changes with detailed information).
+
+Please include the corresponding author information in the authors' footnote.
+
+Important - Please upload and designate your clean revision PDF file as the “Main Document”. Annotated PDF files and summary of changes files should be designated as a “Supporting Document”.
+
+Please make sure these responses are not submitted in the space designated for confidential comments to the Editor in Chief.
+
+J-STARS policy requires major revision manuscripts to be returned within 28 days. After this date, the manuscript will be considered as a new submission.  Please contact jstars-editor@ieee.org if you need to request an extension for this deadline.
+
+When you are ready to submit your revision, visit the following link:
+https://ieee.atyponrex.com/submission/submissionBoard/REX-PROD-2-8FE1ED0E-785A-4F3B-971B-C90A932B8A65-7FFF13C9-8EC4-4D0E-A147-CDCAE2D11EBD-91754/current?idtype=external
+
+
+**PLEASE BE SURE TO FIRST DETAIL THE CHANGES YOU HAVE MADE IN  RESPONSE TO THE REVIEWERS COMMENTS BEFORE UPLOADING YOUR  REVISION.**
+
+If you have any difficulty please contact:
+Yogendra Tripathy
+jstars-editor@ieee.org
+ 
+Sincerely,
+Dr. Peifeng Ma
+Deputy Editor-in-Chief
+IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing
+
+Editor-in-Chief Comments:
+For revision, two files should be submitted, including,
+1) a revised manuscript, in which the revised part in the manuscript should be highlighted in different color, submitted as the main file.
+2)  a point-to-point response letter to the comments submitted as supporting file.
+ 
+*** A "Discussion Section" is suggested for publications in JSTARS. Please improve the manuscript from this aspect, which will make the manuscript more likely to get accepted. ***
+
+Associate Editor Comments:
+Associate Editor
+Comments to the Author:
+Dear authors, your paper reviewed by experts has been considered suitable for publication on JSTARS after major revision. Please proceed in reviewing the paper by closely following the reviewers suggestions.
+
+
+Reviewer(s) Comments:
+Reviewer: 1
+
+Comments to the Author
+This paper addresses several important challenges in developing efficient crop-type classification models using the traditional machine-learning approach in data-scarce environments, including the scarcity of training datasets collected from crop fields, especially in developing countries. Combining the dataset collected from crop fields with the imagery datasets extracted using filter-based methods is crucial for achieving high classification accuracy. Crowdsourced data collected by volunteers can serve as a potential alternative, but these data are typically lack proper validation. To address this issue, the author proposes a novel methodology leveraging KoboToolbox, YouthMappers participants, and Sentinel-2 satellite imagery, among others, to extract and validate crowdsourced data and time-series imagery features. The authors also propose a traditional machine learning-based classification model that utilizes the integrated dataset of time-series features with crowdsourced, field-validated crop-type labels to validate their approach. The proposed methods show promise by achieving high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85.
+
+Strengths:
+-The paper is well-structured and follows a clear and logical progression.
+-The authors provide a significant introduction and background, giving insight into the challenges that limit the implementation of an efficient crop-type classification.
+-The authors contribute to proposing novel methods for extracting and validating crowdsourced data.
+
+Minor correction:
+- Ensure that reference 25 fits within the column width.
+- The sentence refers to "as seen in the crop calendar in Figure 2 below" Fig 2; However, the figure is displayed above the sentence, not below.
+
+
+Reviewer: 2
+
+Comments to the Author
+This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Overall, the content of the paper is presented too succinctly and requires further refinement in expression, particularly in the description of data and methodology, the presentation of results and figures, as well as the discussion section, which is currently lacking.
+
+It is recommended to divide Section II (DATA & METHODS) into two separate sections. A schematic diagram should be provided to illustrate the data, especially the crowdsourced data. In the methodology section, a flowchart should be added, along with an accuracy evaluation component.
+
+The conclusion section is also overly concise. For instance, in Part B (Land Cover and Crop Type), a more detailed description of Figure 3 is suggested.
+
+It is advisable to present the Discussion as an independent section and enrich its content.
+
+Whether to use a colon after figure titles (e.g., “Fig. 6:”) should strictly follow the journal’s formatting guidelines.
+
+The font size in the figures is too small and lacks clarity, as seen in Figure 7.
+
+It is recommended to include comparative experiments with other methods.
+
+It is suggested to add visualizations and descriptions of the classification results.

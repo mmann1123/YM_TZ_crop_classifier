@@ -1,5 +1,4 @@
 ---
-
 title: "Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing"
 author:
 - name: Michael L. Mann
@@ -13,8 +12,10 @@ author:
   affiliation: The George Washington University, Washington DC 20052
 - name: Stellamaris Nakacwa
   affiliation: YouthMappers, Texas Tech University, Lubbock TX 79409
+documentclass: IEEEtran
+classoption: [journal,twocolumn]
 header-includes:
-  - \usepackage{geometry}
+  - \usepackage[margin=1in]{geometry}
   - \usepackage{pdflscape}
   - \usepackage{longtable}
   - \usepackage{fancyhdr}
@@ -27,34 +28,45 @@ header-includes:
   - \usepackage{booktabs}
   - \usepackage{caption}
   - |
-   ```{=latex}
-   \pagestyle{fancy}
-   \fancyhf{}
-   \rfoot{\thepage}
-   \renewcommand{\headrulewidth}{0pt}
-   \renewcommand{\footrulewidth}{0pt}
-   \fancypagestyle{plain}{
-     \fancyhf{}
-     \rfoot{\thepage}
-     \renewcommand{\headrulewidth}{0pt}
-     \renewcommand{\footrulewidth}{0pt}
-   }
-   ```
+    \pagestyle{fancy}
+    \fancyhf{}
+    \rfoot{\thepage}
+    \fancypagestyle{plain}{
+      \fancyhf{}
+      \rfoot{\thepage}
+    }
 
 abstract: |
   This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85. The model often match or outperform broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
 --- 
 
-\linenumbers  
+<!-- \linenumbers  
 \modulolinenumbers[1]  
 \pagewiselinenumbers  
-\newgeometry{margin=1in}
+<!-- \newgeometry{margin=1in}  
 \captionsetup{justification=raggedright, singlelinecheck=false}
-  
+   -->
 <!-- compile working with:
-pandoc writeup.md --template=mytemplate.tex -o output.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc 
+cd writeup
+pandoc writeup.md --template=mytemplate.tex -o output_IEEE.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc 
+
+------------------------------------------------
+# manually create tex then run manually to get error
+# create LaTeX only (no PDF)
+pandoc writeup.md --template=mytemplate.tex \
+  --from markdown+raw_tex --to latex \
+  --bibliography=refs.bib --citeproc -o output.tex
+
+xelatex -file-line-error -interaction=errorstopmode -halt-on-error output.tex
+
+# run xelatex with file/line errors and stop on error
+xelatex -file-line-error -interaction=errorstopmode -halt-on-error output.tex
 
 
+# open the region around the reported line to find stray \usepackage
+sed -n '1,140p' output.tex        # or adjust line range shown by the error
+
+-------------------------------------------------
 
 # convert to word doc (2 steps)
 pandoc writeup.md --template=mytemplate.tex \
@@ -117,7 +129,7 @@ We propose a novel approach that combines crowdsourced data with a new automated
 <!-- └── Outline of the Paper
     └── Structure of Subsequent Sections -->
 
-# Data & Methods
+# Data
 
 Data for this study were collected from multiple sources, including satellite imagery, and crowdsourced ground truth observations. The section below describes the input data and methods used throughout the paper.
 
@@ -131,17 +143,35 @@ The study was conducted in 50 wards within three major districts of Arusha, Dodo
    \label{fig:study_area} %can refer to in text with \ref{fig:study_area}
 \end{figure}
 
-### Crowd Sourced Data Collection
+## Crowd Sourced Data Collection
 
-Crop type data collection was designed and executed by YouthMappers through a crowdsourced GIS approach. The method was designed in 3 steps where: 1) Development of and training all intended student participants. 2) Data collection using KoboToolbox hosting a well developed data model. The exercise lasted 14 days with 7 days of iterative pilot testing on different farms, crops and landscapes. Finally the last step, 3) was the data review and cleaning phase to generate a sample for training.
+Crop type data collection was designed and executed by YouthMappers through a crowdsourced GIS approach. Data collection was designed in 3 steps where: 1) Development of and training all intended student participants. 2) Data collection using KoboToolbox hosting a well developed data model. The exercise lasted 14 days with 7 days of iterative pilot testing on different farms, crops and landscapes. Finally the last step, 3) was the data review and cleaning phase to generate a sample for training as seen in Figure \ref{fig:methodology_flowchart}
 
-Additional training data was collected utilizing high resolution imagery from Google Earth. These data were used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  The final cleaned dataset includes 1,400 crop type observations of rice, maize, cassava, sunflower, sorghum, cotton, and millet; plus 386 other observations of land cover classes including water, tidal areas, forest, shrub and urban.  
 
-#### Data Collection Methods
+\begin{figure}[H]
+   \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/methodology_flowchart.png} 
+   \caption{Data collection methodology flowchart}
+   \label{fig:methodology_flowchart} %can refer to in text with \ref{fig:methodology_flowchart}
+\end{figure}
+
+Additional training data for non-agricultural sites was collected utilizing high resolution imagery from Google Earth. These data were used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  The final cleaned dataset includes 1,400 crop type observations of rice, maize, cassava, sunflower, sorghum, cotton, and millet; plus 386 other observations of land cover classes including water, tidal areas, forest, shrub and urban.  
+
+## Satellite Imagery
+
+Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area between January and August of 2023 during the growing season, capturing the spectral characteristics of different crop types and coinciding with field data collection. The Sentinel-2 L2 harmonized reflectance data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes [@begue2018remote].
+
+In our study, cloud and cloud shadow contamination was mitigated using the 's2cloudless' machine learning model on the Google Earth Engine platform. Cloudy pixels were identified using a cloud probability mask, with pixels having a probability above 50% classified as clouds. To detect cloud shadows, we used the Near-Infrared (NIR) spectrum to flag dark pixels not identified as water as potential shadow pixels. The projected shadows from the clouds were identified using a directional distance transform based on the solar azimuth angle from the image metadata. A combined cloud and shadow mask was refined through morphological dilation, creating a buffer zone to ensure comprehensive coverage. This mask was applied to the Sentinel-2 surface reflectance data to exclude all pixels identified as clouds or shadows, enhancing the reliability of the dataset for environmental analysis.
+
+Monthly composites were collected for January through August of 2023 for the the bands B2 Blue (458-523nm), B6 Vegetation Red Edge (733-738nm), B8 Near Infrared (785-899nm), B11 Short-Wave Infrared (SWIR)(1565-1655nm), and B12 Short Wave Infrared (2100-2280nm). Sw. We also calculate the Enhanced Vegetation Index (EVI) and hue, the color spectrum value [@GoogleHSV]. This computed hue value provides the basic color as perceived in the color wheel, from red, through green, blue, and back to red for each pixel. Due to the high prevalence of clouds in the region, linear interpolation was used to fill in missing data in the time series using `xr_fresh` [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The monthly composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
+
+# Methods
+The following section describes the methods used for data collection, feature extraction, model training, and evaluation.
+
+## Data Collection Methods
 
 To ensure the success of our project, we focused heavily on the design of our data collection methods. These methods were carefully integrated, taking into account: the crop calendar, information on the different stages of crop development, the distances between crop fields, the tools used, and data quality assurance.
 
-Young crops exhibit significant differences compared to mature crops in terms of color, density, and phenological development. Variations in the crop cycle across different fields could lead to heteroscedasticity in the spectral reflectance measurements used for machine learning (ML) training, thereby affecting the precision and accuracy of the model. By targeting the period of April through May we aimed to capture crops late in the growing season and yet before harvest as seen in the crop calendar in Figure \ref{fig:crop_cal} below.
+Young crops exhibit significant differences compared to mature crops in terms of color, density, and phenological development. Variations in the crop cycle across different fields could lead to heteroscedasticity in the spectral reflectance measurements used for machine learning (ML) training, thereby affecting the precision and accuracy of the model. By targeting the period of April through May as we aimed to capture crops late in the growing season, and yet before harvest as seen in the crop calendar in Figure \ref{fig:crop_cal} below.
 
 \begin{figure}[H]
    \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/plant_ghant.png}
@@ -151,10 +181,17 @@ Young crops exhibit significant differences compared to mature crops in terms of
 
 USDA’s Foreign Agricultural Service compiles information on planting and harvest windows for grain, oilseed, and cotton crops as an important tool to support crop condition assessments with satellite imagery. Tanzania’s crop planting seasons are shaped by its bimodal and unimodal rainfall patterns, which vary by region. In the north and northeast, bimodal areas experience the short rains (Vuli) from late-October to mid-January, during which crops like maize, beans, and vegetables are planted in October and November, and the long rains (Masika) from March to May, supporting crops like maize, rice, sorghum, and cassava, typically planted in February and March. In the central, southern, and western regions with unimodal rainfall, there is a single rainy season from November to April, when crops such as cotton, maize, millet, rice, and sunflower are planted in November and December. This diversity in rainfall patterns allows for a wide variety of crops suited to the local climate and seasonal conditions.
 
-The data collection took place between late April and May as shown in figure \ref{fig:crop_cal} to align with mid-season for many crops. YouthMappers were advised to focus on a set of target crops, ones known to be present in the region and at appropriate crop growth stages. Before embarking on data collection, discussions covered several factors to consider in selecting field collection sites. Factors included field size to establish a minimum detectable by the satellite imagery, clear and open fields to enhance clean spectra sampling, prioritizing areas covered by a single crop to reduce confusion, sampling distribution of at least one kilometer between stops, and even crop maturity and health. YouthMappers were advised to identify only fields 30 meters or greater across to ensure a minimum size detectable by the satellite imagery. When picking between fields for data collection, defining clear and open fields was discussed with several examples, as agriculture can include mixed land cover types with tree cover, power lines, buildings, and other obstructions that prevent the satellite from cleanly capturing spectra of only the crop. YouthMappers were advised to only pick clear and open fields and prioritize those growing only one crop. The recommendation to have a sampling distribution of at least one kilometer was a compromise between the amount of time available for data collection, the expense of travel, and a sufficient distribution to reduce spatial autocorrelation. It was permitted for YouthMappers to identify adjacent fields growing different types of crops, but otherwise highly encouraged for them to return to the vehicle and drive the 1 km to collect more data. The most important factors driving the timing for data collection were crop maturity and health. The fieldwork was conducted between late-April to May 2023 because the target crops typically reach reproductive stages with maximum canopy cover during this time of year. This crop stage is best suited for discerning different crop types with satellite imagery. While most fields were found in late reproductive stages, drought conditions impacted the health of some fields. YouthMappers were advised to prioritize and identify mature, lush green fields, as ideal data collection sites. By thoroughly discussing each of these factors, we trained YouthMappers to select fields best suited as in-situ training data for satellite imagery analysis.
+Data collection took place between late April and May 2023 (Figure \ref{fig:crop_cal}) to align with the mid-season growth stage for most target crops. YouthMappers were trained to focus on crops known to be present in each region and at appropriate phenological stages for spectral discrimination. Prior to fieldwork, extensive training sessions covered the key criteria for selecting suitable field sites to ensure high-quality training data for the machine learning models.
+
+Field size represented a critical consideration, as features below the spatial resolution of Sentinel-2 imagery would not be adequately captured. YouthMappers were therefore instructed to identify only fields measuring 30 meters or greater across, ensuring that each field would encompass multiple pixels in the satellite imagery. Beyond size, field composition played an equally important role in data quality. Agriculture in the study region often includes heterogeneous land cover with tree cover, power lines, buildings, and other obstructions that can contaminate the spectral signature of crops. To minimize this spectral mixing, YouthMappers were trained to prioritize clear, open fields planted with a single crop type, using photographic examples to illustrate ideal versus problematic field characteristics.
+
+Spatial distribution of sample sites was carefully considered to balance logistical constraints with statistical independence. A minimum separation distance of one kilometer between sampling locations was established as a compromise between the time and cost of travel and the need to reduce spatial autocorrelation in the training data. While YouthMappers were permitted to sample adjacent fields when different crop types were present, they were otherwise encouraged to maintain this spacing by traveling to more distant locations.
+
+The timing of data collection was primarily driven by crop phenology and field condition. Mid to late reproductive stages offer maximum canopy cover and the most distinctive spectral signatures for crop type discrimination. Although most sampled fields exhibited the desired phenological characteristics, drought conditions in 2023 affected crop health across the region, with some fields showing signs of stress or early harvest. To ensure robust model training, YouthMappers were instructed to prioritize mature, healthy fields with lush green canopies whenever possible. Through this comprehensive training process, field teams developed the expertise needed to consistently identify sites well-suited for generating high-quality in-situ training data for satellite-based crop classification.
 
 The data collection was managed through KoboCollect, hosted on the KoboToolBox infrastructure, which provided an effective platform for gathering and organizing data. This approach enabled a collection of the desired volume of data points necessary for model training and evaluation, as summarized in Table \ref{tab:data_n}.
- 
+
+\onecolumn 
 \begin{table}[h!]
 \centering
 \begin{tabular}{@{}lp{4cm}p{4cm}p{4cm}@{}}
@@ -170,18 +207,24 @@ The data collection was managed through KoboCollect, hosted on the KoboToolBox i
 \caption{Collection Targets and Primary Crops by Region in Tanzania}
 \label{tab:data_n}
 \end{table}
+\twocolumn
 
-### Satellite Imagery
+## Field Data Cleaning
 
-Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area  between January and August of 2023 during the growing season, capturing the spectral characteristics of different crop types and coinciding with field data collection. The Sentinel-2 L2 harmonized reflectance data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes [@begue2018remote].
+The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several key steps:
 
-In our study, cloud and cloud shadow contamination was mitigated using the 's2cloudless' machine learning model on the Google Earth Engine platform. Cloudy pixels were identified using a cloud probability mask, with pixels having a probability above 50% classified as clouds. To detect cloud shadows, we used the Near-Infrared (NIR) spectrum to flag dark pixels not identified as water as potential shadow pixels. The projected shadows from the clouds were identified using a directional distance transform based on the solar azimuth angle from the image metadata. A combined cloud and shadow mask was refined through morphological dilation, creating a buffer zone to ensure comprehensive coverage. This mask was applied to the Sentinel-2 surface reflectance data to exclude all pixels identified as clouds or shadows, enhancing the reliability of the dataset for environmental analysis.
+1. Removal of Duplicates: Duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset.
+2. Handling Missing Values: Observations with missing or incomplete data were addressed. Depending
+  on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset.
+3. Visual Inspection: Each observation was visually inspected using in-situ photos taken by students at each site. This step helped verify the accuracy of the recorded crop types and field conditions.
+4. Standardization of Crop Type Labels: Crop type labels were standardized to ensure consistency across the dataset. This involved correcting typographical errors and unifying different naming conventions for the same crop.
+5. Geospatial Validation: The geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded accurately to the reported crop types.
 
-Monthly composites were collected for January through August of 2023 for the the bands B2 Blue (458-523nm), B6 Vegetation Red Edge (733-738nm), B8 Near Infrared (785-899nm), B11 Short-Wave Infrared (SWIR)(1565-1655nm), and B12 Short Wave Infrared (2100-2280nm). Sw. We also calculate the Enhanced Vegetation Index (EVI) and hue, the color spectrum value [@GoogleHSV]. This computed hue value provides the basic color as perceived in the color wheel, from red, through green, blue, and back to red for each pixel. Due to the high prevalence of clouds in the region, linear interpolation was used to fill in missing data in the time series using `xr_fresh` [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The monthly composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
+After completing the cleaning process, the final dataset consisted of 1,400 crop type entries. This refined dataset provided a robust foundation for training and evaluating the machine learning models used in this study.
 
-### Time Series Features
+## Time Series Features
 
-Time series features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. We leverage the time series nature of the satellite imagery to extract relevant features for crop type classification.
+Time series features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. We leverage the time series nature of the satellite imagery to extract relevant features for crop type classification for the 2023 growing season.
 
 In this study, we utilized the `xr_fresh` toolkit to compute detailed time-series statistics for various spectral bands, facilitating comprehensive pixel-by-pixel temporal analysis [@xr_fresh_2021]. The `xr_fresh` framework is specifically designed to extract a wide array of statistical measures from time-series data, which are essential for understanding temporal dynamics in remote sensing datasets.
 
@@ -200,26 +243,25 @@ For a full list of the time series features extracted in this study and their de
 
 The integration of `xr_fresh` into our analytical workflow allowed for an automated and robust analysis of temporal patterns across the study area. By leveraging this toolkit, we could efficiently process large datasets, ensuring that each pixel's temporal dynamics were comprehensively characterized, which is critical for accurate environmental monitoring and change detection.
 
-### Data Extraction
+## Data Extraction
 
-To partially account for variation in field size we extracted pixels based on a buffer around field point locations. This allows us to account for the fact that fields likely represent groups of adjacent pixels. Small fields were buffered by only 5 meters, medium fields by 10m and large fields by 30m. This approach allowed us to capture the time series features from the surrounding area, providing a more comprehensive representation of the field's characteristics. The use of larger buffers was explored but found to decrease model performance as fields tended to be heterogenous - for instance containing patches of trees. To account for this in our modeling we treat observations from the same field as a "group" in our cross-validation scheme - as described below.
+To partially account for variation in field size, we extracted pixels based on a buffer around field point locations. This allows us to account for the fact that fields likely represent groups of adjacent pixels. Small fields were buffered by only 5 meters, medium fields by 10m and large fields by 30m. This approach allowed us to capture the time series features from the surrounding area, providing a more comprehensive representation of the field's characteristics. The use of larger buffers was explored but found to decrease model performance as fields tended to be heterogenous - for instance containing patches of trees. To account for this in our modeling, we treat observations from the same field as a "group" in our cross-validation scheme - as described below.
 
-### Machine Learning Models
+## Model Selection & Performance 
 
 In our study, we utilized the extracted time-series features from satellite imagery, described above, to analyze crop classifications.  Notably, features were centered and scaled from the `scikit-learn` library to normalize the data, followed by the application of a variance threshold method to reduce dimensionality by excluding features with low variance [@scikit-learn].
 
-We employ `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study using Optuna where each trial proposes a set of model parameters aimed at optimizing performance metrics. Specifically, we used stratified group k-fold cross-validation with the number of splits set to three, ensuring that samples from the same field were not split across training and validation sets to prevent data leakage. The scoring metric utilized is the kappa statistic, chosen for its suitability in evaluating models on imbalanced datasets.
+We employ `Optuna`, an optimization framework, to conduct systematic model selection, hyperparameter tuning and gather performance metrics [@optuna_2019]. Our methodology involved defining a study using Optuna where each trial proposes a set of model parameters aimed at optimizing performance metrics. Specifically, we used stratified group k-fold cross-validation with the number of splits set to three, ensuring that samples from the same field were not split across training and validation sets to prevent data leakage. The scoring metric utilized is the kappa statistic, chosen for its suitability in evaluating models on imbalanced datasets.
 
 This approach allows us to rigorously evaluate and compare different classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, and their configurations under a variety of conditions. The final selection of the model and its parameters was based on the ability to maximize the kappa statistic, ensuring that the chosen model provided the best possible performance for the classification of land cover types in our dataset.
 
-### Interpretation and Feature Selection
+## Interpretation and Feature Selection
 
 To interpret the contributions of individual features to the model predictions, we employed SHapley Additive exPlanations (SHAP) [@shaps_2017]. This approach, based on game theory, quantifies the impact of each feature on the prediction outcome, providing insights into which features are most influential in determining land cover types.
 
 In our feature selection process, we incorporate both the mean and maximum SHAP values to comprehensively assess the influence of features on model predictions. The mean of the absolute SHAP values across all samples, provides a measure of the average impact of each feature, highlighting its overall importance across the dataset. This approach emphasizes features that consistently affect the model’s output but might underrepresented the significance of features causing substantial impacts under specific conditions. To address this, we also consider the maximum absolute SHAP values. Sorting features by their maximum absolute SHAP values allows us to identify those that have significant, albeit possibly infrequent, effects on individual predictions. This method ensures that features crucial for particular scenarios are not overlooked, thus offering a more nuanced understanding of feature importance that balances general influence with critical, situation-specific impacts.
 
 Feature selection then is the union of the top 30 time series features found with both the mean and maximum SHAP values, resulting in 33 total features. This approach ensures that the selected features are both consistently influential across the dataset and capable of exerting substantial impacts under specific conditions, providing a comprehensive set of features for model training and evaluation.
-
 
 ## Results & Discussion
 
@@ -358,6 +400,7 @@ The United States Agency for International Development generously supports this 
 The following table provides a comprehensive list of the time series features extracted from the satellite imagery using the `xr_fresh` module. These features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. The computed metrics encompass a wide range of statistical measures, changes over time, and distribution-based metrics, offering a detailed analysis of the temporal patterns in the study area.
 
 \renewcommand{\arraystretch}{1.5}  
+\onecolumn
 \begin{longtable}{|p{4cm}|p{5cm}|p{6cm}|}
 \hline
 \textbf{Statistic} & \textbf{Description} & \textbf{Equation} \\
@@ -392,7 +435,7 @@ Variance & Variance of the time series & $\sigma^2 = \frac{1}{N}\sum_{i=1}^{n} (
 Variance Larger than Standard Deviation & check if variance is larger than standard deviation & $\sigma^2 > 1$ \\
 \hline
 \end{longtable}
- 
+\twocolumn 
  
 
 ```{=latex}

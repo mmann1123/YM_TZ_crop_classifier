@@ -60,22 +60,74 @@ Minor correction:
 - Ensure that reference 25 fits within the column width.
 - The sentence refers to "as seen in the crop calendar in Figure 2 below" Fig 2; However, the figure is displayed above the sentence, not below.
 
+Revision Notes:
+- Reference 25 has been updated
+- Updated figure 2 reference
+- 
+
+
 
 Reviewer: 2
 
 Comments to the Author
-This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Overall, the content of the paper is presented too succinctly and requires further refinement in expression, particularly in the description of data and methodology, the presentation of results and figures, as well as the discussion section, which is currently lacking.
+This study introduces a novel approach to traditional machine learning methodology for crop type 
+classification in Tanzania, by integrating crowdsourced data with time-series features extracted 
+from Sentinel-2 satellite imagery. Overall, the content of the paper is presented too succinctly and 
+requires further refinement in expression, particularly in the description of data and methodology, 
+the presentation of results and figures, as well as the discussion section, which is currently lacking.
 
-It is recommended to divide Section II (DATA & METHODS) into two separate sections. A schematic diagram should be provided to illustrate the data, especially the crowdsourced data. In the methodology section, a flowchart should be added, along with an accuracy evaluation component.
+It is recommended to divide Section II (DATA & METHODS) into two separate sections. A schematic diagram 
+should be provided to illustrate the data, especially the crowdsourced data. In the methodology section, 
+a flowchart should be added, along with an accuracy evaluation component.
 
-The conclusion section is also overly concise. For instance, in Part B (Land Cover and Crop Type), a more detailed description of Figure 3 is suggested.
+The conclusion section is also overly concise. For instance, in Part B (Land Cover and Crop Type), a 
+more detailed description of Figure 3 is suggested.
 
 It is advisable to present the Discussion as an independent section and enrich its content.
 
-Whether to use a colon after figure titles (e.g., “Fig. 6:”) should strictly follow the journal’s formatting guidelines.
+Whether to use a colon after figure titles (e.g., “Fig. 6:”) should strictly follow the journal’s 
+formatting guidelines.
 
 The font size in the figures is too small and lacks clarity, as seen in Figure 7.
 
 It is recommended to include comparative experiments with other methods.
 
 It is suggested to add visualizations and descriptions of the classification results.
+
+
+Revision Comments 
+
+- We have seperated out the data and methods sections
+- We have tried to better detail our data and methods.
+
+    For instance:
+        1) we clarify that google imagery was only used for non-agricultural landcover types. 
+        "Additional training data for non-agricultural sites was collected utilizing high resolution imagery from Google Earth."
+        2) We heavily revised the description of the training objectives and replaced a paragraph with:
+        """
+        Data collection took place between late April and May 2023 (Figure \ref{fig:crop_cal}) to align with the mid-season growth stage for most target crops. YouthMappers were trained to focus on crops known to be present in each region and at appropriate phenological stages for spectral discrimination. Prior to fieldwork, extensive training sessions covered the key criteria for selecting suitable field sites to ensure high-quality training data for the machine learning models.
+
+        Field size represented a critical consideration, as features below the spatial resolution of Sentinel-2 imagery would not be adequately captured. YouthMappers were therefore instructed to identify only fields measuring 30 meters or greater across, ensuring that each field would encompass multiple pixels in the satellite imagery. Beyond size, field composition played an equally important role in data quality. Agriculture in the study region often includes heterogeneous land cover with tree cover, power lines, buildings, and other obstructions that can contaminate the spectral signature of crops. To minimize this spectral mixing, YouthMappers were trained to prioritize clear, open fields planted with a single crop type, using photographic examples to illustrate ideal versus problematic field characteristics.
+
+        Spatial distribution of sample sites was carefully considered to balance logistical constraints with statistical independence. A minimum separation distance of one kilometer between sampling locations was established as a compromise between the time and cost of travel and the need to reduce spatial autocorrelation in the training data. While YouthMappers were permitted to sample adjacent fields when different crop types were present, they were otherwise encouraged to maintain this spacing by traveling to more distant locations.
+
+        The timing of data collection was primarily driven by crop phenology and field condition. Mid to late reproductive stages offer maximum canopy cover and the most distinctive spectral signatures for crop type discrimination. Although most sampled fields exhibited the desired phenological characteristics, drought conditions in 2023 affected crop health across the region, with some fields showing signs of stress or early harvest. To ensure robust model training, YouthMappers were instructed to prioritize mature, healthy fields with lush green canopies whenever possible. Through this comprehensive training process, field teams developed the expertise needed to consistently identify sites well-suited for generating high-quality in-situ training data for satellite-based crop classification.
+        """
+
+        3) We add the following section on data cleaning:
+        """
+        ## Field Data Cleaning
+
+        The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several key steps:
+
+        1. Removal of Duplicates: Duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset.
+        2. Handling Missing Values: Observations with missing or incomplete data were addressed. Depending
+        on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset.
+        3. Visual Inspection: Each observation was visually inspected using in-situ photos taken by students at each site. This step helped verify the accuracy of the recorded crop types and field conditions.
+        4. Standardization of Crop Type Labels: Crop type labels were standardized to ensure consistency across the dataset. This involved correcting typographical errors and unifying different naming conventions for the same crop.
+        5. Geospatial Validation: The geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded accurately to the reported crop types.
+
+        After completing the cleaning process, the final dataset consisted of 1,400 crop type entries. This refined dataset provided a robust foundation for training and evaluating the machine learning models used in this study.
+        """     
+
+        4) We try to more clearly state out model performance metrics in the renamed Model Selection & Performance section

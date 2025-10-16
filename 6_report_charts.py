@@ -400,3 +400,115 @@ plt.show()
 
 
 # %%
+# Flow diagram for the 3-step methodology
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
+def create_methodology_flowchart():
+    """
+    Creates a flow diagram showing the 3-step data collection methodology
+    """
+    fig, ax = plt.subplots(figsize=(12, 10))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 12)
+    ax.axis('off')
+
+    # Define colors
+    color_step1 = '#e8f4f8'
+    color_step2 = '#d4e6f1'
+    color_step3 = '#aed6f1'
+    color_arrow = '#2c3e50'
+
+    # Step 1: Development and Training
+    step1_box = FancyBboxPatch(
+        (1, 9), 8, 2,
+        boxstyle="round,pad=0.1",
+        facecolor=color_step1,
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(step1_box)
+    ax.text(5, 10.3, 'Step 1: Development and Training',
+            ha='center', va='center', fontsize=20, weight='bold')
+    ax.text(5, 9.7, 'Training of all intended student participants',
+            ha='center', va='center', fontsize=16)
+
+    # Arrow 1 -> 2
+    arrow1 = FancyArrowPatch(
+        (5, 9), (5, 7),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=color_arrow,
+        linewidth=4
+    )
+    ax.add_patch(arrow1)
+
+    # Step 2: Data Collection (main box)
+    step2_box = FancyBboxPatch(
+        (1, 5), 8, 2,
+        boxstyle="round,pad=0.1",
+        facecolor=color_step2,
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(step2_box)
+    ax.text(5, 6.3, 'Step 2: Data Collection',
+            ha='center', va='center', fontsize=20, weight='bold')
+    ax.text(5, 5.7, 'KoboToolbox hosting well-developed data model',
+            ha='center', va='center', fontsize=16)
+    ax.text(5, 5.3, 'Duration: 14 days total',
+            ha='center', va='center', fontsize=14, style='italic')
+
+    # # Sub-box for pilot testing
+    # pilot_box = FancyBboxPatch(
+    #     (1.5, 5), 7, 0.8,
+    #     boxstyle="round,pad=0.05",
+    #     facecolor='white',
+    #     edgecolor='gray',
+    #     linewidth=1,
+    #     linestyle='--'
+    # )
+    # ax.add_patch(pilot_box)
+    # ax.text(5, 5.4, '7 days: Iterative pilot testing on different farms, crops, and landscapes',
+    #         ha='center', va='center', fontsize=9.5)
+
+    # Arrow 2 -> 3
+    arrow2 = FancyArrowPatch(
+        (5, 5), (5, 3),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=color_arrow,
+        linewidth=4
+    )
+    ax.add_patch(arrow2)
+
+    # Step 3: Data Review and Cleaning
+    step3_box = FancyBboxPatch(
+        (1, 1), 8, 2,
+        boxstyle="round,pad=0.1",
+        facecolor=color_step3,
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(step3_box)
+    ax.text(5, 2.3, 'Step 3: Data Review and Cleaning',
+            ha='center', va='center', fontsize=20, weight='bold')
+    ax.text(5, 1.7, 'Generate training sample for model development',
+            ha='center', va='center', fontsize=16)
+
+    # Title
+    ax.text(5, 11.5, 'Data Collection Methodology',
+            ha='center', va='center', fontsize=22, weight='bold')
+
+    plt.tight_layout()
+
+    # Save the figure
+    output_path = './writeup/figures/methodology_flowchart.png'
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"Flowchart saved to: {output_path}")
+
+    plt.show()
+
+# Create the flowchart
+create_methodology_flowchart()
+
+# %%

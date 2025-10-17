@@ -802,13 +802,14 @@ for index in sorted(files_by_index.keys()):
         raise ValueError(f"Warning: Not all files were ordered ({len(ordered_files)} vs {len(expected_feature_names)})")
 
     # Create the stack with correctly ordered files
-    with gw.open(ordered_files, nodata=9999, stack_dim="band") as src:
-            src.gw.to_raster(
-                f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif", 
-                compress="lzw", 
-                overwrite=True, 
-                bigtiff=True
-            )
+    with gw.config.update(ref_image=ordered_files[0]):
+        with gw.open(ordered_files, nodata=9999, stack_dim="band") as src:
+                src.gw.to_raster(
+                    f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif", 
+                    compress="lzw", 
+                    overwrite=True, 
+                    bigtiff=True
+                )
             
     # predict to stack
     def user_func(w, block, model):

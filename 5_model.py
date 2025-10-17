@@ -449,7 +449,7 @@ select_images = set(
 # ]
 
 select_images
-
+#%%
 from sklearn_helpers import best_classifier_pipe, find_selected_ranked_images
 
 
@@ -461,10 +461,12 @@ select_image_paths = find_selected_ranked_images(
     available_image_list=glob("../features/**/*.tif"),
     # select_how_many=len(select_images), dont use doesn't make sense with multiple zones
 )
-
+select_image_paths
+ 
 # update keys to remove _0
 select_image_paths = {k.replace("_0", ""): v for k, v in select_image_paths.items()}
-
+select_image_paths
+ 
 
 # replace . in B11_quantile_q.95 with _ for all select_image_paths keys:
 select_image_paths = {k.replace(".", "_"): v for k, v in select_image_paths.items()}
@@ -613,16 +615,21 @@ logger = logging.getLogger(__name__)
 ref_images = glob("../bounds_examples_v2/*.tif")
 print(ref_images)
 
+#%%
+for item in select_image_paths.items():
+    if 'quantile' in item[0]:
+
 # %%
 from geowombat.backends.dask_ import Cluster
-import tqdm
+from tqdm import tqdm   
 
 temp_dir = "../temp3"
 out_dir = "../final_model_features_v3"
 os.makedirs("../temp3", exist_ok=True)
 os.makedirs("../final_model_features_v3/", exist_ok=True)
-
-for k, v in tqdm(select_image_paths.items(), desc="Processing images"):
+# quantile_items = {key: value for key, value in select_image_paths.items() if 'quantile' in key}
+for k, v in tqdm(list(select_image_paths.items()), desc="Processing images"):
+# for k, v in tqdm(quantile_items.items(), desc="Processing images"):
     cluster = Cluster(
             n_workers=8,
             threads_per_worker=2,
@@ -724,39 +731,152 @@ image_names
 # Write out final model
 ##################################################################
 # # %%
+os.chdir(
+    "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data"
+)
+pipeline_performance = best_classifier_pipe("models/study.db", "final_model_selection_no_kbest_30_LGBM_kappa_3")
 
 # %% Create a prediction stack
+mean_shaps_file = f"../outputs/mean_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+max_shaps_file = f"../outputs/max_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
 
-pipeline_performance = best_classifier_pipe("models/study.db", "model_selection")
+model_images = set(
+    list(pd.read_csv(mean_shaps_file)[f"top{select_how_many}names"].values)
+    + list(pd.read_csv(max_shaps_file)[f"top{select_how_many}names"].values)
+)
 
-# %%
-with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-    src.gw.to_raster(
-        "outputs/pred_stack.tif", compress="lzw", overwrite=True, bigtiff=True
+model_images
+
+select_images = sorted(glob("/mnt/bigdrive/final_model_features_v3/*.tif"))
+select_images
+#%%
+import os
+import re
+from collections import defaultdict
+from glob import glob
+
+# Get the feature names in the correct order as used during training
+expected_feature_names = model_images   
+
+# Group files by their suffix number
+files_by_index = defaultdict(list)
+
+# Extract the index from filenames
+for file_path in select_images:
+    match = re.search(r'_(\d+)\.tif$', file_path)
+    if match:
+        index = int(match.group(1))
+        files_by_index[index].append(file_path)
+
+# Process each group of files with the same index
+for index in sorted(files_by_index.keys()):
+    print(f"Processing files with index {index}")
+    current_files = files_by_index[index]
+    print(f"  Found {len(current_files)} files")
+    
+    # Sort the files to match the expected feature order
+    # Extract the base names without the index suffix for comparison
+    file_basenames = {os.path.basename(f).rsplit('_', 1)[0]: f for f in current_files}
+    
+    # Arrange files in the order expected by the model
+    ordered_files = []
+    for feature_name in expected_feature_names:
+        matching_files = [f for name, f in file_basenames.items() if name == feature_name]
+        if matching_files:
+            ordered_files.append(matching_files[0])
+            
+
+    # You can also find which expected features are missing from the actual files
+    missing_features = set(expected_feature_names) - set([os.path.basename(f).rsplit('_', 1)[0] for f in ordered_files])
+    if missing_features:
+        print("\nMissing features:")
+        for feature in sorted(missing_features):
+            print(f"- {feature}")
+    
+        # raise ValueError(f"Warning: Not all files were ordered ({len(ordered_files)} vs {len(expected_feature_names)})")
+
+    # # Create the stack with correctly ordered files
+    # with gw.config.update(ref_image=ordered_files[0]):
+    #     with gw.open(ordered_files, nodata=9999, stack_dim="band") as src:
+    #         src.gw.to_raster(
+    #             f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif", 
+    #             compress="lzw", 
+    #             overwrite=True, 
+    #             bigtiff=True
+    #         )
+            
+    # # predict to stack
+    # def user_func(w, block, model):
+    #     pred_shape = list(block.shape)
+    #     X = block.reshape(pred_shape[0], -1).T
+    #     pred_shape[0] = 1
+    #     y_hat = model.predict(X)
+    #     X_reshaped = y_hat.T.reshape(pred_shape)
+    #     return w, X_reshaped
+
+    # # Run prediction
+    # gw.apply(
+    #     f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif",
+    #     f"outputs/final_model_lgbm_{index}.tif",
+    #     user_func,
+    #     args=(pipeline_performance,),
+    #     n_jobs=16,
+    #     count=1,
+    #     overwrite=True,
+    #     scheduler="threads"
+    # )
+        
+# %% create image stack for prediction
+
+for index in sorted_indices[0:1]:
+    print(f"Processing files with index {index}")
+    current_files = files_by_index[index]
+    
+    # Process all files with the current index
+    print(f"  Found {len(current_files)} files")
+
+    # predict to stack
+    def user_func(w, block, model):
+        pred_shape = list(block.shape)
+        X = block.reshape(pred_shape[0], -1).T
+        pred_shape[0] = 1
+        y_hat = model.predict(X)
+        X_reshaped = y_hat.T.reshape(pred_shape)
+        return w, X_reshaped
+
+
+    gw.apply(
+        f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif",
+        f"outputs/final_model_lgbm_{index}.tif",
+        user_func,
+        args=(pipeline_performance,),
+        n_jobs=16,
+        count=1,
+        overwrite=True,
+        scheduler="threads",  #  LGBM needs threads since its multithreaded
     )
 
+# # %%
+# with gw.open(select_images, nodata=9999, stack_dim="band") as src:
+#     # fit a model to get Xy used to train model
+#     df = gw.extract(src, lu_poly, verbose=1)
+#     y = df["lc"]
+#     X = df[range(1, len(select_images) + 1)]
+#     X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
+#     groups = df.id.values
+#     weights = df.Field_size
 
-# %%
-with gw.open(select_images, nodata=9999, stack_dim="band") as src:
-    # fit a model to get Xy used to train model
-    df = gw.extract(src, lu_poly, verbose=1)
-    y = df["lc"]
-    X = df[range(1, len(select_images) + 1)]
-    X.columns = [os.path.basename(f).split(".")[0] for f in select_images]
-    groups = df.id.values
-    weights = df.Field_size
+# # %%
 
-# %%
+# skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+# for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
+#     # for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+#     X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+#     y_train, y_test = y[train_index], y[test_index]
 
-skf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
-for i, (train_index, test_index) in enumerate(skf.split(X, y, groups)):
-    # for i, (train_index, test_index) in enumerate(skf.split(X, y)):
-    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-    y_train, y_test = y[train_index], y[test_index]
-
-    pipeline_performance.fit(
-        X_train, y_train, classifier__sample_weight=weights[train_index]
-    )
+#     pipeline_performance.fit(
+#         X_train, y_train, classifier__sample_weight=weights[train_index]
+#     )
 
 
 # %%

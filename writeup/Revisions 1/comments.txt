@@ -98,6 +98,7 @@ It is suggested to add visualizations and descriptions of the classification res
 Revision Comments 
 
 - We have seperated out the data and methods sections
+- Althought constrained by the 2 column format, we have increased the font sizes on all our figures. 
 - We have tried to better detail our data and methods.
 
     For instance:
@@ -138,4 +139,8 @@ Revision Comments
 
         5) We add two flow charts, one for data collection and cleaning and another for analytical methods.
 
-        
+        6) We added the following to our discussions of Figure 3 as suggested:
+
+        "Peanuts, soybeans and okra are among the least represented land cover types in the dataset, highlighting the challenges associated with collecting sufficient training data for these categories. This figure also includes land cover types such as water, forest, shrub, and tidal areas, which are essential for providing context to the landscape but were not the focus of this study. The varied distribution of land cover types underscores the complexity of the classification task and the need for robust modeling techniques to accurately capture this diversity."
+
+- Although we appreciate the suggestion of seperating the results and methods, to help improve legibility to non-technical readers we are going to keep them combined. However, we agree the results/discussion section could be better developed.  We are adding the following: 

@@ -512,3 +512,201 @@ def create_methodology_flowchart():
 create_methodology_flowchart()
 
 # %%
+# Analytical Methods Flow Diagram (excluding data collection)
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
+def create_analytical_methods_flowchart():
+    """
+    Creates a simplified flow diagram for the analytical methodology steps
+    """
+    fig, ax = plt.subplots(figsize=(10, 14))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 16)
+    ax.axis('off')
+
+    title_text = 28
+    top_text = 22
+    bottom_text = 18
+
+    # Define colors - cleaner palette
+    colors = {
+        'box': "#386496",
+        'arrow': '#2c3e50',
+        'alt_box': '#4A90E2'
+    }
+
+    y_start = 13.5
+    box_height = 1.5
+    box_width = 7
+    x_center = 5
+    spacing = 2.0
+
+    # Title
+    ax.text(x_center, 15.7, 'Analytical Methods Workflow',
+            ha='center', va='center', fontsize=title_text, weight='bold')
+
+    # Step 1: Field Data Cleaning
+    y1 = y_start
+    box1 = FancyBboxPatch(
+        (1.5, y1), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box1)
+    ax.text(x_center, y1 + 0.95, 'Field Data Cleaning',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    # ax.text(x_center, y1 + 0.5, '1,720 → 1,400 observations',
+    #         ha='center', va='center', fontsize=13, color='white')
+
+    # Arrow 1 -> 2
+    arrow1 = FancyArrowPatch(
+        (x_center, y1), (x_center, y1 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow1)
+
+    # Step 2: Time Series Feature Extraction
+    y2 = y1 - spacing
+    box2 = FancyBboxPatch(
+        (1.5, y2), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box2)
+    ax.text(x_center, y2 + 0.95, 'Time Series Feature Extraction',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y2 + 0.5, 'xr_fresh (6 spectral bands)',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 2 -> 3
+    arrow2 = FancyArrowPatch(
+        (x_center, y2), (x_center, y2 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow2)
+
+    # Step 3: Spatial Data Extraction
+    y3 = y2 - spacing
+    box3 = FancyBboxPatch(
+        (1.5, y3), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box3)
+    ax.text(x_center, y3 + 0.95, 'Spatial Data Extraction',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y3 + 0.5, 'Field size-based buffering',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 3 -> 4
+    arrow3 = FancyArrowPatch(
+        (x_center, y3), (x_center, y3 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow3)
+
+    # Step 4: Model Selection & Training
+    y4 = y3 - spacing
+    box4 = FancyBboxPatch(
+        (1.5, y4), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['alt_box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box4)
+    ax.text(x_center, y4 + 0.95, 'Model Selection & Training',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y4 + 0.5, 'Optuna hyperparameter optimization',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 4 -> 5
+    arrow4 = FancyArrowPatch(
+        (x_center, y4), (x_center, y4 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow4)
+
+    # Step 5: Performance Evaluation
+    y5 = y4 - spacing
+    box5 = FancyBboxPatch(
+        (1.5, y5), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['alt_box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box5)
+    ax.text(x_center, y5 + 0.95, 'Feature Selection via SHAP',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y5 + 0.5, '33 final features',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 5 -> 6
+    arrow5 = FancyArrowPatch(
+        (x_center, y5), (x_center, y5 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow5)
+
+    # Step 6: Feature Selection via SHAP
+    y6 = y5 - spacing
+    box6 = FancyBboxPatch(
+        (1.5, y6), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['alt_box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box6)
+
+    ax.text(x_center, y6 + 0.95, 'Performance Evaluation',
+        ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y6 + 0.5, 'Stratified Group K-Fold CV',
+        ha='center', va='center', fontsize=bottom_text, color='white')
+
+
+    # Feedback arrow from Step 6 back to Step 4 (bidirectional)
+    feedback_arrow = FancyArrowPatch(
+        (8.7, y6 + 0.75), (8.7, y4 + 0.75),
+        arrowstyle='<->,head_width=0.3,head_length=0.3',
+        color='black',
+        linewidth=2,
+        linestyle='--'
+    )
+    ax.add_patch(feedback_arrow)
+    ax.text(9, (y6 + y4) / 2 + 0.75, 'Retrain',
+            ha='left', va='center', fontsize=top_text, color='black', weight='bold',
+            rotation=90)
+
+    plt.tight_layout()
+
+    # Save the figure
+    output_path = './writeup/figures/analytical_methods_flowchart.png'
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"Analytical methods flowchart saved to: {output_path}")
+
+    plt.show()
+
+# Create the analytical flowchart
+create_analytical_methods_flowchart()
+
+# %%

@@ -115,19 +115,27 @@ Revision Comments
         """
 
         3) We add the following section on data cleaning:
+        
         """
         ## Field Data Cleaning
-
-        The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several key steps:
-
-        1. Removal of Duplicates: Duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset.
-        2. Handling Missing Values: Observations with missing or incomplete data were addressed. Depending
-        on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset.
-        3. Visual Inspection: Each observation was visually inspected using in-situ photos taken by students at each site. This step helped verify the accuracy of the recorded crop types and field conditions.
-        4. Standardization of Crop Type Labels: Crop type labels were standardized to ensure consistency across the dataset. This involved correcting typographical errors and unifying different naming conventions for the same crop.
-        5. Geospatial Validation: The geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded accurately to the reported crop types.
-
-        After completing the cleaning process, the final dataset consisted of 1,400 crop type entries. This refined dataset provided a robust foundation for training and evaluating the machine learning models used in this study.
+        The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several steps. First, duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset. Second, observations with missing or incomplete data were addressed; depending on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset. Third, each observation was visually inspected using in-situ photos taken by students at each site, which helped verify the accuracy of the recorded crop types and field conditions. Fourth, crop type labels were standardized to ensure consistency across the dataset by correcting typographical errors and unifying different naming conventions for the same crop. Finally, the geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded to an observable field from satellite imagery. After completing the cleaning process, the final dataset consisted of 1,400 crop type entries, providing a robust foundation for training and evaluating the machine learning models used in this study.
         """     
 
         4) We try to more clearly state out model performance metrics in the renamed Model Selection & Performance section
+
+        """
+        ## Model Selection
+
+        We employed `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study where each trial proposed a set of model parameters aimed at optimizing classification performance. We evaluated multiple classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, testing various configurations to identify the optimal approach for crop classification.
+
+        Prior to model training, we preprocessed the extracted time-series features from satellite imagery using standard scaling (centering and scaling) from the `scikit-learn` library to normalize the data [@scikit-learn]. We then applied a variance threshold method to reduce dimensionality by excluding features with low variance, thereby improving computational efficiency and model interpretability.
+        The final model selection was based on maximizing the kappa statistic across all cross-validation folds, ensuring that the chosen model and its parameters provided the best possible performance for classifying crop types in our dataset.
+
+        ## Performance Evaluation
+
+        To assess model performance, we implemented stratified group k-fold cross-validation with three splits. This approach ensured that samples from the same field remained together within either the training or validation set, preventing data leakage that could occur if observations from the same field were split across folds. We utilized the kappa statistic as our primary evaluation metric due to its suitability for assessing classifier performance on imbalanced datasets. This metric accounts for agreement occurring by chance, providing a more robust measure of classification accuracy than simple overall accuracy when class distributions are unequal.
+        """
+
+        5) We add two flow charts, one for data collection and cleaning and another for analytical methods.
+
+        

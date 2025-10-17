@@ -167,9 +167,11 @@ Monthly composites were collected for January through August of 2023 for the the
 # Methods
 The following section describes the methods used for data collection, feature extraction, model training, and evaluation.
 
-## Data Collection Methods
+## Data Collection
 
 To ensure the success of our project, we focused heavily on the design of our data collection methods. These methods were carefully integrated, taking into account: the crop calendar, information on the different stages of crop development, the distances between crop fields, the tools used, and data quality assurance.
+
+### Field Data
 
 Young crops exhibit significant differences compared to mature crops in terms of color, density, and phenological development. Variations in the crop cycle across different fields could lead to heteroscedasticity in the spectral reflectance measurements used for machine learning (ML) training, thereby affecting the precision and accuracy of the model. By targeting the period of April through May as we aimed to capture crops late in the growing season, and yet before harvest as seen in the crop calendar in Figure \ref{fig:crop_cal} below.
 
@@ -209,20 +211,22 @@ The data collection was managed through KoboCollect, hosted on the KoboToolBox i
 \end{table}
 \twocolumn
 
-## Field Data Cleaning
+### Field Data Cleaning
 
-The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several key steps:
+The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several steps. First, duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset. Second, observations with missing or incomplete data were addressed; depending on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset. Third, each observation was visually inspected using in-situ photos taken by students at each site, which helped verify the accuracy of the recorded crop types and field conditions. Fourth, crop type labels were standardized to ensure consistency across the dataset by correcting typographical errors and unifying different naming conventions for the same crop. Finally, the geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded to an observable field from satellite imagery. After completing the cleaning process, the final dataset consisted of 1,400 crop type entries, providing a robust foundation for training and evaluating the machine learning models used in this study.
 
-1. Removal of Duplicates: Duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset.
-2. Handling Missing Values: Observations with missing or incomplete data were addressed. Depending
-  on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset.
-3. Visual Inspection: Each observation was visually inspected using in-situ photos taken by students at each site. This step helped verify the accuracy of the recorded crop types and field conditions.
-4. Standardization of Crop Type Labels: Crop type labels were standardized to ensure consistency across the dataset. This involved correcting typographical errors and unifying different naming conventions for the same crop.
-5. Geospatial Validation: The geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded accurately to the reported crop types.
+## Analytical Methods
 
-After completing the cleaning process, the final dataset consisted of 1,400 crop type entries. This refined dataset provided a robust foundation for training and evaluating the machine learning models used in this study.
+After data collection and cleaning, we employed a series of analytical methods to extract relevant features from the satellite imagery, train machine learning models, and evaluate their performance. The overall workflow is illustrated in Figure \ref{fig:analyt_flow}.
 
-## Time Series Features
+\begin{figure}
+   \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/analytical_methods_flowchart.png}
+   \caption{Analytical Methods Workflow }
+   \label{fig:analyt_flow} %can refer to in text with \ref{fig:analyt_flow}
+\end{figure} 
+
+
+### Time Series Features
 
 Time series features capture the temporal dynamics of crop growth and development, providing valuable information on the phenological patterns of different crops. We leverage the time series nature of the satellite imagery to extract relevant features for crop type classification for the 2023 growing season.
 
@@ -243,19 +247,22 @@ For a full list of the time series features extracted in this study and their de
 
 The integration of `xr_fresh` into our analytical workflow allowed for an automated and robust analysis of temporal patterns across the study area. By leveraging this toolkit, we could efficiently process large datasets, ensuring that each pixel's temporal dynamics were comprehensively characterized, which is critical for accurate environmental monitoring and change detection.
 
-## Data Extraction
+### Data Extraction
 
 To partially account for variation in field size, we extracted pixels based on a buffer around field point locations. This allows us to account for the fact that fields likely represent groups of adjacent pixels. Small fields were buffered by only 5 meters, medium fields by 10m and large fields by 30m. This approach allowed us to capture the time series features from the surrounding area, providing a more comprehensive representation of the field's characteristics. The use of larger buffers was explored but found to decrease model performance as fields tended to be heterogenous - for instance containing patches of trees. To account for this in our modeling, we treat observations from the same field as a "group" in our cross-validation scheme - as described below.
 
-## Model Selection & Performance 
+### Model Selection
 
-In our study, we utilized the extracted time-series features from satellite imagery, described above, to analyze crop classifications.  Notably, features were centered and scaled from the `scikit-learn` library to normalize the data, followed by the application of a variance threshold method to reduce dimensionality by excluding features with low variance [@scikit-learn].
+We employed `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study where each trial proposed a set of model parameters aimed at optimizing classification performance. We evaluated multiple classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, testing various configurations to identify the optimal approach for crop classification.
 
-We employ `Optuna`, an optimization framework, to conduct systematic model selection, hyperparameter tuning and gather performance metrics [@optuna_2019]. Our methodology involved defining a study using Optuna where each trial proposes a set of model parameters aimed at optimizing performance metrics. Specifically, we used stratified group k-fold cross-validation with the number of splits set to three, ensuring that samples from the same field were not split across training and validation sets to prevent data leakage. The scoring metric utilized is the kappa statistic, chosen for its suitability in evaluating models on imbalanced datasets.
+Prior to model training, we preprocessed the extracted time-series features from satellite imagery using standard scaling (centering and scaling) from the `scikit-learn` library to normalize the data [@scikit-learn]. We then applied a variance threshold method to reduce dimensionality by excluding features with low variance, thereby improving computational efficiency and model interpretability.
+The final model selection was based on maximizing the kappa statistic across all cross-validation folds, ensuring that the chosen model and its parameters provided the best possible performance for classifying crop types in our dataset.
 
-This approach allows us to rigorously evaluate and compare different classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, and their configurations under a variety of conditions. The final selection of the model and its parameters was based on the ability to maximize the kappa statistic, ensuring that the chosen model provided the best possible performance for the classification of land cover types in our dataset.
+### Performance Evaluation
 
-## Interpretation and Feature Selection
+To assess model performance, we implemented stratified group k-fold cross-validation with three splits. This approach ensured that samples from the same field remained together within either the training or validation set, preventing data leakage that could occur if observations from the same field were split across folds. We utilized the kappa statistic as our primary evaluation metric due to its suitability for assessing classifier performance on imbalanced datasets. This metric accounts for agreement occurring by chance, providing a more robust measure of classification accuracy than simple overall accuracy when class distributions are unequal.
+
+### Interpretation and Feature Selection
 
 To interpret the contributions of individual features to the model predictions, we employed SHapley Additive exPlanations (SHAP) [@shaps_2017]. This approach, based on game theory, quantifies the impact of each feature on the prediction outcome, providing insights into which features are most influential in determining land cover types.
 

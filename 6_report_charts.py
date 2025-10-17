@@ -409,10 +409,19 @@ def create_methodology_flowchart():
     """
     Creates a flow diagram showing the 3-step data collection methodology
     """
-    fig, ax = plt.subplots(figsize=(12, 10))
+    fig, ax = plt.subplots(figsize=(10, 8))
     ax.set_xlim(0, 10)
-    ax.set_ylim(0, 12)
+    ax.set_ylim(0, 10)
     ax.axis('off')
+
+    title_text = 28
+    top_text = 22
+    bottom_text = 18
+
+    box_height = 1.5
+    box_width = 7
+    x_center = 5
+    spacing = 2.0  # Match the analytical flowchart spacing
 
     # Define colors
     color_step1 = '#e8f4f8'
@@ -420,84 +429,74 @@ def create_methodology_flowchart():
     color_step3 = '#aed6f1'
     color_arrow = '#2c3e50'
 
+    # Calculate positions
+    y1 = 7.5
+    y2 = y1 - spacing
+    y3 = y2 - spacing
+
     # Step 1: Development and Training
     step1_box = FancyBboxPatch(
-        (1, 9), 8, 2,
+        (1.5, y1), box_width, box_height,
         boxstyle="round,pad=0.1",
         facecolor=color_step1,
         edgecolor='black',
         linewidth=2
     )
     ax.add_patch(step1_box)
-    ax.text(5, 10.3, 'Step 1: Development and Training',
-            ha='center', va='center', fontsize=20, weight='bold')
-    ax.text(5, 9.7, 'Training of all intended student participants',
-            ha='center', va='center', fontsize=16)
+    ax.text(x_center, y1 + 0.95, 'Step 1: Development and Training',
+            ha='center', va='center', fontsize=top_text, weight='bold')
+    ax.text(x_center, y1 + 0.5, 'Training student participants',
+            ha='center', va='center', fontsize=bottom_text)
 
     # Arrow 1 -> 2
     arrow1 = FancyArrowPatch(
-        (5, 9), (5, 7),
+        (x_center, y1), (x_center, y1 - spacing + box_height),
         arrowstyle='->,head_width=0.4,head_length=0.4',
         color=color_arrow,
-        linewidth=4
+        linewidth=2.5
     )
     ax.add_patch(arrow1)
 
     # Step 2: Data Collection (main box)
     step2_box = FancyBboxPatch(
-        (1, 5), 8, 2,
+        (1.5, y2), box_width, box_height,
         boxstyle="round,pad=0.1",
         facecolor=color_step2,
         edgecolor='black',
         linewidth=2
     )
     ax.add_patch(step2_box)
-    ax.text(5, 6.3, 'Step 2: Data Collection',
-            ha='center', va='center', fontsize=20, weight='bold')
-    ax.text(5, 5.7, 'KoboToolbox hosting well-developed data model',
-            ha='center', va='center', fontsize=16)
-    ax.text(5, 5.3, 'Duration: 14 days total',
-            ha='center', va='center', fontsize=14, style='italic')
-
-    # # Sub-box for pilot testing
-    # pilot_box = FancyBboxPatch(
-    #     (1.5, 5), 7, 0.8,
-    #     boxstyle="round,pad=0.05",
-    #     facecolor='white',
-    #     edgecolor='gray',
-    #     linewidth=1,
-    #     linestyle='--'
-    # )
-    # ax.add_patch(pilot_box)
-    # ax.text(5, 5.4, '7 days: Iterative pilot testing on different farms, crops, and landscapes',
-    #         ha='center', va='center', fontsize=9.5)
+    ax.text(x_center, y2 + 0.95, 'Step 2: Data Collection',
+            ha='center', va='center', fontsize=top_text, weight='bold')
+    ax.text(x_center, y2 + 0.5, 'KoboToolbox (14 days)',
+            ha='center', va='center', fontsize=bottom_text)
 
     # Arrow 2 -> 3
     arrow2 = FancyArrowPatch(
-        (5, 5), (5, 3),
+        (x_center, y2), (x_center, y2 - spacing + box_height),
         arrowstyle='->,head_width=0.4,head_length=0.4',
         color=color_arrow,
-        linewidth=4
+        linewidth=2.5
     )
     ax.add_patch(arrow2)
 
     # Step 3: Data Review and Cleaning
     step3_box = FancyBboxPatch(
-        (1, 1), 8, 2,
+        (1.5, y3), box_width, box_height,
         boxstyle="round,pad=0.1",
         facecolor=color_step3,
         edgecolor='black',
         linewidth=2
     )
     ax.add_patch(step3_box)
-    ax.text(5, 2.3, 'Step 3: Data Review and Cleaning',
-            ha='center', va='center', fontsize=20, weight='bold')
-    ax.text(5, 1.7, 'Generate training sample for model development',
-            ha='center', va='center', fontsize=16)
+    ax.text(x_center, y3 + 0.95, 'Step 3: Data Review and Cleaning',
+            ha='center', va='center', fontsize=top_text, weight='bold')
+    ax.text(x_center, y3 + 0.5, 'Generate training sample for model development',
+            ha='center', va='center', fontsize=bottom_text)
 
     # Title
-    ax.text(5, 11.5, 'Data Collection Methodology',
-            ha='center', va='center', fontsize=22, weight='bold')
+    ax.text(x_center, 9.6, 'Data Collection Methodology',
+            ha='center', va='center', fontsize=title_text, weight='bold')
 
     plt.tight_layout()
 
@@ -521,9 +520,9 @@ def create_analytical_methods_flowchart():
     """
     Creates a simplified flow diagram for the analytical methodology steps
     """
-    fig, ax = plt.subplots(figsize=(10, 14))
+    fig, ax = plt.subplots(figsize=(10, 11))
     ax.set_xlim(0, 10)
-    ax.set_ylim(0, 16)
+    ax.set_ylim(2, 16)
     ax.axis('off')
 
     title_text = 28

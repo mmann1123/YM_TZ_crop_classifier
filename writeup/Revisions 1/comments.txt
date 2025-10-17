@@ -85,8 +85,7 @@ more detailed description of Figure 3 is suggested.
 
 It is advisable to present the Discussion as an independent section and enrich its content.
 
-Whether to use a colon after figure titles (e.g., “Fig. 6:”) should strictly follow the journal’s 
-formatting guidelines.
+Whether to use a colon after figure titles (e.g., “Fig. 6:”) should strictly follow the journal’s formatting guidelines.
 
 The font size in the figures is too small and lacks clarity, as seen in Figure 7.
 
@@ -144,3 +143,12 @@ Revision Comments
         "Peanuts, soybeans and okra are among the least represented land cover types in the dataset, highlighting the challenges associated with collecting sufficient training data for these categories. This figure also includes land cover types such as water, forest, shrub, and tidal areas, which are essential for providing context to the landscape but were not the focus of this study. The varied distribution of land cover types underscores the complexity of the classification task and the need for robust modeling techniques to accurately capture this diversity."
 
 - Although we appreciate the suggestion of seperating the results and methods, to help improve legibility to non-technical readers we are going to keep them combined. However, we agree the results/discussion section could be better developed.  We are adding the following: 
+    1) We expanded the discussion of SHAPs values in a number of places for instance:
+
+    """
+    Reflecting on the colors of the bars we can see that 'B11.mean' is important in distinguishing sunflower, sorghum, and millet to a roughly equal degree, and has some small impact on distinguishing other classes. This pattern likely reflects fundamental differences in canopy structure and water content between these dryland crops and the more common maize and rice in the dataset. The SWIR bands are particularly sensitive to plant water content and canopy moisture status, as water strongly absorbs radiation at these wavelengths. Sunflower, sorghum, and millet are typically grown in drier conditions and exhibit distinct water use strategies compared to maize. Sunflower, with its deep taproot system and larger leaf area, maintains different canopy moisture levels throughout the growing season. Sorghum and millet, as drought-tolerant cereals with waxy leaf coatings and more efficient water use, exhibit characteristically different SWIR reflectance patterns than the more water-demanding maize crop. The mean SWIR reflectance over the growing season therefore captures these persistent biophysical differences in canopy water status, allowing the model to effectively separate these dryland-adapted crops from others in the training dataset.  The equal importance of B11.mean across these three crops suggests that while this feature helps separate them from the broader "cereal" or "broadleaf" categories, additional features are needed to distinguish among sunflower, sorghum, and millet themselves.
+    """
+
+    """
+    Looking at 'B12.absolute.sum.of.changes' we can see it best differentiates shrubs, cotton, and forest. The sum of absolute changes measures the total magnitude of variation in a time series by summing the absolute differences between consecutive time steps, effectively quantifying how much a variable fluctuates over the observation period regardless of direction. When applied to the B12 band (SWIR 2100-2280nm), this metric captures the cumulative volatility in canopy water content and structural properties throughout the growing season. B12's effectiveness at distinguishing shrub, cotton, and forests using sum of absolute changes likely reflects fundamental differences in their temporal stability and management regimes. Cotton, as an intensively managed annual crop, exhibits pronounced temporal variability in the SWIR signal driven by distinct phenological transitions and management interventions. Cotton fields progress through rapid establishment after planting, vigorous vegetative growth, flowering and boll development, and then defoliation before harvest—each transition creating sharp changes in canopy water content and structure that B12 captures.  
+    """

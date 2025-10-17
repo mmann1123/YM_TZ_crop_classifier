@@ -737,16 +737,22 @@ os.chdir(
 pipeline_performance = best_classifier_pipe("models/study.db", "final_model_selection_no_kbest_30_LGBM_kappa_3")
 
 # %% Create a prediction stack
-mean_shaps_file = f"../outputs/mean_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
-max_shaps_file = f"../outputs/max_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+mean_shaps_file = f"./outputs/mean_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
+max_shaps_file = f"./outputs/max_shaps_importance_no_other_{select_how_many}_{'_'.join([classifier])}_{scoring}_{n_splits}.csv"
 
 model_images = set(
     list(pd.read_csv(mean_shaps_file)[f"top{select_how_many}names"].values)
     + list(pd.read_csv(max_shaps_file)[f"top{select_how_many}names"].values)
 )
 
-model_images
+# update keys to remove _0
+model_images = [k.replace("_0", "") for k in model_images]
 
+
+model_images = [k.replace(".", "_")  for k  in model_images]
+
+model_images
+#%%
 select_images = sorted(glob("/mnt/bigdrive/final_model_features_v3/*.tif"))
 select_images
 #%%
@@ -792,49 +798,18 @@ for index in sorted(files_by_index.keys()):
         print("\nMissing features:")
         for feature in sorted(missing_features):
             print(f"- {feature}")
-    
-        # raise ValueError(f"Warning: Not all files were ordered ({len(ordered_files)} vs {len(expected_feature_names)})")
 
-    # # Create the stack with correctly ordered files
-    # with gw.config.update(ref_image=ordered_files[0]):
-    #     with gw.open(ordered_files, nodata=9999, stack_dim="band") as src:
-    #         src.gw.to_raster(
-    #             f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif", 
-    #             compress="lzw", 
-    #             overwrite=True, 
-    #             bigtiff=True
-    #         )
+        raise ValueError(f"Warning: Not all files were ordered ({len(ordered_files)} vs {len(expected_feature_names)})")
+
+    # Create the stack with correctly ordered files
+    with gw.open(ordered_files, nodata=9999, stack_dim="band") as src:
+            src.gw.to_raster(
+                f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif", 
+                compress="lzw", 
+                overwrite=True, 
+                bigtiff=True
+            )
             
-    # # predict to stack
-    # def user_func(w, block, model):
-    #     pred_shape = list(block.shape)
-    #     X = block.reshape(pred_shape[0], -1).T
-    #     pred_shape[0] = 1
-    #     y_hat = model.predict(X)
-    #     X_reshaped = y_hat.T.reshape(pred_shape)
-    #     return w, X_reshaped
-
-    # # Run prediction
-    # gw.apply(
-    #     f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif",
-    #     f"outputs/final_model_lgbm_{index}.tif",
-    #     user_func,
-    #     args=(pipeline_performance,),
-    #     n_jobs=16,
-    #     count=1,
-    #     overwrite=True,
-    #     scheduler="threads"
-    # )
-        
-# %% create image stack for prediction
-
-for index in sorted_indices[0:1]:
-    print(f"Processing files with index {index}")
-    current_files = files_by_index[index]
-    
-    # Process all files with the current index
-    print(f"  Found {len(current_files)} files")
-
     # predict to stack
     def user_func(w, block, model):
         pred_shape = list(block.shape)
@@ -844,17 +819,47 @@ for index in sorted_indices[0:1]:
         X_reshaped = y_hat.T.reshape(pred_shape)
         return w, X_reshaped
 
-
+    # Run prediction
     gw.apply(
         f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif",
-        f"outputs/final_model_lgbm_{index}.tif",
+        f"outputs/final_model_lgbm_{select_how_many}_{index}.tif",
         user_func,
         args=(pipeline_performance,),
-        n_jobs=16,
+        n_jobs=12,
         count=1,
         overwrite=True,
-        scheduler="threads",  #  LGBM needs threads since its multithreaded
+        scheduler="threads"
     )
+        
+# %% create image stack for prediction
+
+# for index in sorted_indices[0:1]:
+#     print(f"Processing files with index {index}")
+#     current_files = files_by_index[index]
+    
+#     # Process all files with the current index
+#     print(f"  Found {len(current_files)} files")
+
+#     # predict to stack
+#     def user_func(w, block, model):
+#         pred_shape = list(block.shape)
+#         X = block.reshape(pred_shape[0], -1).T
+#         pred_shape[0] = 1
+#         y_hat = model.predict(X)
+#         X_reshaped = y_hat.T.reshape(pred_shape)
+#         return w, X_reshaped
+
+
+#     gw.apply(
+#         f"/mnt/bigdrive/pred_stack/pred_stack_{index}.tif",
+#         f"outputs/final_model_lgbm_{index}.tif",
+#         user_func,
+#         args=(pipeline_performance,),
+#         n_jobs=16,
+#         count=1,
+#         overwrite=True,
+#         scheduler="threads",  #  LGBM needs threads since its multithreaded
+#     )
 
 # # %%
 # with gw.open(select_images, nodata=9999, stack_dim="band") as src:

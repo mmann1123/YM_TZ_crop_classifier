@@ -564,7 +564,7 @@ get_oos_confusion_matrix(
 #########################################################
 
 
-    # %% create tiles for reference
+    # %% create tiles for reference this doesn't work 
 # from geowombat.backends.dask_ import Cluster
 
 # cluster = Cluster(
@@ -597,7 +597,7 @@ get_oos_confusion_matrix(
 #         )
 # cluster.stop()
 
-# %%
+# %%    create tiles for reference
 
 
 import logging

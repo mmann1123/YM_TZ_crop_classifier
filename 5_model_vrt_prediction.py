@@ -516,7 +516,10 @@ if __name__ == "__main__":
     # Combine mean and max SHAP features
     mean_features = pd.read_csv(mean_shaps_file)[f"top{select_how_many}names"].values
     max_features = pd.read_csv(max_shaps_file)[f"top{select_how_many}names"].values
-    selected_features = list(set(list(mean_features) + list(max_features)))
+
+    # Use sorted list to ensure deterministic ordering
+    # Critical: Feature order must be identical for training and prediction
+    selected_features = sorted(list(set(list(mean_features) + list(max_features))))
 
     # Replace . with _ in feature names to match file naming
     selected_features = [f.replace(".", "_") for f in selected_features]

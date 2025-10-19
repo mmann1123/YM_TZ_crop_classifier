@@ -21,7 +21,10 @@ import pandas as pd
 from osgeo import gdal
 from rasterio.coords import BoundingBox
 import geowombat as gw
-from sklearn_helpers import best_classifier_pipe
+from sklearn_helpers import best_classifier_pipe, classifier_objective
+import optuna
+from sklearn.model_selection import StratifiedGroupKFold
+from sklearn.metrics import cohen_kappa_score, balanced_accuracy_score
 
 # Enable GDAL exceptions
 gdal.UseExceptions()
@@ -589,7 +592,10 @@ if __name__ == "__main__":
 
     print(f"✓ Model trained")
     print(f"  Classes: {len(pipeline_performance.classes_)}")
-
+    print(f"  Class labels: {pipeline_performance.classes_}"
+          )
+    print(f"   Performance on training data:")
+    print(f"    - Accuracy: {pipeline_performance.score(X, y, sample_weight=weights)}")
     # ==============================================================================
     # Step 3: Process tiles with subtiling
     # ==============================================================================

@@ -613,7 +613,6 @@ if __name__ == "__main__":
                 chunk_size=CHUNK_SIZE,
                 n_jobs=N_JOBS
             )
-
             all_outputs.extend(outputs)
 
         except Exception as e:

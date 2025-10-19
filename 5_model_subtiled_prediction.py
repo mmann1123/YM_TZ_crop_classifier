@@ -546,6 +546,23 @@ if __name__ == "__main__":
     data_path = os.path.join(BASE_DIR, "extracted_features", "merged_data", "all_bands_merged_no_outliers_new.csv")
     data = pd.read_csv(data_path)
 
+    new_columns = [k.replace("_0", "") for k in data.columns ]
+
+    # Replace . with _ to match file naming
+    new_columns = [f.replace(".", "_") for f in new_columns]
+
+    data.columns = new_columns  
+
+    from sklearn.preprocessing import LabelEncoder
+    # The labels are string names, so here we convert them to integers
+    le = LabelEncoder()
+    data["lc"] = le.fit_transform(data["lc_name"])
+    print(data["lc"].unique())
+
+    print(f"Training data loaded: {data_path}")
+    for i in data.columns:
+        print(f"  - {i}")
+
     # Train model
     X = data[selected_features].values
     y = data["lc"].values

@@ -261,11 +261,15 @@ def predict_subtile(
         output_file: Where to save predictions
         temp_vrt_dir: Directory for temporary VRT files
         target_resolution: Target resolution in meters
-        chunk_size: Processing chunk size in pixels
-        n_jobs: Number of parallel workers
+        chunk_size: Processing chunk size in pixels (for reading VRT)
+        n_jobs: Number of parallel workers (unused, LGBM handles threading)
 
     Returns:
         Path to output prediction file
+
+    Note:
+        VRTs cannot be written through, so we read the VRT into memory,
+        predict in-memory, then write the output.
     """
     os.makedirs(temp_vrt_dir, exist_ok=True)
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -288,37 +292,47 @@ def predict_subtile(
     if not verify_pixel_alignment(vrt_path, expected_resolution=target_resolution[0]):
         print(f"  ⚠ Warning: Pixel alignment issue for subtile {subtile_info['index']}")
 
-    # Prediction function for geowombat
-    def user_func(w, block, model):
-        """Apply model to a block of pixels."""
-        pred_shape = list(block.shape)
+    # Open VRT and read into memory (VRTs cannot be written through)
+    # Use chunks for lazy loading, then compute() to load into memory
+    with gw.open(vrt_path, chunks=chunk_size) as src:
+        # Get the data array (lazy loaded with dask)
+        data_array = src
 
-        # Reshape to (n_pixels, n_bands)
-        X = block.reshape(pred_shape[0], -1).T
+        # Get dimensions
+        n_bands, n_rows, n_cols = data_array.shape
 
-        # Predict
-        y_hat = model.predict(X)
+        print(f"    Reading data: {n_bands} bands × {n_rows} rows × {n_cols} cols")
+        print(f"    Memory required: ~{(n_bands * n_rows * n_cols * 4) / 1e9:.2f} GB")
 
-        # Reshape back to (1, height, width)
-        pred_shape[0] = 1
-        X_reshaped = y_hat.T.reshape(pred_shape)
+        # Load into memory and reshape to (n_pixels, n_bands) for prediction
+        # Using .compute() loads the dask array into numpy
+        X = data_array.values.reshape(n_bands, -1).T
 
-        return w, X_reshaped
+        print(f"    Predicting {X.shape[0]:,} pixels...")
 
-    # Run prediction
-    gw.apply(
-        vrt_path,
-        output_file,
-        user_func,
-        args=(model_pipeline,),
-        n_jobs=n_jobs,
-        count=1,  # Single-band output
-        overwrite=True,
-        scheduler="threads",  # LGBM requires threads
-        compress='lzw',
-        bigtiff='IF_NEEDED',
-        chunks=chunk_size
-    )
+        # Predict (LGBM handles threading internally)
+        y_hat = model_pipeline.predict(X)
+
+        # Reshape back to (1, n_rows, n_cols)
+        predictions = y_hat.reshape(1, n_rows, n_cols).astype('uint8')
+
+        # Create output xarray with same georeferencing as input
+        output_array = data_array.isel(band=0).expand_dims('band')
+        output_array.values = predictions
+
+        print(f"    Writing output...")
+
+        # Save predictions
+        output_array.gw.save(
+            output_file,
+            overwrite=True,
+            compress='lzw',
+            bigtiff='IF_NEEDED',
+            dtype='uint8',
+            nodata=0
+        )
+
+        print(f"    ✓ Complete")
 
     # Clean up temp VRT
     try:

@@ -36,8 +36,10 @@ Creating physical stacks of 34 bands would require:
 ┌────────────────────▼────────────────────────────────────┐
 │  Stage 2: Create Per-Feature VRT Mosaics               │
 │  - For each feature, find all tile fragments            │
-│  - Build VRT: gdalbuildvrt feature_name.vrt tiles/*     │
-│  - No data copying - VRT is just XML metadata           │
+│  - Auto-detect resolution (10m or 20m)                  │
+│  - Build VRT with resolution harmonization to 10m       │
+│  - Resample 20m → 10m using cubic convolution           │
+│  - No data copying - VRT handles resampling lazily      │
 └────────────────────┬────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────┐
@@ -215,6 +217,11 @@ N_JOBS = 12            # Parallel workers (adjust based on CPU cores)
 NODATA_INPUT = 0       # Nodata value in input features
 NODATA_OUTPUT = 255    # Nodata value in output predictions
 
+# Resolution harmonization
+TARGET_RESOLUTION = (10.0, 10.0)  # Target resolution in meters
+RESAMPLING_METHOD = 'cubic'       # Resampling algorithm for 20m→10m
+# Options: 'nearest', 'bilinear', 'cubic', 'cubicspline', 'lanczos'
+
 # Model parameters
 select_how_many = 30   # Number of top features to use
 ```
@@ -230,6 +237,50 @@ select_how_many = 30   # Number of top features to use
 - Set to number of CPU cores minus 1-2 for system responsiveness
 - LGBM is multi-threaded, so don't over-provision workers
 - Monitor memory usage - reduce if RAM is exhausted
+
+## Resolution Handling
+
+**Your features have mixed resolutions** because Sentinel-2 bands are captured at different native resolutions:
+- **10m bands**: EVI, B2, B6 (~72 files)
+- **20m bands**: B11, B12, hue (~100 files)
+
+The VRT script **automatically harmonizes all features to 10m** for model compatibility.
+
+### How It Works
+
+1. **Auto-detection**: Script detects each feature's native resolution
+2. **VRT resampling**: 20m features are virtually upsampled to 10m using cubic convolution
+3. **Lazy evaluation**: No physical resampling until prediction (saves disk space)
+4. **Grid alignment**: All pixels aligned to consistent 10m grid
+
+### Performance Impact
+
+- **VRT creation**: No overhead (virtual operation)
+- **Prediction**: ~10-15% slower than all-native 10m (worth it for quality)
+- **Memory**: No change (resampling per chunk)
+
+### Resampling Methods
+
+```python
+RESAMPLING_METHOD = 'cubic'  # Default: best quality for spectral data
+```
+
+| Method | Quality | Speed | Use Case |
+|--------|---------|-------|----------|
+| `nearest` | Low | Fastest | Categorical only |
+| `bilinear` | Good | Fast | Quick predictions |
+| **`cubic`** | **Best** | **Medium** | **Spectral data (default)** |
+| `cubicspline` | Excellent | Slow | High-quality output |
+
+**Recommendation**: Keep default `cubic` for best accuracy. Switch to `bilinear` only if speed critical.
+
+### Training/Prediction Consistency
+
+The script matches the resampling used during training (see [5_model.py:641-662](5_model.py#L641-L662)).
+
+**Result**: Model sees identical 10m data in both training and prediction ✓
+
+For detailed information, see [RESOLUTION_HANDLING.md](RESOLUTION_HANDLING.md).
 
 ## Memory Management
 

@@ -29,19 +29,48 @@ from sklearn_helpers import best_classifier_pipe
 gdal.UseExceptions()
 
 
+def get_raster_resolution(file_path: str) -> Tuple[float, float]:
+    """
+    Get the pixel resolution of a raster file.
+
+    Args:
+        file_path: Path to raster file
+
+    Returns:
+        Tuple of (x_resolution, y_resolution) in units of the CRS
+    """
+    ds = gdal.Open(file_path)
+    if ds is None:
+        raise RuntimeError(f"Cannot open {file_path}")
+
+    geotransform = ds.GetGeoTransform()
+    ds = None
+
+    # geotransform[1] is pixel width, geotransform[5] is pixel height (usually negative)
+    x_res = abs(geotransform[1])
+    y_res = abs(geotransform[5])
+
+    return (x_res, y_res)
+
+
 def build_feature_vrt(
     feature_pattern: str,
     feature_dir: str,
     output_vrt: str,
+    target_resolution: Tuple[float, float] = (10.0, 10.0),
+    resampling_method: str = 'cubic',
     nodata: int = 0
 ) -> str:
     """
     Build a VRT mosaic for a single feature from fragmented tiles.
+    Automatically handles resolution harmonization by resampling to target resolution.
 
     Args:
         feature_pattern: Pattern to match feature files (e.g., "EVI_mean")
         feature_dir: Directory containing the feature tiles
         output_vrt: Output VRT file path
+        target_resolution: Target (x, y) resolution in meters (default: 10m)
+        resampling_method: Resampling algorithm ('cubic', 'bilinear', 'nearest', etc.)
         nodata: Nodata value to use
 
     Returns:
@@ -57,22 +86,39 @@ def build_feature_vrt(
     if not tile_files:
         raise FileNotFoundError(f"No tiles found matching: {search_pattern}")
 
+    # Check resolution of first tile
+    source_resolution = get_raster_resolution(tile_files[0])
+
     print(f"Building VRT for {feature_pattern}")
     print(f"  Found {len(tile_files)} tiles")
+    print(f"  Source resolution: {source_resolution[0]:.1f}m x {source_resolution[1]:.1f}m")
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_vrt), exist_ok=True)
 
-    # Build VRT using gdal.BuildVRT
+    # Build VRT using gdal.BuildVRT with resolution harmonization
     vrt_options = gdal.BuildVRTOptions(
-        resolution='highest',  # Use highest resolution if tiles differ
+        resolution='user',  # Use user-specified target resolution
+        targetAlignedPixels=True,  # Align pixels to target grid
+        xRes=target_resolution[0],
+        yRes=target_resolution[1],
+        resampleAlg=resampling_method,  # Resampling method for non-matching resolutions
         srcNodata=nodata,
         VRTNodata=nodata,
         addAlpha=False,
     )
 
     vrt_dataset = gdal.BuildVRT(output_vrt, tile_files, options=vrt_options)
+
+    if vrt_dataset is None:
+        raise RuntimeError(f"Failed to create VRT for {feature_pattern}")
+
     vrt_dataset = None  # Close the dataset
+
+    if source_resolution != target_resolution:
+        print(f"  ⚠ Resampled from {source_resolution[0]:.1f}m to {target_resolution[0]:.1f}m using {resampling_method}")
+    else:
+        print(f"  ✓ Resolution matches target ({target_resolution[0]:.1f}m)")
 
     print(f"  Created: {output_vrt}")
     return output_vrt
@@ -122,15 +168,19 @@ def create_feature_vrts_from_selection(
     selected_features: List[str],
     feature_base_dir: str,
     vrt_output_dir: str,
+    target_resolution: Tuple[float, float] = (10.0, 10.0),
+    resampling_method: str = 'cubic',
     nodata: int = 0
 ) -> Dict[str, str]:
     """
-    Create VRT mosaics for all selected features.
+    Create VRT mosaics for all selected features with resolution harmonization.
 
     Args:
         selected_features: List of feature names from model selection
         feature_base_dir: Base directory containing feature subdirectories
         vrt_output_dir: Directory to save VRT files
+        target_resolution: Target (x, y) resolution in meters (default: 10m)
+        resampling_method: Resampling algorithm for non-matching resolutions
         nodata: Nodata value
 
     Returns:
@@ -140,7 +190,9 @@ def create_feature_vrts_from_selection(
         vrts = create_feature_vrts_from_selection(
             ["EVI_mean", "B11_maximum"],
             "./features/",
-            "./vrts/"
+            "./vrts/",
+            target_resolution=(10.0, 10.0),
+            resampling_method='cubic'
         )
     """
     os.makedirs(vrt_output_dir, exist_ok=True)
@@ -161,11 +213,18 @@ def create_feature_vrts_from_selection(
                 feature_base_dir
             )
 
-            # Build VRT
+            # Check source resolution
+            source_resolution = get_raster_resolution(tile_files[0])
+
+            # Build VRT with resolution harmonization
             vrt_path = os.path.join(vrt_output_dir, f"{feature_name}.vrt")
 
             vrt_options = gdal.BuildVRTOptions(
-                resolution='highest',
+                resolution='user',  # Use user-specified target resolution
+                targetAlignedPixels=True,
+                xRes=target_resolution[0],
+                yRes=target_resolution[1],
+                resampleAlg=resampling_method,
                 srcNodata=nodata,
                 VRTNodata=nodata,
                 addAlpha=False,
@@ -182,7 +241,13 @@ def create_feature_vrts_from_selection(
             vrt_dataset = None  # Close
 
             feature_vrt_paths[feature_name] = vrt_path
-            print(f"  ✓ Created VRT: {width}x{height} pixels from {len(tile_files)} tiles")
+
+            # Report status
+            if source_resolution != target_resolution:
+                print(f"  ✓ Created VRT: {width}x{height} pixels from {len(tile_files)} tiles")
+                print(f"    Resampled {source_resolution[0]:.1f}m → {target_resolution[0]:.1f}m using {resampling_method}")
+            else:
+                print(f"  ✓ Created VRT: {width}x{height} pixels from {len(tile_files)} tiles (native {target_resolution[0]:.1f}m)")
 
         except Exception as e:
             print(f"  ✗ Error processing {feature_name}: {e}")
@@ -198,16 +263,19 @@ def create_feature_vrts_from_selection(
 def build_prediction_stack_vrt(
     feature_vrts: Dict[str, str],
     output_stack_vrt: str,
-    feature_order: List[str]
+    feature_order: List[str],
+    target_resolution: Tuple[float, float] = (10.0, 10.0)
 ) -> str:
     """
     Build a multi-band VRT stack from individual feature VRTs.
     Features are ordered according to feature_order to match model training.
+    All bands are harmonized to the target resolution.
 
     Args:
         feature_vrts: Dictionary mapping feature names to VRT paths
         output_stack_vrt: Output path for the stacked VRT
         feature_order: List of feature names in the order expected by the model
+        target_resolution: Target (x, y) resolution in meters (default: 10m)
 
     Returns:
         Path to the created stacked VRT
@@ -216,7 +284,8 @@ def build_prediction_stack_vrt(
         stack_vrt = build_prediction_stack_vrt(
             {"EVI_mean": "./vrts/EVI_mean.vrt", ...},
             "./pred_stack.vrt",
-            ["EVI_mean", "B11_maximum", ...]
+            ["EVI_mean", "B11_maximum", ...],
+            target_resolution=(10.0, 10.0)
         )
     """
     print(f"\n{'='*60}")
@@ -246,10 +315,30 @@ def build_prediction_stack_vrt(
     for i, (feature, vrt_path) in enumerate(zip(feature_order, ordered_vrt_files), 1):
         print(f"  Band {i}: {feature}")
 
+    # Validate all VRTs before stacking
+    print("Validating VRT dimensions...")
+    vrt_dimensions = {}
+    for feature, vrt_path in zip(feature_order[:3], ordered_vrt_files[:3]):  # Check first 3
+        ds = gdal.Open(vrt_path)
+        if ds:
+            vrt_dimensions[feature] = (ds.RasterXSize, ds.RasterYSize)
+            ds = None
+
+    if len(set(vrt_dimensions.values())) > 1:
+        print("  ⚠ Warning: VRTs have different dimensions:")
+        for feat, dims in vrt_dimensions.items():
+            print(f"    {feat}: {dims[0]}x{dims[1]}")
+    else:
+        dims = list(vrt_dimensions.values())[0]
+        print(f"  ✓ All VRTs validated: {dims[0]}x{dims[1]} pixels at {target_resolution[0]:.1f}m")
+
     # Build stacked VRT with -separate flag (each input becomes a band)
     vrt_options = gdal.BuildVRTOptions(
         separate=True,  # Stack inputs as separate bands
-        resolution='highest',
+        resolution='user',  # Force target resolution
+        targetAlignedPixels=True,
+        xRes=target_resolution[0],
+        yRes=target_resolution[1],
         addAlpha=False,
     )
 
@@ -399,6 +488,13 @@ if __name__ == "__main__":
     NODATA_INPUT = 0
     NODATA_OUTPUT = 255
 
+    # Resolution harmonization parameters
+    TARGET_RESOLUTION = (10.0, 10.0)  # Target resolution in meters (x, y)
+    RESAMPLING_METHOD = 'cubic'  # Options: 'nearest', 'bilinear', 'cubic', 'cubicspline', 'lanczos'
+    # cubic: Good for continuous data (EVI, SWIR, hue) - smooth results
+    # bilinear: Faster, good quality for most cases
+    # nearest: Fastest, preserves original values (use for categorical data only)
+
     # ==============================================================================
     # Step 1: Load selected features from SHAP analysis
     # ==============================================================================
@@ -441,8 +537,15 @@ if __name__ == "__main__":
         selected_features=selected_features,
         feature_base_dir=FEATURE_DIR,
         vrt_output_dir=VRT_DIR,
+        target_resolution=TARGET_RESOLUTION,
+        resampling_method=RESAMPLING_METHOD,
         nodata=NODATA_INPUT
     )
+
+    print(f"\n✓ Resolution harmonization summary:")
+    print(f"  Target resolution: {TARGET_RESOLUTION[0]:.1f}m x {TARGET_RESOLUTION[1]:.1f}m")
+    print(f"  Resampling method: {RESAMPLING_METHOD}")
+    print(f"  Features created: {len(feature_vrts)}")
 
     # ==============================================================================
     # Step 3: Build multi-band prediction stack VRT
@@ -457,7 +560,8 @@ if __name__ == "__main__":
     stack_vrt = build_prediction_stack_vrt(
         feature_vrts=feature_vrts,
         output_stack_vrt=stack_vrt_path,
-        feature_order=selected_features  # Maintain order for model
+        feature_order=selected_features,  # Maintain order for model
+        target_resolution=TARGET_RESOLUTION
     )
 
     # ==============================================================================
@@ -492,8 +596,65 @@ if __name__ == "__main__":
     print(f"\n✓ Loading training data from: {os.path.basename(data_path)}")
     data = pd.read_csv(data_path)
 
+    # replace columns names with . to _
+    data.columns = [col.replace(".", "_") for col in data.columns]
+
+
+    keep = [
+        "rice",
+        "maize",
+        "cassava",
+        # "vegetables",
+        "sunflower",
+        "sorghum",
+        "urban",
+        "forest",
+        "shrub",
+        "tidal",
+        # "other",
+        "cotton",
+        "water",
+        #
+        #
+        # "speciality_crops",
+        # "okra ",
+        # "eggplant",
+        # "soybeans",
+        # "tree_crops",
+        "millet",
+        # "other_grain",
+    ]
+    drop = [
+        "Don't know",
+        "Other (later, specify in optional notes)",
+        "water_body",
+        "large_building",
+        "could be maize.",
+        "no",
+        "don_t_know",
+        "fallow_barren",  # only two examples
+        "forest_shrubland",  # only two examples
+    ]
+
+    # apply keep/drop
+    data.drop(data[data["lc_name"].isin(drop)].index, inplace=True)
+    data.loc[data["lc_name"].isin(keep) == False, "lc_name"] = "Other"
+    data.drop(data[data["lc_name"].isin(["Other"])].index, inplace=True)
+
+    data.reset_index(drop=True, inplace=True)
+
+    # drop two missing values
+    data.dropna(subset=["lc_name"], inplace=True)
+
+    from sklearn.preprocessing import LabelEncoder
+    # The labels are string names, so here we convert them to integers
+    le = LabelEncoder()
+    data["lc"] = le.fit_transform(data["lc_name"])
+    print(data["lc"].unique())
+
     print(f"  Total samples: {len(data)}")
     print(f"  Classes: {data['lc_name'].nunique()}")
+    print(f"  Class labels: {data['lc'].unique()}")
 
     # Verify that selected features exist in training data
     missing_features = set(selected_features) - set(data.columns)
@@ -565,3 +726,5 @@ if __name__ == "__main__":
     print("PREDICTION COMPLETE!")
     print("="*60 + "\n")
     print(f"Output saved to: {output_prediction}")
+
+# %%

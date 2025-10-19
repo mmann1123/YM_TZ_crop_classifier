@@ -148,11 +148,23 @@ Use **Option 1** (current approach) unless:
 - Running many predictions with same model
 - Need exact reproducibility across runs
 
+## Additional Fix: Resolution Harmonization
+
+**Second issue discovered**: Features have mixed resolutions:
+- **10m**: EVI, B2, B6 (72 files)
+- **20m**: B11, B12, hue (100 files)
+
+**Solution**: Automatic resolution harmonization to 10m using GDAL VRT resampling.
+
+See [RESOLUTION_HANDLING.md](RESOLUTION_HANDLING.md) for complete details.
+
 ## Summary
 
 ✅ **Model is now properly trained before prediction**
 ✅ **Feature order validation ensures correctness**
 ✅ **Field-size weights applied for balanced learning**
 ✅ **Full dataset used for best production performance**
+✅ **Mixed resolutions automatically harmonized to 10m**
+✅ **Cubic resampling ensures high-quality 20m→10m upsampling**
 
 The VRT prediction script is production-ready and will produce accurate land cover classifications.

@@ -30,6 +30,7 @@ Predicts land cover across ~424GB of fragmented satellite features without creat
 - ✓ No intermediate stack files (~100GB saved)
 - ✓ Memory efficient (only loads chunks needed)
 - ✓ Handles all tile fragmentation automatically
+- ✓ **Auto-resolves mixed resolutions (10m/20m → 10m)**
 - ✓ Works with existing geowombat workflow
 
 ## Files Created
@@ -62,9 +63,13 @@ northern_tz_data/outputs/
 Edit `5_model_vrt_prediction.py`:
 
 ```python
-CHUNK_SIZE = 512    # Processing tile size (256/512/1024)
-N_JOBS = 12         # Parallel workers (adjust to CPU cores)
+CHUNK_SIZE = 512                   # Processing tile size (256/512/1024)
+N_JOBS = 12                        # Parallel workers (adjust to CPU cores)
+TARGET_RESOLUTION = (10.0, 10.0)   # Target resolution in meters
+RESAMPLING_METHOD = 'cubic'        # For 20m→10m upsampling
 ```
+
+**Note**: Features have mixed resolutions (EVI/B2=10m, B11/B12/hue=20m). Script automatically harmonizes to 10m.
 
 ## Troubleshooting
 

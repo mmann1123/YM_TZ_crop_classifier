@@ -320,15 +320,17 @@ def predict_subtile(
         output_array = data_array.isel(band=0).expand_dims('band')
         output_array.values = predictions
 
+        # Set data type to uint8 in the array attributes
+        output_array.attrs['dtype'] = 'uint8'
+
         print(f"    Writing output...")
 
-        # Save predictions
+        # Save predictions (dtype is inferred from array, not passed as kwarg)
         output_array.gw.save(
             output_file,
             overwrite=True,
             compress='lzw',
             bigtiff='IF_NEEDED',
-            dtype='uint8',
             nodata=0
         )
 
@@ -573,9 +575,9 @@ if __name__ == "__main__":
     data["lc"] = le.fit_transform(data["lc_name"])
     print(data["lc"].unique())
 
-    print(f"Training data loaded: {data_path}")
-    for i in data.columns:
-        print(f"  - {i}")
+    # print(f"Training data loaded: {data_path}")
+    # for i in data.columns:
+    #     print(f"  - {i}")
 
     # Train model
     X = data[selected_features].values

@@ -468,7 +468,7 @@ if __name__ == "__main__":
     study_name_final = f"final_model_selection_no_kbest_no_other_{select_how_many}_{classifier}_{scoring}_{n_splits}"
 
     # Processing parameters
-    SUBTILE_SIZE_KM = 25.6  # 25.6km subtiles (2,560 pixels @ 10m)
+    SUBTILE_SIZE_KM = 128.0  # 128km subtiles (12,800 pixels @ 10m) - 4 subtiles per tile
     SUBTILE_SIZE_METERS = int(SUBTILE_SIZE_KM * 1000)
     TARGET_RESOLUTION = (10.0, 10.0)
     CHUNK_SIZE = 512

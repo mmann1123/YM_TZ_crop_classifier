@@ -469,9 +469,9 @@ if __name__ == "__main__":
     scoring = "kappa"
     n_splits = 3
     study_name_final = f"final_model_selection_no_kbest_no_other_{select_how_many}_{classifier}_{scoring}_{n_splits}"
-
+    
     # Processing parameters
-    SUBTILE_SIZE_KM = 64.0  # 128km subtiles (12,800 pixels @ 10m) - 4 subtiles per tile
+    SUBTILE_SIZE_KM = 25.6  # 25.6km subtiles (2,560 pixels @ 10m) - 16 subtiles per tile
     SUBTILE_SIZE_METERS = int(SUBTILE_SIZE_KM * 1000)
     TARGET_RESOLUTION = (10.0, 10.0)
     CHUNK_SIZE = 512
@@ -480,6 +480,44 @@ if __name__ == "__main__":
     # Tile range to process
     TILE_START = 0  # First tile to process
     TILE_END = 42   # Last tile + 1 (process tiles 0-41)
+
+
+    # Classes to keep/drop
+    keep = [
+        "rice",
+        "maize",
+        "cassava",
+        # "vegetables",
+        "sunflower",
+        "sorghum",
+        "urban",
+        "forest",
+        "shrub",
+        "tidal",
+        # "other",
+        "cotton",
+        "water",
+        # "speciality_crops",
+        # "okra ",
+        # "eggplant",
+        # "soybeans",
+        # "tree_crops",
+        "millet",
+        # "other_grain",
+    ]
+    drop = [
+        "Don't know",
+        "Other (later, specify in optional notes)",
+        "water_body",
+        "large_building",
+        "could be maize.",
+        "no",
+        "don_t_know",
+        "fallow_barren",  # only two examples
+        "forest_shrubland",  # only two examples
+    ]
+
+
 
     print("\n" + "="*60)
     print("SUBTILED PREDICTION WORKFLOW")
@@ -543,59 +581,157 @@ if __name__ == "__main__":
     print(f"✓ All features found in {FEATURE_DIR}")
 
     # ==============================================================================
-    # Step 2: Load trained model
+    # Step 2: Optimize and train final model with selected features
     # ==============================================================================
 
     print("\n" + "="*60)
-    print("STEP 2: Loading and training model")
+    print("STEP 2: Optimizing LGBM model with selected features")
     print("="*60 + "\n")
-
-    os.chdir(MODEL_DIR)
-
-    # Load best hyperparameters
-    pipeline_performance = best_classifier_pipe(
-        db_loc="study.db",
-        study_name=study_name_final
-    )
-
-    print(f"✓ Loaded model parameters: {study_name_final}")
 
     # Load training data
     os.chdir(BASE_DIR)
     data_path = os.path.join(BASE_DIR, "extracted_features", "merged_data", "all_bands_merged_no_outliers_new.csv")
     data = pd.read_csv(data_path)
 
-    new_columns = [k.replace("_0", "") for k in data.columns ]
-
-    # Replace . with _ to match file naming
+    new_columns = [k.replace("_0", "") for k in data.columns]
     new_columns = [f.replace(".", "_") for f in new_columns]
+    data.columns = new_columns
 
-    data.columns = new_columns  
+    # apply keep/drop
+    data.drop(data[data["lc_name"].isin(drop)].index, inplace=True)
+    data.loc[data["lc_name"].isin(keep) == False, "lc_name"] = "Other"
+    data.drop(data[data["lc_name"].isin(["Other"])].index, inplace=True)
+
+    data.reset_index(drop=True, inplace=True)
+
+    # drop two missing values
+    data.dropna(subset=["lc_name"], inplace=True)
+
 
     from sklearn.preprocessing import LabelEncoder
-    # The labels are string names, so here we convert them to integers
     le = LabelEncoder()
     data["lc"] = le.fit_transform(data["lc_name"])
-    print(data["lc"].unique())
 
-    # print(f"Training data loaded: {data_path}")
-    # for i in data.columns:
-    #     print(f"  - {i}")
+    print(f"Training data loaded: {len(data)} samples")
+    print(f"Classes: {le.classes_}")
+    print(f"Features: {len(selected_features)}")
 
-    # Train model
+    # Prepare training data
     X = data[selected_features].values
     y = data["lc"].values
+    groups = data["field_id"].values
     weights = data["Field_size"].values
 
-    print(f"Training on {len(data)} samples...")
+    # Create Optuna study for final model optimization
+    os.chdir(MODEL_DIR)
+    study_name_optimized = f"optimized_final_{select_how_many}_{classifier}_{scoring}_{n_splits}"
+
+    storage = optuna.storages.RDBStorage(
+        url="sqlite:///study.db",
+        engine_kwargs={"connect_args": {"timeout": 30}}
+    )
+
+    # Create or load study
+    try:
+        study = optuna.create_study(
+            study_name=study_name_optimized,
+            storage=storage,
+            direction="maximize",
+            load_if_exists=True
+        )
+        print(f"✓ Created/loaded study: {study_name_optimized}")
+    except:
+        study = optuna.load_study(
+            study_name=study_name_optimized,
+            storage=storage
+        )
+        print(f"✓ Loaded existing study: {study_name_optimized}")
+
+    # Run optimization
+    n_trials = 50
+    print(f"\nRunning Optuna optimization ({n_trials} trials)...")
+    print(f"Scoring: {scoring}")
+    print(f"Cross-validation: {n_splits}-fold StratifiedGroupKFold")
+
+    study.optimize(
+        lambda trial: classifier_objective(
+            trial,
+            X,
+            y,
+            groups=groups,
+            n_splits=n_splits,
+            classifier_override=["LGBM"],
+            weights=weights,
+            scoring=scoring,
+        ),
+        n_trials=n_trials,
+        n_jobs=-1,
+    )
+
+    print(f"\n{'='*60}")
+    print("OPTIMIZATION RESULTS")
+    print(f"{'='*60}")
+    print(f"Best trial: {study.best_trial.number}")
+    print(f"Best {scoring} score: {study.best_value:.4f}")
+    print(f"\nBest hyperparameters:")
+    for key, value in study.best_params.items():
+        print(f"  {key}: {value}")
+
+    # Get best pipeline and train on full dataset
+    print(f"\n{'='*60}")
+    print("TRAINING FINAL MODEL")
+    print(f"{'='*60}\n")
+
+    pipeline_performance = best_classifier_pipe(
+        db_loc="study.db",
+        study_name=study_name_optimized
+    )
+
+    print(f"Training final model on {len(data)} samples...")
     pipeline_performance.fit(X, y, classifier__sample_weight=weights)
 
-    print(f"✓ Model trained")
+    # Calculate out-of-sample performance
+    print(f"\n{'='*60}")
+    print("OUT-OF-SAMPLE PERFORMANCE")
+    print(f"{'='*60}\n")
+
+    cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+    kappa_scores = []
+    balanced_acc_scores = []
+
+    for fold, (train_idx, val_idx) in enumerate(cv.split(X, y, groups), 1):
+        X_train, X_val = X[train_idx], X[val_idx]
+        y_train, y_val = y[train_idx], y[val_idx]
+        w_train = weights[train_idx]
+
+        # Clone and train model
+        from sklearn.base import clone
+        fold_model = clone(pipeline_performance)
+        fold_model.fit(X_train, y_train, classifier__sample_weight=w_train)
+
+        # Predict on validation set
+        y_pred = fold_model.predict(X_val)
+
+        # Calculate metrics
+        kappa = cohen_kappa_score(y_val, y_pred)
+        bal_acc = balanced_accuracy_score(y_val, y_pred)
+
+        kappa_scores.append(kappa)
+        balanced_acc_scores.append(bal_acc)
+
+        print(f"Fold {fold}:")
+        print(f"  Cohen's Kappa: {kappa:.4f}")
+        print(f"  Balanced Accuracy: {bal_acc:.4f}")
+
+    print(f"\n{'='*60}")
+    print(f"Mean Cohen's Kappa: {np.mean(kappa_scores):.4f} ± {np.std(kappa_scores):.4f}")
+    print(f"Mean Balanced Accuracy: {np.mean(balanced_acc_scores):.4f} ± {np.std(balanced_acc_scores):.4f}")
+    print(f"{'='*60}\n")
+
+    print(f"✓ Final model ready for prediction")
     print(f"  Classes: {len(pipeline_performance.classes_)}")
-    print(f"  Class labels: {pipeline_performance.classes_}"
-          )
-    print(f"   Performance on training data:")
-    print(f"    - Accuracy: {pipeline_performance.score(X, y, sample_weight=weights)}")
+    print(f"  Features: {len(selected_features)}")
     # ==============================================================================
     # Step 3: Process tiles with subtiling
     # ==============================================================================

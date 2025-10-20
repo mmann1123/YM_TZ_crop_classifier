@@ -13,8 +13,10 @@ Solves the 128GB RAM problem from processing entire 128km tiles at once.
 
 import os
 from glob import glob
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set
 from pathlib import Path
+import json
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -28,6 +30,97 @@ from sklearn.metrics import cohen_kappa_score, balanced_accuracy_score
 
 # Enable GDAL exceptions
 gdal.UseExceptions()
+
+
+def load_completion_log(log_file: str) -> Dict:
+    """Load the tile completion log."""
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, 'r') as f:
+                content = f.read().strip()
+                if not content:  # Empty file
+                    print(f"Warning: Completion log is empty, creating new one")
+                    return {"completed_tiles": [], "failed_tiles": {}, "last_updated": None}
+                return json.loads(content)
+        except json.JSONDecodeError as e:
+            print(f"Warning: Completion log is corrupted ({e}), creating new one")
+            # Backup corrupted file
+            backup_file = log_file + ".corrupted"
+            os.rename(log_file, backup_file)
+            print(f"  Backed up corrupted file to: {backup_file}")
+            return {"completed_tiles": [], "failed_tiles": {}, "last_updated": None}
+    return {"completed_tiles": [], "failed_tiles": {}, "last_updated": None}
+
+
+def save_completion_log(log_file: str, log_data: Dict):
+    """Save the tile completion log."""
+    log_data["last_updated"] = datetime.now().isoformat()
+    with open(log_file, 'w') as f:
+        json.dump(log_data, f, indent=2)
+
+
+def mark_tile_complete(log_file: str, tile_index: int, num_subtiles: int):
+    """Mark a tile as successfully completed."""
+    log_data = load_completion_log(log_file)
+    if tile_index not in log_data["completed_tiles"]:
+        log_data["completed_tiles"].append(tile_index)
+    # Remove from failed if it was there
+    if str(tile_index) in log_data.get("failed_tiles", {}):
+        del log_data["failed_tiles"][str(tile_index)]
+    save_completion_log(log_file, log_data)
+    print(f"✓ Marked tile {tile_index} as complete ({num_subtiles} subtiles)")
+
+
+def mark_tile_failed(log_file: str, tile_index: int, error_msg: str, missing_features: List[str] = None):
+    """Mark a tile as failed with error information."""
+    log_data = load_completion_log(log_file)
+    if "failed_tiles" not in log_data:
+        log_data["failed_tiles"] = {}
+
+    log_data["failed_tiles"][str(tile_index)] = {
+        "error": error_msg,
+        "missing_features": missing_features or [],
+        "timestamp": datetime.now().isoformat()
+    }
+    save_completion_log(log_file, log_data)
+
+
+def check_tile_features(tile_index: int, feature_names: List[str], feature_dir: str) -> Tuple[bool, List[str], List[str]]:
+    """
+    Check if all required feature files exist and are valid for a tile.
+
+    Returns:
+        (all_valid, missing_files, invalid_files)
+    """
+    missing_files = []
+    invalid_files = []
+
+    for feature in feature_names:
+        file_path = os.path.join(feature_dir, f"{feature}_{tile_index}.tif")
+
+        # Check if file exists
+        if not os.path.exists(file_path):
+            missing_files.append(feature)
+            continue
+
+        # Check if file has valid bands using GDAL
+        try:
+            ds = gdal.Open(file_path, gdal.GA_ReadOnly)
+            if ds is None:
+                invalid_files.append(f"{feature} (cannot open)")
+                continue
+
+            band_count = ds.RasterCount
+            if band_count == 0:
+                invalid_files.append(f"{feature} (0 bands)")
+
+            ds = None  # Close dataset
+
+        except Exception as e:
+            invalid_files.append(f"{feature} (error: {str(e)})")
+
+    all_valid = len(missing_files) == 0 and len(invalid_files) == 0
+    return all_valid, missing_files, invalid_files
 
 
 def get_tile_bounds(tile_file: str) -> BoundingBox:
@@ -182,10 +275,34 @@ def create_subtile_stack_vrt(
 
     # Verify band count
     if n_bands != len(feature_files):
-        raise ValueError(
-            f"Band count mismatch: VRT has {n_bands} bands, "
-            f"expected {len(feature_files)}"
+        # Find which files were dropped by checking VRT metadata
+        vrt_ds = None  # Close and reopen to read XML
+        with open(output_vrt, 'r') as f:
+            vrt_content = f.read()
+
+        # Extract filenames from VRT
+        included_files = []
+        for line in vrt_content.split('\n'):
+            if '<SourceFilename' in line:
+                # Extract filename from XML
+                start = line.find('>') + 1
+                end = line.find('</SourceFilename>')
+                if start > 0 and end > 0:
+                    included_files.append(os.path.basename(line[start:end]))
+
+        # Find dropped files
+        input_basenames = [os.path.basename(f) for f in feature_files]
+        dropped = [f for f in input_basenames if f not in included_files]
+
+        error_msg = (
+            f"Band count mismatch: VRT has {n_bands} bands, expected {len(feature_files)}\n"
+            f"Dropped files ({len(dropped)}):\n" +
+            '\n'.join(f"  - {f}" for f in dropped[:10])
         )
+        if len(dropped) > 10:
+            error_msg += f"\n  ... and {len(dropped)-10} more"
+
+        raise ValueError(error_msg)
 
     vrt_ds = None  # Close
 
@@ -613,7 +730,8 @@ if __name__ == "__main__":
     data["lc"] = le.fit_transform(data["lc_name"])
 
     print(f"Training data loaded: {len(data)} samples")
-    print(f"Classes: {le.classes_}")
+    for code, name in enumerate(le.classes_):
+        print(f"{code}: {name}")
     print(f"Features: {len(selected_features)}")
 
     # Prepare training data
@@ -740,9 +858,88 @@ if __name__ == "__main__":
     print("STEP 3: Processing tiles with subtiling")
     print("="*60)
 
-    all_outputs = []
+    # Setup completion tracking
+    completion_log_file = os.path.join(OUTPUT_DIR, "tile_completion_log.json")
+    completion_log = load_completion_log(completion_log_file)
+
+    print(f"\nCompletion log: {completion_log_file}")
+    if completion_log["completed_tiles"]:
+        print(f"Previously completed tiles: {sorted(completion_log['completed_tiles'])}")
+    if completion_log.get("failed_tiles"):
+        print(f"Previously failed tiles: {sorted([int(k) for k in completion_log['failed_tiles'].keys()])}")
+
+    # Pre-check: Verify all features exist and are valid for all tiles
+    print(f"\n{'='*60}")
+    print("PRE-CHECK: Verifying feature availability and validity")
+    print(f"{'='*60}\n")
+
+    tiles_to_process = []
+    tiles_with_issues = {}
 
     for tile_idx in range(TILE_START, TILE_END):
+        # Skip if already completed
+        if tile_idx in completion_log["completed_tiles"]:
+            print(f"Tile {tile_idx:2d}: ✓ Already completed (skipping)")
+            continue
+
+        # Check if all features exist and are valid
+        all_valid, missing_files, invalid_files = check_tile_features(tile_idx, selected_features, FEATURE_DIR)
+
+        if all_valid:
+            tiles_to_process.append(tile_idx)
+            print(f"Tile {tile_idx:2d}: ✓ All {len(selected_features)} features valid")
+        else:
+            # Combine missing and invalid for reporting
+            all_issues = missing_files + invalid_files
+            tiles_with_issues[tile_idx] = {
+                'missing': missing_files,
+                'invalid': invalid_files
+            }
+
+            total_issues = len(missing_files) + len(invalid_files)
+            print(f"Tile {tile_idx:2d}: ✗ {total_issues} problem features")
+
+            if missing_files:
+                print(f"           Missing files ({len(missing_files)}):")
+                for feat in missing_files[:3]:
+                    print(f"             - {feat}")
+                if len(missing_files) > 3:
+                    print(f"             ... and {len(missing_files)-3} more")
+
+            if invalid_files:
+                print(f"           Invalid files ({len(invalid_files)}):")
+                for feat in invalid_files[:3]:
+                    print(f"             - {feat}")
+                if len(invalid_files) > 3:
+                    print(f"             ... and {len(invalid_files)-3} more")
+
+            # Mark as failed in log
+            error_msg = f"Missing: {len(missing_files)}, Invalid: {len(invalid_files)}"
+            mark_tile_failed(
+                completion_log_file,
+                tile_idx,
+                error_msg,
+                all_issues
+            )
+
+    print(f"\n{'='*60}")
+    print(f"Tiles to process: {len(tiles_to_process)}/{TILE_END - TILE_START}")
+    print(f"Already completed: {len(completion_log['completed_tiles'])}")
+    print(f"Problem tiles: {len(tiles_with_issues)}")
+    print(f"{'='*60}\n")
+
+    if not tiles_to_process:
+        print("No tiles to process! All tiles are either completed or have issues.")
+        print(f"\nCheck completion log for details: {completion_log_file}")
+        import sys
+        sys.exit(0)
+
+    # Process tiles
+    all_outputs = []
+    successful_tiles = []
+    failed_tiles = []
+
+    for tile_idx in tiles_to_process:
         try:
             outputs = process_tile_with_subtiling(
                 tile_index=tile_idx,
@@ -756,10 +953,18 @@ if __name__ == "__main__":
                 n_jobs=N_JOBS
             )
             all_outputs.extend(outputs)
+            successful_tiles.append(tile_idx)
+
+            # Mark as complete
+            mark_tile_complete(completion_log_file, tile_idx, len(outputs))
 
         except Exception as e:
             print(f"\n✗ Error processing tile {tile_idx}: {e}")
             print(f"   Continuing with next tile...")
+            failed_tiles.append(tile_idx)
+
+            # Mark as failed
+            mark_tile_failed(completion_log_file, tile_idx, str(e))
             continue
 
     # ==============================================================================
@@ -769,8 +974,40 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("PREDICTION COMPLETE")
     print("="*60)
-    print(f"\nTotal prediction files: {len(all_outputs)}")
-    print(f"Output directory: {OUTPUT_DIR}")
+
+    # Reload completion log to get final status
+    final_log = load_completion_log(completion_log_file)
+
+    print(f"\nResults for this run:")
+    print(f"  Successfully processed: {len(successful_tiles)} tiles")
+    print(f"  Failed: {len(failed_tiles)} tiles")
+    print(f"  Total prediction files: {len(all_outputs)}")
+
+    print(f"\nOverall status:")
+    print(f"  Completed tiles: {len(final_log['completed_tiles'])}/{TILE_END - TILE_START}")
+    print(f"  Failed tiles: {len(final_log.get('failed_tiles', {}))}")
+
+    if successful_tiles:
+        print(f"\nSuccessfully processed tiles: {sorted(successful_tiles)}")
+
+    if failed_tiles:
+        print(f"\nFailed tiles in this run: {sorted(failed_tiles)}")
+
+    if tiles_with_issues:
+        print(f"\nTiles with issues: {sorted(tiles_with_issues.keys())}")
+        print(f"  (See {completion_log_file} for details)")
+
+    print(f"\nOutput directory: {OUTPUT_DIR}")
+    print(f"Completion log: {completion_log_file}")
+
     print(f"\nTo mosaic subtiles for a tile:")
     print(f"  gdalbuildvrt prediction_tile00_full.vrt {OUTPUT_DIR}/prediction_tile00_sub*.tif")
     print(f"  gdal_translate prediction_tile00_full.vrt prediction_tile00_full.tif")
+
+    print(f"\n{'='*60}")
+    if len(final_log['completed_tiles']) == TILE_END - TILE_START:
+        print("✓ ALL TILES COMPLETED!")
+    else:
+        remaining = (TILE_END - TILE_START) - len(final_log['completed_tiles'])
+        print(f"⚠ {remaining} tiles remaining (re-run script to continue)")
+    print(f"{'='*60}\n")

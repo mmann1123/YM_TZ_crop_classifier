@@ -616,9 +616,7 @@ ref_images = glob("../bounds_examples_v2/*.tif")
 print(ref_images)
 
 #%%
-for item in select_image_paths.items():
-    if 'quantile' in item[0]:
-
+ 
 # %%
 from geowombat.backends.dask_ import Cluster
 from tqdm import tqdm   
@@ -627,9 +625,16 @@ temp_dir = "../temp3"
 out_dir = "../final_model_features_v3"
 os.makedirs("../temp3", exist_ok=True)
 os.makedirs("../final_model_features_v3/", exist_ok=True)
-# quantile_items = {key: value for key, value in select_image_paths.items() if 'quantile' in key}
-for k, v in tqdm(list(select_image_paths.items()), desc="Processing images"):
-# for k, v in tqdm(quantile_items.items(), desc="Processing images"):
+
+feature_list = ['B2_minimum', 'EVI_doy_of_maximum_dates', 'EVI_doy_of_minimum_dates', 
+                'EVI_mean_change', 'EVI_mean_second_der', 'EVI_minimum', 'EVI_standard_dev']
+
+# Dictionary comprehension that checks if any element from feature_list is in the key
+quantile_items = {key: value for key, value in select_image_paths.items() 
+                  if any(feature in key for feature in feature_list)}
+
+# for k, v in tqdm(list(select_image_paths.items()), desc="Processing images"):
+for k, v in tqdm(quantile_items.items(), desc="Processing images"):
     cluster = Cluster(
             n_workers=8,
             threads_per_worker=2,

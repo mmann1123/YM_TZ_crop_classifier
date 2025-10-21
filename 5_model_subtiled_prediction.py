@@ -680,6 +680,10 @@ if __name__ == "__main__":
     # Replace . with _ to match file naming
     selected_features = [f.replace(".", "_") for f in selected_features]
 
+    # Fix quantile naming: q_0_05 -> q_05, q_0_95 -> q_95
+    selected_features = [f.replace("_q_0_05", "_q_05") for f in selected_features]
+    selected_features = [f.replace("_q_0_95", "_q_95") for f in selected_features]
+
     print(f"Selected {len(selected_features)} unique features")
 
     # Verify features exist in feature directory

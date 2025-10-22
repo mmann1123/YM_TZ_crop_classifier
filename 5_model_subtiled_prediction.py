@@ -3,12 +3,14 @@
 Subtiled Prediction Script for Tanzania Crop Classification
 
 This script processes existing resampled feature tiles by:
-1. Loading pre-resampled features from final_model_features_v3/
+1. Loading pre-resampled features from final_model_features_v4/
 2. Sub-dividing large tiles (128km) into manageable subtiles (25.6km)
 3. Using geographic bounding boxes with pixel alignment
 4. Predicting in chunks to avoid memory issues
 
 Solves the 128GB RAM problem from processing entire 128km tiles at once.
+
+NOTE: v4 features are organized as {feature}/{feature}_{tile_idx}.tif
 """
 
 import os
@@ -96,7 +98,8 @@ def check_tile_features(tile_index: int, feature_names: List[str], feature_dir: 
     invalid_files = []
 
     for feature in feature_names:
-        file_path = os.path.join(feature_dir, f"{feature}_{tile_index}.tif")
+        # v4 structure: features are in subdirectories
+        file_path = os.path.join(feature_dir, feature, f"{feature}_{tile_index}.tif")
 
         # Check if file exists
         if not os.path.exists(file_path):
@@ -500,7 +503,8 @@ def process_tile_with_subtiling(
     # Step 1: Get ordered feature files for this tile
     feature_files = []
     for feature in feature_names:
-        file_path = os.path.join(feature_dir, f"{feature}_{tile_index}.tif")
+        # v4 structure: features are in subdirectories
+        file_path = os.path.join(feature_dir, feature, f"{feature}_{tile_index}.tif")
 
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Missing feature file: {file_path}")
@@ -576,7 +580,7 @@ if __name__ == "__main__":
 
     # Paths
     BASE_DIR = "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data"
-    FEATURE_DIR = "/mnt/bigdrive/final_model_features_v3"  # Pre-resampled tiles
+    FEATURE_DIR = "/mnt/bigdrive/final_model_features_v4"  # Pre-resampled tiles
     MODEL_DIR = os.path.join(BASE_DIR, "models")
     OUTPUT_DIR = os.path.join(BASE_DIR, "outputs", "subtiled_predictions")
 
@@ -686,12 +690,18 @@ if __name__ == "__main__":
 
     print(f"Selected {len(selected_features)} unique features")
 
-    # Verify features exist in feature directory
+    # Verify features exist in feature directory (v4 structure with subdirectories)
     missing = []
     for feat in selected_features:
-        test_file = os.path.join(FEATURE_DIR, f"{feat}_0.tif")
+        # Check for feature subdirectory
+        feat_dir = os.path.join(FEATURE_DIR, feat)
+        if not os.path.exists(feat_dir):
+            missing.append(f"{feat} (directory missing)")
+            continue
+        # Check for at least tile 0
+        test_file = os.path.join(feat_dir, f"{feat}_0.tif")
         if not os.path.exists(test_file):
-            missing.append(feat)
+            missing.append(f"{feat} (tile 0 missing)")
 
     if missing:
         print(f"\n⚠ Warning: Missing features in {FEATURE_DIR}:")

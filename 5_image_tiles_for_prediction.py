@@ -351,6 +351,7 @@ def main():
     # Step 5: Process each feature
     n_features = len(features_dict)
     for feat_idx, (feature_name, file_list) in enumerate(sorted(features_dict.items()), 1):
+        
         log_message(f"\n{'#'*80}")
         log_message(f"Feature {feat_idx}/{n_features}: {feature_name}")
         log_message(f"{'#'*80}")

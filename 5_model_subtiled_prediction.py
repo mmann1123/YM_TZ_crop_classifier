@@ -698,7 +698,7 @@ if __name__ == "__main__":
     N_JOBS = 12
 
     # Tile range to process
-    TILE_START = 42  # First tile to process
+    TILE_START = 0  # First tile to process
     TILE_END = 1320   # Last tile + 1  
 
 

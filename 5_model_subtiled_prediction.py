@@ -35,6 +35,104 @@ import pickle
 gdal.UseExceptions()
 
 
+def save_model_with_metadata(model, feature_list: List[str], file_path: str):
+    """
+    Save trained model with metadata for validation.
+
+    Args:
+        model: Trained sklearn pipeline
+        feature_list: Ordered list of feature names used for training
+        file_path: Path to save pickle file
+    """
+    model_data = {
+        'model': model,
+        'features': feature_list,
+        'feature_count': len(feature_list),
+        'date_trained': datetime.now().isoformat(),
+        'model_type': type(model).__name__
+    }
+
+    with open(file_path, 'wb') as f:
+        pickle.dump(model_data, f)
+
+    print(f"✓ Model saved with metadata:")
+    print(f"  Features: {len(feature_list)}")
+    print(f"  Date: {model_data['date_trained']}")
+
+
+def load_model_with_metadata(file_path: str) -> Tuple[object, List[str], Dict]:
+    """
+    Load trained model and verify metadata.
+
+    Args:
+        file_path: Path to pickle file
+
+    Returns:
+        Tuple of (model, feature_list, metadata_dict)
+    """
+    with open(file_path, 'rb') as f:
+        model_data = pickle.load(f)
+
+    # Handle old pickle format (just model object) vs new format (dict with metadata)
+    if isinstance(model_data, dict) and 'model' in model_data:
+        model = model_data['model']
+        features = model_data.get('features', [])
+        metadata = {
+            'feature_count': model_data.get('feature_count', len(features)),
+            'date_trained': model_data.get('date_trained', 'unknown'),
+            'model_type': model_data.get('model_type', 'unknown')
+        }
+    else:
+        # Old format: just the model object
+        model = model_data
+        features = []
+        metadata = {
+            'feature_count': 'unknown',
+            'date_trained': 'unknown (old format)',
+            'model_type': type(model).__name__
+        }
+
+    return model, features, metadata
+
+
+def verify_feature_compatibility(
+    model_features: List[str],
+    expected_features: List[str]
+) -> Tuple[bool, str]:
+    """
+    Verify that model features match expected features.
+
+    Args:
+        model_features: Features from saved model
+        expected_features: Features from current feature selection
+
+    Returns:
+        Tuple of (is_compatible, error_message)
+    """
+    if not model_features:
+        return False, "Model has no feature metadata (old pickle format)"
+
+    if len(model_features) != len(expected_features):
+        return False, (
+            f"Feature count mismatch: model has {len(model_features)} features, "
+            f"expected {len(expected_features)}"
+        )
+
+    # Check feature names and order
+    mismatches = []
+    for i, (model_feat, expected_feat) in enumerate(zip(model_features, expected_features)):
+        if model_feat != expected_feat:
+            mismatches.append(f"  Position {i}: model has '{model_feat}', expected '{expected_feat}'")
+
+    if mismatches:
+        error_msg = f"Feature mismatch at {len(mismatches)} position(s):\n" + "\n".join(mismatches[:5])
+        if len(mismatches) > 5:
+            error_msg += f"\n  ... and {len(mismatches)-5} more"
+        return False, error_msg
+
+    return True, "Features match perfectly"
+
+
 def load_completion_log(log_file: str) -> Dict:
     """Load the tile completion log."""
     if os.path.exists(log_file):
@@ -600,8 +698,8 @@ if __name__ == "__main__":
     N_JOBS = 12
 
     # Tile range to process
-    TILE_START = 0  # First tile to process
-    TILE_END = 42   # Last tile + 1 (process tiles 0-41)
+    TILE_START = 42  # First tile to process
+    TILE_END = 1320   # Last tile + 1  
 
 
     # Classes to keep/drop
@@ -713,16 +811,75 @@ if __name__ == "__main__":
     print(f"✓ All features found in {FEATURE_DIR}")
 
     # ==============================================================================
-    # Step 2: Optimize and train final model with selected features
+    # Early Check: Look for pre-trained model before Step 2
     # ==============================================================================
 
     print("\n" + "="*60)
-    print("STEP 2: Optimizing LGBM model with selected features")
+    print("CHECKING FOR PRE-TRAINED MODEL")
     print("="*60 + "\n")
 
-    # Load training data
+    os.chdir(MODEL_DIR)
+    study_name_optimized = f"optimized_final_{select_how_many}_{classifier}_{scoring}_{n_splits}"
+    model_pickle_file = os.path.join(MODEL_DIR, f"trained_model_{study_name_optimized}.pkl")
+
+    skip_training = False
+    pipeline_performance = None
+
+    if os.path.exists(model_pickle_file):
+        print(f"Found pickle file: {os.path.basename(model_pickle_file)}")
+        print("Attempting to load and verify compatibility...")
+
+        try:
+            # Load model with metadata
+            pipeline_performance, model_features, metadata = load_model_with_metadata(model_pickle_file)
+
+            print(f"\n✓ Model loaded from pickle:")
+            print(f"  Date trained: {metadata['date_trained']}")
+            print(f"  Model type: {metadata['model_type']}")
+            print(f"  Feature count: {metadata['feature_count']}")
+
+            # Verify feature compatibility
+            is_compatible, message = verify_feature_compatibility(model_features, selected_features)
+
+            if is_compatible:
+                print(f"\n✓ Feature compatibility check passed")
+                print(f"  {message}")
+                print(f"\n✓ Using cached model - skipping Optuna optimization and training")
+                skip_training = True
+            else:
+                print(f"\n⚠ Feature compatibility check FAILED:")
+                print(f"  {message}")
+                print(f"\n⚠ Deleting incompatible pickle and retraining...")
+                os.remove(model_pickle_file)
+                pipeline_performance = None
+
+        except Exception as e:
+            print(f"\n✗ Error loading pickle: {e}")
+            print(f"⚠ Deleting corrupt pickle and retraining...")
+            try:
+                os.remove(model_pickle_file)
+            except:
+                pass
+            pipeline_performance = None
+
+    else:
+        print(f"No pickle file found at: {os.path.basename(model_pickle_file)}")
+        print("Will proceed with full optimization and training...")
+
+    # ==============================================================================
+    # Step 2: Optimize and train final model with selected features
+    # (Only runs if skip_training = False)
+    # ==============================================================================
+
+    if not skip_training:
+        print("\n" + "="*60)
+        print("STEP 2: Optimizing LGBM model with selected features")
+        print("="*60 + "\n")
+
+    # Load training data (needed for both training and performance calculation)
     os.chdir(BASE_DIR)
     data_path = os.path.join(BASE_DIR, "extracted_features", "merged_data", "all_bands_merged_no_outliers_new.csv")
+    print(f"Loading training data from: {os.path.basename(data_path)}")
     data = pd.read_csv(data_path)
 
     # new_columns = [k.replace("_0", "") for k in data.columns]
@@ -755,77 +912,67 @@ if __name__ == "__main__":
     groups = data["field_id"].values
     weights = data["Field_size"].values
 
-    # Create Optuna study for final model optimization
-    os.chdir(MODEL_DIR)
-    study_name_optimized = f"optimized_final_{select_how_many}_{classifier}_{scoring}_{n_splits}"
+    # Only run Optuna optimization and training if we don't have a valid cached model
+    if not skip_training:
+        # Create Optuna study for final model optimization
+        os.chdir(MODEL_DIR)
 
-    storage = optuna.storages.RDBStorage(
-        url="sqlite:///study.db",
-        engine_kwargs={"connect_args": {"timeout": 30}}
-    )
-
-    # Create or load study
-    try:
-        study = optuna.create_study(
-            study_name=study_name_optimized,
-            storage=storage,
-            direction="maximize",
-            load_if_exists=True
+        storage = optuna.storages.RDBStorage(
+            url="sqlite:///study.db",
+            engine_kwargs={"connect_args": {"timeout": 30}}
         )
-        print(f"✓ Created/loaded study: {study_name_optimized}")
-    except:
-        study = optuna.load_study(
-            study_name=study_name_optimized,
-            storage=storage
+
+        # Create or load study
+        try:
+            study = optuna.create_study(
+                study_name=study_name_optimized,
+                storage=storage,
+                direction="maximize",
+                load_if_exists=True
+            )
+            print(f"✓ Created/loaded study: {study_name_optimized}")
+        except:
+            study = optuna.load_study(
+                study_name=study_name_optimized,
+                storage=storage
+            )
+            print(f"✓ Loaded existing study: {study_name_optimized}")
+
+        # Run optimization
+        n_trials = 50
+        print(f"\nRunning Optuna optimization ({n_trials} trials)...")
+        print(f"Scoring: {scoring}")
+        print(f"Cross-validation: {n_splits}-fold StratifiedGroupKFold")
+
+        study.optimize(
+            lambda trial: classifier_objective(
+                trial,
+                X,
+                y,
+                groups=groups,
+                n_splits=n_splits,
+                classifier_override=["LGBM"],
+                weights=weights,
+                scoring=scoring,
+            ),
+            n_trials=n_trials,
+            n_jobs=-1,
         )
-        print(f"✓ Loaded existing study: {study_name_optimized}")
 
-    # Run optimization
-    n_trials = 50
-    print(f"\nRunning Optuna optimization ({n_trials} trials)...")
-    print(f"Scoring: {scoring}")
-    print(f"Cross-validation: {n_splits}-fold StratifiedGroupKFold")
+        print(f"\n{'='*60}")
+        print("OPTIMIZATION RESULTS")
+        print(f"{'='*60}")
+        print(f"Best trial: {study.best_trial.number}")
+        print(f"Best {scoring} score: {study.best_value:.4f}")
+        print(f"\nBest hyperparameters:")
+        for key, value in study.best_params.items():
+            print(f"  {key}: {value}")
 
-    study.optimize(
-        lambda trial: classifier_objective(
-            trial,
-            X,
-            y,
-            groups=groups,
-            n_splits=n_splits,
-            classifier_override=["LGBM"],
-            weights=weights,
-            scoring=scoring,
-        ),
-        n_trials=n_trials,
-        n_jobs=-1,
-    )
+        # Train final model on full dataset
+        print(f"\n{'='*60}")
+        print("TRAINING FINAL MODEL")
+        print(f"{'='*60}\n")
 
-    print(f"\n{'='*60}")
-    print("OPTIMIZATION RESULTS")
-    print(f"{'='*60}")
-    print(f"Best trial: {study.best_trial.number}")
-    print(f"Best {scoring} score: {study.best_value:.4f}")
-    print(f"\nBest hyperparameters:")
-    for key, value in study.best_params.items():
-        print(f"  {key}: {value}")
-
-    # Get best pipeline and train on full dataset (or load from pickle)
-    print(f"\n{'='*60}")
-    print("TRAINING FINAL MODEL")
-    print(f"{'='*60}\n")
-
-    # Define pickle file path
-    model_pickle_file = os.path.join(MODEL_DIR, f"trained_model_{study_name_optimized}.pkl")
-
-    # Check if pickled model exists
-    if os.path.exists(model_pickle_file):
-        print(f"✓ Loading pre-trained model from pickle: {os.path.basename(model_pickle_file)}")
-        with open(model_pickle_file, 'rb') as f:
-            pipeline_performance = pickle.load(f)
-        print(f"✓ Model loaded successfully")
-    else:
-        print(f"No pre-trained model found. Training new model...")
         pipeline_performance = best_classifier_pipe(
             db_loc="study.db",
             study_name=study_name_optimized
@@ -834,15 +981,16 @@ if __name__ == "__main__":
         print(f"Training final model on {len(data)} samples...")
         pipeline_performance.fit(X, y, classifier__sample_weight=weights)
 
-        # Save the trained model to pickle
-        print(f"Saving trained model to: {os.path.basename(model_pickle_file)}")
-        with open(model_pickle_file, 'wb') as f:
-            pickle.dump(pipeline_performance, f)
-        print(f"✓ Model saved successfully")
+        # Save the trained model to pickle with metadata
+        print(f"\nSaving trained model to: {os.path.basename(model_pickle_file)}")
+        save_model_with_metadata(pipeline_performance, selected_features, model_pickle_file)
 
-    # Calculate out-of-sample performance
+    # Calculate out-of-sample performance (for both cached and newly trained models)
     print(f"\n{'='*60}")
-    print("OUT-OF-SAMPLE PERFORMANCE")
+    if skip_training:
+        print("OUT-OF-SAMPLE PERFORMANCE (Recalculating for cached model)")
+    else:
+        print("OUT-OF-SAMPLE PERFORMANCE")
     print(f"{'='*60}\n")
 
     cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -1042,6 +1190,62 @@ if __name__ == "__main__":
     else:
         remaining = (TILE_END - TILE_START) - len(final_log['completed_tiles'])
         print(f"⚠ {remaining} tiles remaining (re-run script to continue)")
+    print(f"{'='*60}\n")
+
+    # ==============================================================================
+    # Step 4: Create VRT mosaic of all prediction tiles
+    # ==============================================================================
+
+    print("\n" + "="*60)
+    print("STEP 4: Creating VRT mosaic of all predictions")
+    print("="*60 + "\n")
+
+    # Find all prediction files
+    prediction_files = sorted(glob(os.path.join(OUTPUT_DIR, "prediction_tile*.tif")))
+
+    if not prediction_files:
+        print("⚠ No prediction files found to mosaic")
+    else:
+        print(f"Found {len(prediction_files)} prediction files")
+
+        # Create VRT mosaic
+        vrt_output = os.path.join(OUTPUT_DIR, "all_predictions_mosaic.vrt")
+
+        print(f"Creating VRT mosaic: {os.path.basename(vrt_output)}")
+
+        try:
+            vrt_options = gdal.BuildVRTOptions(
+                resampleAlg=gdal.GRA_NearestNeighbour,  # Nearest neighbor for categorical data
+                addAlpha=False
+            )
+
+            vrt_ds = gdal.BuildVRT(vrt_output, prediction_files, options=vrt_options)
+
+            if vrt_ds is None:
+                raise RuntimeError("Failed to create VRT")
+
+            # Get VRT info
+            width = vrt_ds.RasterXSize
+            height = vrt_ds.RasterYSize
+            gt = vrt_ds.GetGeoTransform()
+
+            vrt_ds = None  # Close
+
+            print(f"✓ VRT created successfully:")
+            print(f"  Path: {vrt_output}")
+            print(f"  Dimensions: {width} × {height} pixels")
+            print(f"  Resolution: {abs(gt[1])}m × {abs(gt[5])}m")
+            print(f"  Coverage: {(width * abs(gt[1]))/1000:.1f}km × {(height * abs(gt[5]))/1000:.1f}km")
+            print(f"\nTo convert VRT to GeoTIFF:")
+            print(f"  gdal_translate -co COMPRESS=LZW -co TILED=YES -co BIGTIFF=YES \\")
+            print(f"    {vrt_output} \\")
+            print(f"    {os.path.join(OUTPUT_DIR, 'all_predictions_mosaic.tif')}")
+
+        except Exception as e:
+            print(f"✗ Error creating VRT: {e}")
+
+    print(f"\n{'='*60}")
+    print("WORKFLOW COMPLETE")
     print(f"{'='*60}\n")
 
 # %%

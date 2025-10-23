@@ -29,6 +29,7 @@ from sklearn_helpers import best_classifier_pipe, classifier_objective
 import optuna
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.metrics import cohen_kappa_score, balanced_accuracy_score
+import pickle
 
 # Enable GDAL exceptions
 gdal.UseExceptions()
@@ -582,7 +583,7 @@ if __name__ == "__main__":
     BASE_DIR = "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data"
     FEATURE_DIR = "/mnt/bigdrive/final_model_features_v4"  # Pre-resampled tiles
     MODEL_DIR = os.path.join(BASE_DIR, "models")
-    OUTPUT_DIR = os.path.join(BASE_DIR, "outputs", "subtiled_predictions")
+    OUTPUT_DIR = os.path.join(BASE_DIR, "outputs", "subtiled_predictions_v4")
 
     # Model parameters
     select_how_many = 30
@@ -679,14 +680,14 @@ if __name__ == "__main__":
     # Critical: Feature order must be identical for training and prediction
     selected_features = sorted(list(set(list(mean_features) + list(max_features))))
 
-    selected_features = [k.replace("_0", "") for k in selected_features]
+    # selected_features = [k.replace("_0", "") for k in selected_features]
 
     # Replace . with _ to match file naming
     selected_features = [f.replace(".", "_") for f in selected_features]
 
     # Fix quantile naming: q_0_05 -> q_05, q_0_95 -> q_95
-    selected_features = [f.replace("_q_0_05", "_q_05") for f in selected_features]
-    selected_features = [f.replace("_q_0_95", "_q_95") for f in selected_features]
+    # selected_features = [f.replace("_q_0_05", "_q_05") for f in selected_features]
+    # selected_features = [f.replace("_q_0_95", "_q_95") for f in selected_features]
 
     print(f"Selected {len(selected_features)} unique features")
 
@@ -724,8 +725,8 @@ if __name__ == "__main__":
     data_path = os.path.join(BASE_DIR, "extracted_features", "merged_data", "all_bands_merged_no_outliers_new.csv")
     data = pd.read_csv(data_path)
 
-    new_columns = [k.replace("_0", "") for k in data.columns]
-    new_columns = [f.replace(".", "_") for f in new_columns]
+    # new_columns = [k.replace("_0", "") for k in data.columns]
+    new_columns = [f.replace(".", "_") for f in data.columns]
     data.columns = new_columns
 
     # apply keep/drop
@@ -809,18 +810,35 @@ if __name__ == "__main__":
     for key, value in study.best_params.items():
         print(f"  {key}: {value}")
 
-    # Get best pipeline and train on full dataset
+    # Get best pipeline and train on full dataset (or load from pickle)
     print(f"\n{'='*60}")
     print("TRAINING FINAL MODEL")
     print(f"{'='*60}\n")
 
-    pipeline_performance = best_classifier_pipe(
-        db_loc="study.db",
-        study_name=study_name_optimized
-    )
+    # Define pickle file path
+    model_pickle_file = os.path.join(MODEL_DIR, f"trained_model_{study_name_optimized}.pkl")
 
-    print(f"Training final model on {len(data)} samples...")
-    pipeline_performance.fit(X, y, classifier__sample_weight=weights)
+    # Check if pickled model exists
+    if os.path.exists(model_pickle_file):
+        print(f"✓ Loading pre-trained model from pickle: {os.path.basename(model_pickle_file)}")
+        with open(model_pickle_file, 'rb') as f:
+            pipeline_performance = pickle.load(f)
+        print(f"✓ Model loaded successfully")
+    else:
+        print(f"No pre-trained model found. Training new model...")
+        pipeline_performance = best_classifier_pipe(
+            db_loc="study.db",
+            study_name=study_name_optimized
+        )
+
+        print(f"Training final model on {len(data)} samples...")
+        pipeline_performance.fit(X, y, classifier__sample_weight=weights)
+
+        # Save the trained model to pickle
+        print(f"Saving trained model to: {os.path.basename(model_pickle_file)}")
+        with open(model_pickle_file, 'wb') as f:
+            pickle.dump(pipeline_performance, f)
+        print(f"✓ Model saved successfully")
 
     # Calculate out-of-sample performance
     print(f"\n{'='*60}")
@@ -1025,3 +1043,5 @@ if __name__ == "__main__":
         remaining = (TILE_END - TILE_START) - len(final_log['completed_tiles'])
         print(f"⚠ {remaining} tiles remaining (re-run script to continue)")
     print(f"{'='*60}\n")
+
+# %%

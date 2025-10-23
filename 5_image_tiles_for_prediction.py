@@ -73,15 +73,23 @@ def scan_features():
         for tif_file in tif_files:
             # Extract feature name by removing coordinate suffixes
             # e.g., "B11_abs_energy_0000000000-0000000000.tif" -> "B11_abs_energy"
+            # e.g., "B11_quantile_q_0_05_0000000000-0000000000.tif" -> "B11_quantile_q_0_05"
             basename = os.path.basename(tif_file)
-            # Remove everything from the first digit pattern
-            parts = basename.split("_")
-            # Find where the coordinate pattern starts (all digits)
+            # Remove .tif extension
+            basename_no_ext = basename.replace(".tif", "")
+
+            # Find the coordinate pattern (10 digits - 10 digits)
+            # Split by underscore and look for pattern like "0000000000-0000000000"
+            parts = basename_no_ext.split("_")
+
+            # Find where coordinate pattern starts (contains hyphen and all digits)
             feature_parts = []
             for part in parts:
-                if part[0].isdigit():
+                # Check if this looks like a coordinate (contains hyphen, all digits/hyphen)
+                if "-" in part and all(c.isdigit() or c == "-" for c in part):
                     break
                 feature_parts.append(part)
+
             feature_name = "_".join(feature_parts)
 
             features[feature_name].append(tif_file)

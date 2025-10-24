@@ -897,77 +897,77 @@ get_oos_confusion_matrix(
 #     )
 
 
-# %%
-# predict to stack
-def user_func(w, block, model):
-    pred_shape = list(block.shape)
-    X = block.reshape(pred_shape[0], -1).T
-    pred_shape[0] = 1
-    y_hat = model.predict(X)
-    X_reshaped = y_hat.T.reshape(pred_shape)
-    return w, X_reshaped
+# # %%
+# # predict to stack
+# def user_func(w, block, model):
+#     pred_shape = list(block.shape)
+#     X = block.reshape(pred_shape[0], -1).T
+#     pred_shape[0] = 1
+#     y_hat = model.predict(X)
+#     X_reshaped = y_hat.T.reshape(pred_shape)
+#     return w, X_reshaped
 
 
-gw.apply(
-    "outputs/pred_stack.tif",
-    f"outputs/final_model_lgbm{len(select_images)}.tif",
-    user_func,
-    args=(pipeline_performance,),
-    n_jobs=16,
-    count=1,
-    overwrite=True,
-    scheduler="threads",  #  LGBM needs threads since its multithreaded
-)
+# gw.apply(
+#     "outputs/pred_stack.tif",
+#     f"outputs/final_model_lgbm{len(select_images)}.tif",
+#     user_func,
+#     args=(pipeline_performance,),
+#     n_jobs=16,
+#     count=1,
+#     overwrite=True,
+#     scheduler="threads",  #  LGBM needs threads since its multithreaded
+# )
 
-# %% Validate distribution of pixels
+# # %% Validate distribution of pixels
 
-select_images = glob("./outputs/selected_images_10m/*.tif")
-
-
-with gw.open(
-    f"outputs/final_model_lgbm{len(select_images)}.tif", nodata=9999, stack_dim="band"
-) as src:
-    plt.hist(src.values.ravel(), bins=30, edgecolor="black")
-
-data_values = src.values.ravel()
-pixels = pd.DataFrame({"values": data_values.astype(np.uint8)})
-pred = pd.DataFrame(
-    {
-        "percent": (pixels.groupby("values").size() / len(data_values))
-        .sort_values(ascending=False)
-        .values,
-        "Model": "prediction",
-    },
-    index=(pixels.groupby("values").size()).sort_values(ascending=False).index,
-)
-actual = pd.DataFrame(
-    {
-        "percent": lu_poly.lc.value_counts(normalize=True)
-        .sort_values(ascending=False)
-        .values,
-        "Model": "training data",
-    },
-    index=(lu_poly.lc.value_counts(normalize=True).sort_values(ascending=False)).index,
-)
-pred.reset_index(inplace=True)
-pred.columns = ["lc", "percent", "Model"]
-actual.reset_index(inplace=True)
+# select_images = glob("./outputs/selected_images_10m/*.tif")
 
 
-print(pred)
-print(actual)
-# %%
-pred_actual = pd.concat([pred, actual], axis=0)
-pred_actual["lc"] = le.inverse_transform(pred_actual["lc"])
+# with gw.open(
+#     f"outputs/final_model_lgbm{len(select_images)}.tif", nodata=9999, stack_dim="band"
+# ) as src:
+#     plt.hist(src.values.ravel(), bins=30, edgecolor="black")
 
-ax = sns.barplot(data=pred_actual, x="lc", y="percent", hue="Model")
-ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
-ax.set_ylabel("Percent of Pixels/Training Points")
-ax.set_xlabel("Land Use Class")
+# data_values = src.values.ravel()
+# pixels = pd.DataFrame({"values": data_values.astype(np.uint8)})
+# pred = pd.DataFrame(
+#     {
+#         "percent": (pixels.groupby("values").size() / len(data_values))
+#         .sort_values(ascending=False)
+#         .values,
+#         "Model": "prediction",
+#     },
+#     index=(pixels.groupby("values").size()).sort_values(ascending=False).index,
+# )
+# actual = pd.DataFrame(
+#     {
+#         "percent": lu_poly.lc.value_counts(normalize=True)
+#         .sort_values(ascending=False)
+#         .values,
+#         "Model": "training data",
+#     },
+#     index=(lu_poly.lc.value_counts(normalize=True).sort_values(ascending=False)).index,
+# )
+# pred.reset_index(inplace=True)
+# pred.columns = ["lc", "percent", "Model"]
+# actual.reset_index(inplace=True)
 
-plt.savefig("outputs/final_model_lgbm_distribution.png", dpi=300, bbox_inches="tight")
-plt.show()
-# %%
+
+# print(pred)
+# print(actual)
+# # %%
+# pred_actual = pd.concat([pred, actual], axis=0)
+# pred_actual["lc"] = le.inverse_transform(pred_actual["lc"])
+
+# ax = sns.barplot(data=pred_actual, x="lc", y="percent", hue="Model")
+# ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+# ax.set_ylabel("Percent of Pixels/Training Points")
+# ax.set_xlabel("Land Use Class")
+
+# plt.savefig("outputs/final_model_lgbm_distribution.png", dpi=300, bbox_inches="tight")
+# plt.show()
+# # %%
 
 
 #############################################

@@ -51,9 +51,9 @@ abstract: |
 
 <!-- compile working with:
 cd writeup
-pandoc writeup.md --template=mytemplate.tex -o output_IEEE.pdf --bibliography=refs.bib --pdf-engine=xelatex
+pandoc writeup.md --template=mytemplate.tex -o output_JSTARS-2025-00807.pdf --bibliography=refs.bib --pdf-engine=xelatex
 
-
+ 
 ------------------------------------------------
 # manually create tex then run manually to get error
 # create LaTeX only (no PDF)

@@ -59,7 +59,30 @@ cd writeup
 - Reviewing what changed
 - Printing with custom formatting
 
-### 3. `create_readable_comparison.sh` - Summary Document
+### 3. `create_word_comparison.sh` - Word Document ⭐ **BEST FOR REVIEWERS**
+
+Creates a Microsoft Word document with the comparison.
+
+**Usage:**
+```bash
+cd writeup
+./Revisions\ 1/create_word_comparison.sh
+```
+
+**What it does:**
+- Extracts version from main branch
+- Compares to current working version
+- Creates Word document showing changes with +/- indicators
+- Ignores whitespace-only changes
+- Output: `comparison_document.docx` (28KB)
+
+**Perfect for:**
+- Journal submission (Word format widely accepted)
+- Reviewers familiar with Word
+- Easy to read and annotate
+- No browser printing needed
+
+### 4. `create_readable_comparison.sh` - Summary Document (DEPRECATED)
 
 Creates a human-readable PDF summarizing changes in plain language.
 

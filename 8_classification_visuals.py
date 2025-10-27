@@ -55,7 +55,7 @@ print(f"Total training points: {len(gdf)}")
 
 # Sample 10 random points
 np.random.seed(42)  # For reproducibility
-sample_gdf = gdf.sample(n=10, random_state=42)
+sample_gdf = gdf.sample(n=15, random_state=42)
 sample_gdf = sample_gdf.reset_index(drop=True)
 
 print(f"Sampled {len(sample_gdf)} points")
@@ -146,6 +146,7 @@ feature_files = {}
 feature_mapping = {
     "B11_mean": "B11_mean",
     "hue_quantile_q_05": "hue_quantile_q_0_05",
+    # "EVI_standard_deviation": "EVI_standard_deviation",
     "EVI_mean_change": "EVI_mean_change"
 }
 
@@ -211,9 +212,9 @@ def get_s2_rgb_for_bbox(bbox_utm, year=2023):
 
 # %% Create visualizations for each site
 # Font size configuration
-TITLE_FONTSIZE = 14
-LEGEND_FONTSIZE = 14
-COLORBAR_FONTSIZE = 14
+TITLE_FONTSIZE = 18
+LEGEND_FONTSIZE = 18
+COLORBAR_FONTSIZE = 18
 dpi = 350
 print("\n" + "="*80)
 print("Creating visualizations for each site...")
@@ -225,7 +226,8 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
 
     # Create figure with 5 subplots (RGB, Classification, 3 features)
     # Increased width to accommodate legend/colorbar on the right
-    fig, axes = plt.subplots(5, 1, figsize=(16, 24))
+    # Adjusted aspect ratio to make images less rectangular
+    fig, axes = plt.subplots(5, 1, figsize=(20, 30))
 
     try:
         # 1. Get Sentinel-2 RGB
@@ -296,10 +298,10 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
                 cbar1 = plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
                 cbar1.ax.set_visible(False)
 
-                # Add legend with more space and larger font
-                legend_elements = [mpatches.Patch(facecolor=colors[i], label=labels[i])
+                # Add legend with more space and larger font (capitalize first letter)
+                legend_elements = [mpatches.Patch(facecolor=colors[i], label=labels[i].capitalize())
                                  for i in range(len(labels))]
-                axes[1].legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1.08, 0.5),
+                axes[1].legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1.12, 0.5),
                              fontsize=LEGEND_FONTSIZE, frameon=True, framealpha=0.9, edgecolor='black')
 
         # 3-5. Extract and plot input features
@@ -332,8 +334,8 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
                                       fontsize=TITLE_FONTSIZE, fontweight='bold', pad=10)
                 axes[ax_idx].axis('off')
 
-        # Adjust layout with more space on the right
-        plt.tight_layout(h_pad=2.0, rect=[0, 0, 0.8, 1])
+        # Adjust layout with more space on the right (reserve 30% for legends/colorbars)
+        plt.tight_layout(h_pad=2.0, rect=[0, 0, 0.70, 1])
 
         # Save figure
         output_file = os.path.join(output_dir, f"site_{idx:02d}_visualization.png")

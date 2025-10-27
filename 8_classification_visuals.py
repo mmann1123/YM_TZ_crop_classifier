@@ -219,7 +219,8 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
     print(f"\nProcessing Site {idx:02d} (index {site_idx})...")
 
     # Create figure with 5 subplots (RGB, Classification, 3 features)
-    fig, axes = plt.subplots(5, 1, figsize=(12, 24))
+    # Increased width to accommodate legend/colorbar on the right
+    fig, axes = plt.subplots(5, 1, figsize=(16, 24))
 
     try:
         # 1. Get Sentinel-2 RGB
@@ -259,13 +260,16 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
 
         # Display the RGB image
         if img_array is not None:
-            axes[0].imshow(img_array, aspect='auto')
+            im0 = axes[0].imshow(img_array, aspect='auto')
             axes[0].set_title('1. Sentinel-2 RGB Composite (2023)', fontsize=14, fontweight='bold', pad=10)
             axes[0].axis('off')
+            # Add invisible colorbar for alignment
+            cbar0 = plt.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
+            cbar0.ax.set_visible(False)
         else:
             axes[0].text(0.5, 0.5, 'Sentinel-2 RGB\n(Download failed)\nSee KML for location',
                         ha='center', va='center', fontsize=12, transform=axes[0].transAxes)
-            axes[0].set_title('1. Sentinel-2 RGB Composite (2023)', fontsize=14, fontweight='bold', pad=10)
+            axes[0].set_title('Sentinel-2 RGB Composite (2023)', fontsize=14, fontweight='bold', pad=10)
             axes[0].axis('off')
 
         # 2. Extract and plot land cover classification
@@ -279,15 +283,19 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
                 window_transform = src.window_transform(window)
 
                 # Plot with colormap
-                im = axes[1].imshow(lc_data, cmap=cmap, norm=norm, interpolation='nearest', aspect='auto')
-                axes[1].set_title('2. Land Cover Classification', fontsize=14, fontweight='bold', pad=10)
+                im1 = axes[1].imshow(lc_data, cmap=cmap, norm=norm, interpolation='nearest', aspect='auto')
+                axes[1].set_title('Land Cover Classification', fontsize=14, fontweight='bold', pad=10)
                 axes[1].axis('off')
 
-                # Add legend
+                # Add invisible colorbar for alignment (legend is on the side)
+                cbar1 = plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
+                cbar1.ax.set_visible(False)
+
+                # Add legend with more space
                 legend_elements = [mpatches.Patch(facecolor=colors[i], label=labels[i])
                                  for i in range(len(labels))]
-                axes[1].legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1.02, 0.5),
-                             fontsize=9, frameon=True, framealpha=0.9)
+                axes[1].legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1.05, 0.5),
+                             fontsize=10, frameon=True, framealpha=0.9)
 
         # 3-5. Extract and plot input features
         for feat_idx, feat_name in enumerate(feature_mapping.keys()):
@@ -304,13 +312,13 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
 
                     # Plot
                     im = axes[ax_idx].imshow(feat_data, cmap='viridis', interpolation='nearest', aspect='auto')
-                    axes[ax_idx].set_title(f'{ax_idx}. Input Feature: {feat_name}',
+                    axes[ax_idx].set_title(f'Input Feature: {feat_name}',
                                           fontsize=14, fontweight='bold', pad=10)
                     axes[ax_idx].axis('off')
 
-                    # Add colorbar
+                    # Add colorbar with better sizing
                     cbar = plt.colorbar(im, ax=axes[ax_idx], fraction=0.046, pad=0.04)
-                    cbar.set_label(feat_name, fontsize=10)
+                    cbar.ax.tick_params(labelsize=9)
             else:
                 axes[ax_idx].text(0.5, 0.5, f'{feat_name}\n(Not Found)',
                                 ha='center', va='center', fontsize=12,
@@ -319,11 +327,12 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
                                       fontsize=14, fontweight='bold', pad=10)
                 axes[ax_idx].axis('off')
 
-        plt.tight_layout(h_pad=2.0)
+        # Adjust layout with more space on the right
+        plt.tight_layout(h_pad=2.0, rect=[0, 0, 0.8, 1])
 
         # Save figure
         output_file = os.path.join(output_dir, f"site_{idx:02d}_visualization.png")
-        plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
+        plt.savefig(output_file, dpi=200, bbox_inches='tight', facecolor='white', pad_inches=0.3)
         print(f"  Saved: {output_file}")
         plt.close()
 

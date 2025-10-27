@@ -1,20 +1,4 @@
----
-title: "Response to Reviewers: JSTARS-2025-00807"
-subtitle: "Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing"
-author:
-- name: Michael L. Mann et al.
-date: 2025
-documentclass: article
-classoption: [11pt]
-geometry: margin=1in
----
-
-<!-- compile working with:
-cd writeup
-pandoc ./Revisions 1/comments.md --template=mytemplate.tex -o reviewer_Response_JSTARS-2025-00807.pdf --bibliography=refs.bib --pdf-engine=xelatex
--->
-
-
+ 
 
 
 # Editorial Decision

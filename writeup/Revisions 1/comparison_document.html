@@ -27,8 +27,8 @@ pre {
 <h2>Summary of Changes</h2>
 <div class="stats">
 <pre>
- writeup/writeup.md | 204 ++++++++++++++++++++++++++++++++++++++---------------
- 1 file changed, 148 insertions(+), 56 deletions(-)
+ writeup/writeup.md | 184 +++++++++++++++++++++++++++++++++++++++--------------
+ 1 file changed, 138 insertions(+), 46 deletions(-)
 </pre>
 </div>
 
@@ -38,6 +38,8 @@ pre {
 <li class="del">- (minus) were <strong>removed</strong> from the original</li>
 <li class="add">+ (plus) were <strong>added</strong> in the revision</li>
 </ul>
+
+<p><strong>Note:</strong> Whitespace-only changes and trivial punctuation edits are ignored to focus on substantive changes.</p>
 
 <pre>
 diff --git a/writeup/writeup.md b/writeup/writeup.md
@@ -62,30 +64,23 @@ index a60e2ba..6747d8b 100644
    - \usepackage{pdflscape}
    - \usepackage{longtable}
    - \usepackage{fancyhdr}
-@@ -27,35 +28,50 @@ header-includes:
+@@ -27,34 +28,49 @@ header-includes:
    - \usepackage{booktabs}
    - \usepackage{caption}
    - |
 -   ```{=latex}
--   \pagestyle{fancy}
--   \fancyhf{}
--   \rfoot{\thepage}
+     \pagestyle{fancy}
+     \fancyhf{}
+     \rfoot{\thepage}
 -   \renewcommand{\headrulewidth}{0pt}
 -   \renewcommand{\footrulewidth}{0pt}
--   \fancypagestyle{plain}{
--     \fancyhf{}
--     \rfoot{\thepage}
+     \fancypagestyle{plain}{
+       \fancyhf{}
+       \rfoot{\thepage}
 -     \renewcommand{\headrulewidth}{0pt}
 -     \renewcommand{\footrulewidth}{0pt}
--   }
+     }
 -   ```
-+    \pagestyle{fancy}
-+    \fancyhf{}
-+    \rfoot{\thepage}
-+    \fancypagestyle{plain}{
-+      \fancyhf{}
-+      \rfoot{\thepage}
-+    }
  
  abstract: |
    This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85. The model often match or outperform broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
@@ -98,17 +93,16 @@ index a60e2ba..6747d8b 100644
 -\newgeometry{margin=1in}
 +<!-- \newgeometry{margin=1in}  
  \captionsetup{justification=raggedright, singlelinecheck=false}
--  
 +   -->
 +
 +
-+
+ 
  <!-- compile working with:
 -pandoc writeup.md --template=mytemplate.tex -o output.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc 
 +cd writeup
 +pandoc writeup.md --template=mytemplate.tex -o output_JSTARS-2025-00807.pdf --bibliography=refs.bib --pdf-engine=xelatex
-+
-+ 
+ 
+  
 +------------------------------------------------
 +# manually create tex then run manually to get error
 +# create LaTeX only (no PDF)
@@ -117,19 +111,18 @@ index a60e2ba..6747d8b 100644
 +  --bibliography=refs.bib -o output.tex
 +
 +xelatex -file-line-error -interaction=errorstopmode -halt-on-error output.tex
- 
++
 +# run xelatex with file/line errors and stop on error
 +xelatex -file-line-error -interaction=errorstopmode -halt-on-error output.tex
- 
- 
++
++
 +# open the region around the reported line to find stray \usepackage
 +sed -n '1,140p' output.tex        # or adjust line range shown by the error
 +
 +-------------------------------------------------
-+
+ 
  # convert to word doc (2 steps)
  pandoc writeup.md --template=mytemplate.tex \
-   --from markdown+raw_tex \
 @@ -117,7 +133,7 @@ We propose a novel approach that combines crowdsourced data with a new automated
  <!-- └── Outline of the Paper
      └── Structure of Subsequent Sections -->
@@ -154,20 +147,20 @@ index a60e2ba..6747d8b 100644
 +   \caption{Data collection methodology flowchart}
 +   \label{fig:methodology_flowchart} %can refer to in text with \ref{fig:methodology_flowchart}
 +\end{figure}
- 
--Crop type data collection was designed and executed by YouthMappers through a crowdsourced GIS approach. The method was designed in 3 steps where: 1) Development of and training all intended student participants. 2) Data collection using KoboToolbox hosting a well developed data model. The exercise lasted 14 days with 7 days of iterative pilot testing on different farms, crops and landscapes. Finally the last step, 3) was the data review and cleaning phase to generate a sample for training.
++
 +Additional training data for non-agricultural sites was collected utilizing high resolution imagery from Google Earth. These data were used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  The final cleaned dataset includes over 1,400 crop type observations of rice, maize, cassava, sunflower, sorghum, cotton, and millet; plus 386 other observations of land cover classes including water, tidal areas, forest, shrub and urban.  
- 
--Additional training data was collected utilizing high resolution imagery from Google Earth. These data were used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  The final cleaned dataset includes 1,400 crop type observations of rice, maize, cassava, sunflower, sorghum, cotton, and millet; plus 386 other observations of land cover classes including water, tidal areas, forest, shrub and urban.  
++
 +## Satellite Imagery
  
--#### Data Collection Methods
+-Crop type data collection was designed and executed by YouthMappers through a crowdsourced GIS approach. The method was designed in 3 steps where: 1) Development of and training all intended student participants. 2) Data collection using KoboToolbox hosting a well developed data model. The exercise lasted 14 days with 7 days of iterative pilot testing on different farms, crops and landscapes. Finally the last step, 3) was the data review and cleaning phase to generate a sample for training.
 +Satellite imagery was obtained from the Sentinel-2 satellite constellation, which provides high-resolution multispectral data at 10-meter spatial resolution. The imagery was acquired over the study area between January and August of 2023 during the growing season, capturing the spectral characteristics of different crop types and coinciding with field data collection. The Sentinel-2 L2 harmonized reflectance data were pre-processed to remove noise and atmospheric effects, ensuring that the spectral information was accurate and reliable for classification purposes [@begue2018remote].
 +
 +In our study, cloud and cloud shadow contamination was mitigated using the 's2cloudless' machine learning model on the Google Earth Engine platform. Cloudy pixels were identified using a cloud probability mask, with pixels having a probability above 50% classified as clouds. To detect cloud shadows, we used the Near-Infrared (NIR) spectrum to flag dark pixels not identified as water as potential shadow pixels. The projected shadows from the clouds were identified using a directional distance transform based on the solar azimuth angle from the image metadata. A combined cloud and shadow mask was refined through morphological dilation, creating a buffer zone to ensure comprehensive coverage. This mask was applied to the Sentinel-2 surface reflectance data to exclude all pixels identified as clouds or shadows, enhancing the reliability of the dataset for environmental analysis.
-+
+ 
+-Additional training data was collected utilizing high resolution imagery from Google Earth. These data were used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  The final cleaned dataset includes 1,400 crop type observations of rice, maize, cassava, sunflower, sorghum, cotton, and millet; plus 386 other observations of land cover classes including water, tidal areas, forest, shrub and urban.  
 +Monthly composites were collected for January through August of 2023 for the the bands B2 Blue (458-523nm), B6 Vegetation Red Edge (733-738nm), B8 Near Infrared (785-899nm), B11 Short-Wave Infrared (SWIR)(1565-1655nm), and B12 Short Wave Infrared (2100-2280nm). Sw. We also calculate the Enhanced Vegetation Index (EVI) and hue, the color spectrum value [@GoogleHSV]. This computed hue value provides the basic color as perceived in the color wheel, from red, through green, blue, and back to red for each pixel. Due to the high prevalence of clouds in the region, linear interpolation was used to fill in missing data in the time series using `xr_fresh` [@xr_fresh_2021]. These bands were selected based on their relevance to crop type classification and their ability to capture the unique spectral signatures of different crops. The monthly composites were used to generate time series features for each pixel in the study area, providing valuable information on the temporal dynamics of crop growth and development.
-+
+ 
+-#### Data Collection Methods
 +# Methods
 +The following section describes the methods used for data collection, feature extraction, model training, and evaluation.
 +
@@ -196,8 +189,7 @@ index a60e2ba..6747d8b 100644
 +The timing of data collection was primarily driven by crop phenology and field condition. Mid to late reproductive stages offer maximum canopy cover and the most distinctive spectral signatures for crop type discrimination. Although most sampled fields exhibited the desired phenological characteristics, drought conditions in 2023 affected crop health across the region, with some fields showing signs of stress or early harvest. To ensure robust model training, YouthMappers were instructed to prioritize mature, healthy fields with lush green canopies whenever possible. Through this comprehensive training process, field teams developed the expertise needed to consistently identify sites well-suited for generating high-quality in-situ training data for satellite-based crop classification.
  
  The data collection was managed through KoboCollect, hosted on the KoboToolBox infrastructure, which provided an effective platform for gathering and organizing data. This approach enabled a collection of the desired volume of data points necessary for model training and evaluation, as summarized in Table \ref{tab:data_n}.
-- 
-+
+ 
 +
  \begin{table}[h!]
  \centering
@@ -256,20 +248,20 @@ index a60e2ba..6747d8b 100644
  
 -To partially account for variation in field size we extracted pixels based on a buffer around field point locations. This allows us to account for the fact that fields likely represent groups of adjacent pixels. Small fields were buffered by only 5 meters, medium fields by 10m and large fields by 30m. This approach allowed us to capture the time series features from the surrounding area, providing a more comprehensive representation of the field's characteristics. The use of larger buffers was explored but found to decrease model performance as fields tended to be heterogenous - for instance containing patches of trees. To account for this in our modeling we treat observations from the same field as a "group" in our cross-validation scheme - as described below.
 +To partially account for variation in field size, we extracted pixels based on a buffer around field point locations. This allows us to account for the fact that fields likely represent groups of adjacent pixels. Small fields were buffered by only 5 meters, medium fields by 10m and large fields by 30m. This approach allowed us to capture the time series features from the surrounding area, providing a more comprehensive representation of the field's characteristics. The use of larger buffers was explored but found to decrease model performance as fields tended to be heterogenous - for instance containing patches of trees. To account for this in our modeling, we treat observations from the same field as a "group" in our cross-validation scheme - as described below.
- 
--### Machine Learning Models
++
 +### Model Selection
  
--In our study, we utilized the extracted time-series features from satellite imagery, described above, to analyze crop classifications.  Notably, features were centered and scaled from the `scikit-learn` library to normalize the data, followed by the application of a variance threshold method to reduce dimensionality by excluding features with low variance [@scikit-learn].
+-### Machine Learning Models
 +We employed `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study where each trial proposed a set of model parameters aimed at optimizing classification performance. We evaluated multiple classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, testing various configurations to identify the optimal approach for crop classification.
  
--We employ `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study using Optuna where each trial proposes a set of model parameters aimed at optimizing performance metrics. Specifically, we used stratified group k-fold cross-validation with the number of splits set to three, ensuring that samples from the same field were not split across training and validation sets to prevent data leakage. The scoring metric utilized is the kappa statistic, chosen for its suitability in evaluating models on imbalanced datasets.
+-In our study, we utilized the extracted time-series features from satellite imagery, described above, to analyze crop classifications.  Notably, features were centered and scaled from the `scikit-learn` library to normalize the data, followed by the application of a variance threshold method to reduce dimensionality by excluding features with low variance [@scikit-learn].
 +Prior to model training, we preprocessed the extracted time-series features from satellite imagery using standard scaling (centering and scaling) from the `scikit-learn` library to normalize the data [@scikit-learn]. We then applied a variance threshold method to reduce dimensionality by excluding features with low variance, thereby improving computational efficiency and model interpretability.
 +The final model selection was based on maximizing the kappa statistic across all cross-validation folds, ensuring that the chosen model and its parameters provided the best possible performance for classifying crop types in our dataset.
  
--This approach allows us to rigorously evaluate and compare different classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, and their configurations under a variety of conditions. The final selection of the model and its parameters was based on the ability to maximize the kappa statistic, ensuring that the chosen model provided the best possible performance for the classification of land cover types in our dataset.
+-We employ `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study using Optuna where each trial proposes a set of model parameters aimed at optimizing performance metrics. Specifically, we used stratified group k-fold cross-validation with the number of splits set to three, ensuring that samples from the same field were not split across training and validation sets to prevent data leakage. The scoring metric utilized is the kappa statistic, chosen for its suitability in evaluating models on imbalanced datasets.
 +### Performance Evaluation
-+
+ 
+-This approach allows us to rigorously evaluate and compare different classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, and their configurations under a variety of conditions. The final selection of the model and its parameters was based on the ability to maximize the kappa statistic, ensuring that the chosen model provided the best possible performance for the classification of land cover types in our dataset.
 +To assess model performance, we implemented stratified group k-fold cross-validation with three splits. This approach ensured that samples from the same field remained together within either the training or validation set, preventing data leakage that could occur if observations from the same field were split across folds. We utilized the kappa statistic as our primary evaluation metric due to its suitability for assessing classifier performance on imbalanced datasets. This metric accounts for agreement occurring by chance, providing a more robust measure of classification accuracy than simple overall accuracy when class distributions are unequal.
  
  ### Interpretation and Feature Selection
@@ -318,15 +310,6 @@ index a60e2ba..6747d8b 100644
  
  \begin{figure}[H]
      \centering
-@@ -276,7 +339,7 @@ The final selection of features for model training was carefully curated to incl
- 
- ### Model Selection
- 
--Optuna trials tuning results selected LightGBM [@ke2017lightgbm]is a gradient boosting algorithm that combines many simple decision trees to produce a stronger single model, improving the model at each step. LightGBM grows decision trees leaf-wise rather than adding different levels, thereby targeting branches that most need refining.  
-+Optuna trials tuning results selected LightGBM [@ke2017lightgbm] is a gradient boosting algorithm that combines many simple decision trees to produce a stronger single model, improving the model at each step. LightGBM grows decision trees leaf-wise rather than adding different levels, thereby targeting branches that most need refining.  
- 
- ### Model Performance
- 
 @@ -306,7 +369,6 @@ Recall (PA)   & 0.84    \\
  \end{tabular}
  \caption{Summary of Classification Metrics}

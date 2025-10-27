@@ -51,8 +51,8 @@ pre {
 <pre>
 HEREDOC
 
-# Add git diff stats
-git diff --stat main..redo_resample -- writeup/writeup.md >> "$OUTPUT_DIR/comparison_document.html"
+# Add git diff stats (ignore whitespace)
+git diff --stat --ignore-all-space main..redo_resample -- writeup/writeup.md >> "$OUTPUT_DIR/comparison_document.html"
 
 cat >> "$OUTPUT_DIR/comparison_document.html" << 'HEREDOC'
 </pre>
@@ -65,11 +65,13 @@ cat >> "$OUTPUT_DIR/comparison_document.html" << 'HEREDOC'
 <li class="add">+ (plus) were <strong>added</strong> in the revision</li>
 </ul>
 
+<p><strong>Note:</strong> Whitespace-only changes and trivial punctuation edits are ignored to focus on substantive changes.</p>
+
 <pre>
 HEREDOC
 
-# Add the actual diff
-git diff --unified=3 main..redo_resample -- writeup/writeup.md >> "$OUTPUT_DIR/comparison_document.html"
+# Add the actual diff (ignore whitespace and trivial changes)
+git diff --unified=3 --ignore-all-space main..redo_resample -- writeup/writeup.md >> "$OUTPUT_DIR/comparison_document.html"
 
 cat >> "$OUTPUT_DIR/comparison_document.html" << 'HEREDOC'
 </pre>
@@ -109,4 +111,4 @@ else
     exit 1
 fi
 
-rm "$OUTPUT_DIR/version_main.md" "$OUTPUT_DIR/version_current.md"
+rm "$OUTPUT_DIR/version_main.md" "$OUTPUT_DIR/version_current.md" "$OUTPUT_DIR/writeup_current_version.md" "$OUTPUT_DIR/writeup_diff.txt" "$OUTPUT_DIR/writeup_main_version.md"

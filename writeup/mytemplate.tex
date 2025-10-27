@@ -318,6 +318,17 @@ $if(csl-refs)$
   \setlength{\parskip}{#2\cslentryspacingunit}
  }%
  {}
+% Add lowercase alias for newer pandoc versions (no parameters)
+\newenvironment{cslreferences}
+ {% don't indent paragraphs
+  \setlength{\parindent}{0pt}
+  % turn on hanging indent
+  \let\oldpar\par
+  \def\par{\hangindent=\cslhangindent\oldpar}
+  % set entry spacing
+  \setlength{\parskip}{\cslentryspacingunit}
+ }%
+ {}
 \usepackage{calc}
 \newcommand{\CSLBlock}[1]{#1\hfill\break}
 \newcommand{\CSLLeftMargin}[1]{\parbox[t]{\csllabelwidth}{#1}}

@@ -1,69 +1,73 @@
- 
-Your manuscript JSTARS-2025-00807 Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing has been reviewed by the J-STARS Editorial Review Board and recommended for publication subject to satisfactory response to major revisions suggested. It is recommended that you resubmit your manuscript as revised in accordance with the Editorial Review Board comments given below.
+---
+title: "Response to Reviewers: JSTARS-2025-00807"
+subtitle: "Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing"
+author:
+- name: Michael L. Mann et al.
+date: 2025
+documentclass: article
+classoption: [11pt]
+geometry: margin=1in
+---
 
-***Any supplementary files a reviewer may have attached containing additional comments will NOT appear in the letter delivered to your personal e-mail inbox.  They will, however, appear in a copy of this letter.   Please review both copies to make sure you have received all of the comments***
+<!-- compile working with:
+cd writeup
+pandoc ./Revisions 1/comments.md --template=mytemplate.tex -o reviewer_Response_JSTARS-2025-00807.pdf --bibliography=refs.bib --pdf-engine=xelatex
+-->
+
+
+
+
+# Editorial Decision
+
+Your manuscript JSTARS-2025-00807 *Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing* has been reviewed by the J-STARS Editorial Review Board and recommended for publication subject to satisfactory response to major revisions suggested. It is recommended that you resubmit your manuscript as revised in accordance with the Editorial Review Board comments given below.
+
+## Submission Requirements
 
 Along with the revised manuscript, please provide an item-by-item response to reviewers' comments, including:
 
-* Which suggested changes were accepted and made.
-* Which were ignored (these should be indicated and justified).
-* Where the changes were made in the manuscript (this should  include all changes with detailed information).
+- Which suggested changes were accepted and made
+- Which were ignored (these should be indicated and justified)
+- Where the changes were made in the manuscript (this should include all changes with detailed information)
 
-Please include the corresponding author information in the authors' footnote.
+## Editor-in-Chief Comments
 
-Important - Please upload and designate your clean revision PDF file as the “Main Document”. Annotated PDF files and summary of changes files should be designated as a “Supporting Document”.
+For revision, two files should be submitted:
 
-Please make sure these responses are not submitted in the space designated for confidential comments to the Editor in Chief.
+1. A revised manuscript, in which the revised part should be highlighted in different color, submitted as the main file
+2. A point-to-point response letter to the comments submitted as supporting file
 
-J-STARS policy requires major revision manuscripts to be returned within 28 days. After this date, the manuscript will be considered as a new submission.  Please contact jstars-editor@ieee.org if you need to request an extension for this deadline.
+**Note:** A "Discussion Section" is suggested for publications in JSTARS. Please improve the manuscript from this aspect, which will make the manuscript more likely to get accepted.
 
-When you are ready to submit your revision, visit the following link:
-https://ieee.atyponrex.com/submission/submissionBoard/REX-PROD-2-8FE1ED0E-785A-4F3B-971B-C90A932B8A65-7FFF13C9-8EC4-4D0E-A147-CDCAE2D11EBD-91754/current?idtype=external
+## Associate Editor Comments
 
-
-**PLEASE BE SURE TO FIRST DETAIL THE CHANGES YOU HAVE MADE IN  RESPONSE TO THE REVIEWERS COMMENTS BEFORE UPLOADING YOUR  REVISION.**
-
-If you have any difficulty please contact:
-Yogendra Tripathy
-jstars-editor@ieee.org
- 
-Sincerely,
-Dr. Peifeng Ma
-Deputy Editor-in-Chief
-IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing
-
-Editor-in-Chief Comments:
-For revision, two files should be submitted, including,
-1) a revised manuscript, in which the revised part in the manuscript should be highlighted in different color, submitted as the main file.
-2)  a point-to-point response letter to the comments submitted as supporting file.
- 
-*** A "Discussion Section" is suggested for publications in JSTARS. Please improve the manuscript from this aspect, which will make the manuscript more likely to get accepted. ***
-
-Associate Editor Comments:
-Associate Editor
-Comments to the Author:
-Dear authors, your paper reviewed by experts has been considered suitable for publication on JSTARS after major revision. Please proceed in reviewing the paper by closely following the reviewers suggestions.
+Your paper reviewed by experts has been considered suitable for publication on JSTARS after major revision. Please proceed in reviewing the paper by closely following the reviewers' suggestions.
 
 
-Reviewer(s) Comments:
-Reviewer: 1
+\newpage
 
-Comments to the Author
+# Reviewer Comments and Responses
+
+## Reviewer 1
+
+### Summary
+
 This paper addresses several important challenges in developing efficient crop-type classification models using the traditional machine-learning approach in data-scarce environments, including the scarcity of training datasets collected from crop fields, especially in developing countries. Combining the dataset collected from crop fields with the imagery datasets extracted using filter-based methods is crucial for achieving high classification accuracy. Crowdsourced data collected by volunteers can serve as a potential alternative, but these data are typically lack proper validation. To address this issue, the author proposes a novel methodology leveraging KoboToolbox, YouthMappers participants, and Sentinel-2 satellite imagery, among others, to extract and validate crowdsourced data and time-series imagery features. The authors also propose a traditional machine learning-based classification model that utilizes the integrated dataset of time-series features with crowdsourced, field-validated crop-type labels to validate their approach. The proposed methods show promise by achieving high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85.
 
-Strengths:
--The paper is well-structured and follows a clear and logical progression.
--The authors provide a significant introduction and background, giving insight into the challenges that limit the implementation of an efficient crop-type classification.
--The authors contribute to proposing novel methods for extracting and validating crowdsourced data.
+### Strengths
 
-Minor correction:
-- Ensure that reference 25 fits within the column width.
-- The sentence refers to "as seen in the crop calendar in Figure 2 below" Fig 2; However, the figure is displayed above the sentence, not below.
+- The paper is well-structured and follows a clear and logical progression
+- The authors provide a significant introduction and background, giving insight into the challenges that limit the implementation of an efficient crop-type classification
+- The authors contribute to proposing novel methods for extracting and validating crowdsourced data
 
-Revision Notes:
+### Minor Corrections
+
+1. Ensure that reference 25 fits within the column width
+2. The sentence refers to "as seen in the crop calendar in Figure 2 below" Fig 2; However, the figure is displayed above the sentence, not below
+
+### Response to Reviewer 1
+
 - Reference 25 has been updated
 - Updated figure 2 reference
-- 
 
 
 
@@ -94,7 +98,7 @@ It is recommended to include comparative experiments with other methods.
 It is suggested to add visualizations and descriptions of the classification results.
 
 
-Revision Comments 
+Revision Comments Reviewer 2:
 
 - We have seperated out the data and methods sections
 - Althought constrained by the 2 column format, we have increased the font sizes on all our figures. 
@@ -143,6 +147,7 @@ Revision Comments
         "Peanuts, soybeans and okra are among the least represented land cover types in the dataset, highlighting the challenges associated with collecting sufficient training data for these categories. This figure also includes land cover types such as water, forest, shrub, and tidal areas, which are essential for providing context to the landscape but were not the focus of this study. The varied distribution of land cover types underscores the complexity of the classification task and the need for robust modeling techniques to accurately capture this diversity."
 
 - Although we appreciate the suggestion of seperating the results and methods, to help improve legibility to non-technical readers we are going to keep them combined. However, we agree the results/discussion section could be better developed.  We are adding the following: 
+
     1) We expanded the discussion of SHAPs values in a number of places for instance:
 
     """
@@ -151,4 +156,16 @@ Revision Comments
 
     """
     Looking at 'B12.absolute.sum.of.changes' we can see it best differentiates shrubs, cotton, and forest. The sum of absolute changes measures the total magnitude of variation in a time series by summing the absolute differences between consecutive time steps, effectively quantifying how much a variable fluctuates over the observation period regardless of direction. When applied to the B12 band (SWIR 2100-2280nm), this metric captures the cumulative volatility in canopy water content and structural properties throughout the growing season. B12's effectiveness at distinguishing shrub, cotton, and forests using sum of absolute changes likely reflects fundamental differences in their temporal stability and management regimes. Cotton, as an intensively managed annual crop, exhibits pronounced temporal variability in the SWIR signal driven by distinct phenological transitions and management interventions. Cotton fields progress through rapid establishment after planting, vigorous vegetative growth, flowering and boll development, and then defoliation before harvest—each transition creating sharp changes in canopy water content and structure that B12 captures.  
+    """
+
+- As suggested, we have added two visualizations of the crop classification results that also include an RGB input image, as well as 3 selected time series features that helped generate that classification. We hope that this will provide some visual evidence of its efficacy and some insight into how a variety of time-series features can identify critical signals for classification. These are included in the new 'Land Cover Product' section.
+
+- We largely revised the conclusion to better summerize our objectives, and finding but also added a large section outlining limitations of the study:
+
+    """
+    Our study has several important limitations that suggest directions for future research. Data collection constraints significantly impacted our results: the 2023 drought affected crop health and planting schedules, resulting in fields at varying phenological stages and some early harvests. Our concentrated data collection window (April-May 2023) captured crops primarily in late growing season, potentially missing spectral signatures from earlier phenological stages that could improve discrimination. Additionally, crop type imbalance in our dataset—with underrepresentation of crops like peanuts, soybeans, and okra these crops were dropped from the study. Confusion between similar crops (e.g., cassava and maize) indicates that additional discriminative features or more extensive training data are needed for these challenging classification scenarios.
+
+    Geographic generalizability remains an open question. Our model was trained exclusively on data from three districts in northern Tanzania (Arusha, Dodoma, and Mwanza), and its transferability to other regions with different agro-ecological conditions, farming practices, or crop varieties remains untested. The spectral and temporal signatures of crops can vary significantly with climate, soil conditions, and management practices, potentially limiting model performance in new geographic contexts.
+
+    Finally, interpretability trade-offs persist despite our use of SHAP values: while providing valuable insights into feature importance, the large number of features (33 final features from hundreds of candidates) still presents challenges for intuitive interpretation. Future work should focus on expanding geographic coverage to assess model transferability, incorporating multi-temporal data collection throughout the growing season, developing methods to handle class imbalance, and exploring more parsimonious feature sets that balance accuracy with interpretability.
     """

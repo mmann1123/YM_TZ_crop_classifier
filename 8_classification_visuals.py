@@ -29,6 +29,9 @@ warnings.filterwarnings('ignore')
 # Initialize Earth Engine
 # ee.authenticate()
 ee.Initialize()
+
+
+
 #%%
 # Set paths
 base_path = "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries"
@@ -48,6 +51,22 @@ rgb_cache_dir = os.path.join(output_dir, "rgb_cache")
 os.makedirs(rgb_cache_dir, exist_ok=True)
 
 print(f"Loading training data from: {training_shp}")
+
+
+
+feature_mapping = {
+    # top 3 used for site 00 visual
+    # "B11_mean": "B11_mean",
+    # "hue_quantile_q_05": "hue_quantile_q_0_05",
+    # "EVI_mean_change": "EVI_mean_change",
+
+    # features for site 03 visual
+    "EVI_standard_deviation": "EVI_standard_deviation",
+    "B11_abs_energy": "B11_abs_energy",
+    "B11_standard_deviation": "B11_standard_deviation",
+}
+
+
 
 # %% Load and sample training data
 gdf = gpd.read_file(training_shp)
@@ -143,12 +162,6 @@ for v, l in zip(values, labels):
 print("\nSearching for input feature files...")
 feature_files = {}
 # Map display names to directory names
-feature_mapping = {
-    "B11_mean": "B11_mean",
-    "hue_quantile_q_05": "hue_quantile_q_0_05",
-    # "EVI_standard_deviation": "EVI_standard_deviation",
-    "EVI_mean_change": "EVI_mean_change"
-}
 
 for display_name, dir_name in feature_mapping.items():
     # Search for VRT mosaic files in subdirectories

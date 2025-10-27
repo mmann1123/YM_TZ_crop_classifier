@@ -267,7 +267,18 @@ for idx, (row, bbox_utm) in enumerate(zip(sample_gdf.iterrows(), bbox_list)):
 
         # Display the RGB image
         if img_array is not None:
-            im0 = axes[0].imshow(img_array, aspect='auto')
+            # Normalize RGB image for consistent brightness
+            # Convert to float and normalize each band to 0-1 range
+            img_normalized = img_array.astype(np.float32)
+            for i in range(3):  # For each RGB band
+                band = img_normalized[:, :, i]
+                # Use 2nd and 98th percentile for robust normalization
+                p2, p98 = np.percentile(band, (1, 99))
+                if p98 > p2:  # Avoid division by zero
+                    band = np.clip((band - p2) / (p98 - p2), 0, 1)
+                    img_normalized[:, :, i] = band
+
+            im0 = axes[0].imshow(img_normalized, aspect='auto')
             axes[0].set_title('Sentinel-2 RGB Composite (2023)', fontsize=TITLE_FONTSIZE, fontweight='bold', pad=10)
             axes[0].axis('off')
             # Add invisible colorbar for alignment

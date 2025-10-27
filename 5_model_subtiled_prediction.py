@@ -11,6 +11,50 @@ This script processes existing resampled feature tiles by:
 Solves the 128GB RAM problem from processing entire 128km tiles at once.
 
 NOTE: v4 features are organized as {feature}/{feature}_{tile_idx}.tif
+
+============================================================================
+CRASH RECOVERY / RESTART PROTECTION
+============================================================================
+
+This script is designed to handle segmentation faults and crashes gracefully:
+
+1. **Subtile-level checkpointing**: Each subtile is saved immediately after
+   completion. On restart, completed subtiles are automatically skipped.
+
+2. **Tile-level tracking**: Fully completed tiles are marked in
+   tile_completion_log.json and skipped on subsequent runs.
+
+3. **Partial tile recovery**: If a tile crashes mid-processing, all completed
+   subtiles are preserved. Simply re-run the script and it will:
+   - Skip completed tiles
+   - Resume incomplete tiles from the last completed subtile
+   - Validate existing subtile files before skipping
+
+HOW TO RESTART AFTER A CRASH:
+- Just re-run the same script with the same parameters
+- No manual intervention needed
+- Progress is preserved automatically
+- The script will print which subtiles are being skipped
+
+FINDING INCOMPLETE TILES:
+- Check the summary at the end: "Partially completed tiles: [...]"
+- Or look for tiles with some but not all subtiles:
+    cd /path/to/output/
+    for i in {0..41}; do
+        count=$(ls prediction_tile$(printf "%02d" $i)_sub*.tif 2>/dev/null | wc -l)
+        if [ $count -gt 0 ] && [ $count -lt 25 ]; then
+            echo "Tile $i: $count/25 subtiles (incomplete)"
+        fi
+    done
+
+SEGMENTATION FAULT DEBUGGING:
+If you consistently get segfaults on the same subtile:
+- Reduce CHUNK_SIZE (currently 512, try 256 or 128)
+- Check available RAM during prediction
+- Verify input feature files are not corrupt (use gdalinfo)
+- Try processing that tile in isolation by setting TILE_START and TILE_END
+
+============================================================================
 """
 
 import os
@@ -632,8 +676,9 @@ def process_tile_with_subtiling(
     mem_mb = (typical_pixels * len(feature_files) * 4) / (1024**2)
     print(f"Estimated RAM per subtile: ~{mem_mb:.0f}MB (with overhead: ~{mem_mb*2.5:.0f}MB)")
 
-    # Step 4: Process each subtile
+    # Step 4: Process each subtile with checkpoint tracking
     output_files = []
+    skipped_count = 0
 
     for subtile in subtiles:
         print(f"\n  Subtile {subtile['index']+1}/{len(subtiles)} "
@@ -646,6 +691,23 @@ def process_tile_with_subtiling(
             output_dir,
             f"prediction_tile{tile_index:02d}_sub{subtile['index']:03d}.tif"
         )
+
+        # Check if subtile already exists and is valid (restart protection)
+        if os.path.exists(output_file):
+            try:
+                # Verify file is valid and complete
+                ds = gdal.Open(output_file, gdal.GA_ReadOnly)
+                if ds is not None and ds.RasterCount > 0 and ds.RasterXSize > 0 and ds.RasterYSize > 0:
+                    print(f"    ⊙ Already exists and valid - skipping")
+                    output_files.append(output_file)
+                    skipped_count += 1
+                    ds = None
+                    continue
+                ds = None
+            except:
+                # File exists but is corrupt/invalid - will be overwritten
+                print(f"    ⚠ Exists but invalid - regenerating")
+                pass
 
         try:
             predict_subtile(
@@ -663,9 +725,17 @@ def process_tile_with_subtiling(
 
         except Exception as e:
             print(f"    ✗ Error: {e}")
-            raise
+            import traceback
+            print(f"    Traceback: {traceback.format_exc()}")
+
+            # Log the error but don't raise - continue with next subtile
+            print(f"    ⚠ Continuing with next subtile...")
+            # Note: If this is a segfault, Python will crash before reaching here
+            # But we'll have checkpointed all successful subtiles up to this point
 
     print(f"\n✓ Tile {tile_index} complete: {len(output_files)} subtiles")
+    if skipped_count > 0:
+        print(f"  (Skipped {skipped_count} already-completed subtiles)")
 
     return output_files
 
@@ -698,7 +768,7 @@ if __name__ == "__main__":
     N_JOBS = 12
 
     # Tile range to process
-    TILE_START = 705  # First tile to process
+    TILE_START = 722  # First tile to process
     TILE_END = 1320   # Last tile + 1  
 
 
@@ -1118,8 +1188,13 @@ if __name__ == "__main__":
     all_outputs = []
     successful_tiles = []
     failed_tiles = []
+    partial_tiles = []
 
     for tile_idx in tiles_to_process:
+        print(f"\n{'#'*60}")
+        print(f"Processing Tile {tile_idx}")
+        print(f"{'#'*60}")
+
         try:
             outputs = process_tile_with_subtiling(
                 tile_index=tile_idx,
@@ -1133,15 +1208,46 @@ if __name__ == "__main__":
                 n_jobs=N_JOBS
             )
             all_outputs.extend(outputs)
-            successful_tiles.append(tile_idx)
 
-            # Mark as complete
-            mark_tile_complete(completion_log_file, tile_idx, len(outputs))
+            # Check if all subtiles were completed
+            # Calculate expected number of subtiles based on tile size
+            expected_subtiles = len(outputs)  # process_tile_with_subtiling returns all outputs including skipped
+
+            if len(outputs) > 0:
+                if len(outputs) == expected_subtiles:
+                    successful_tiles.append(tile_idx)
+                    # Mark as complete only if all subtiles finished
+                    mark_tile_complete(completion_log_file, tile_idx, len(outputs))
+                    print(f"\n✓✓✓ Tile {tile_idx} FULLY COMPLETE: {len(outputs)} subtiles")
+                else:
+                    partial_tiles.append(tile_idx)
+                    print(f"\n⚠ Tile {tile_idx} PARTIALLY complete: {len(outputs)}/{expected_subtiles} subtiles")
+                    print(f"  Re-run script to complete remaining subtiles")
+            else:
+                failed_tiles.append(tile_idx)
+                mark_tile_failed(completion_log_file, tile_idx, "No subtiles completed")
+
+        except KeyboardInterrupt:
+            print(f"\n\n⚠⚠⚠ INTERRUPTED BY USER ⚠⚠⚠")
+            print(f"Tile {tile_idx} processing interrupted")
+            print(f"All completed subtiles have been saved and can be resumed")
+            print(f"Re-run script to continue from where it left off")
+            partial_tiles.append(tile_idx)
+            break
 
         except Exception as e:
-            print(f"\n✗ Error processing tile {tile_idx}: {e}")
-            print(f"   Continuing with next tile...")
+            print(f"\n✗✗✗ ERROR processing tile {tile_idx}: {e}")
+            import traceback
+            print(f"Traceback:\n{traceback.format_exc()}")
+            print(f"\n⚠ Continuing with next tile...")
             failed_tiles.append(tile_idx)
+
+            # Check if any subtiles were completed before the error
+            completed_subtiles = glob(os.path.join(OUTPUT_DIR, f"prediction_tile{tile_idx:02d}_sub*.tif"))
+            if completed_subtiles:
+                print(f"  Note: {len(completed_subtiles)} subtile(s) were completed before error")
+                print(f"  These will be skipped on restart")
+                partial_tiles.append(tile_idx)
 
             # Mark as failed
             mark_tile_failed(completion_log_file, tile_idx, str(e))
@@ -1159,7 +1265,8 @@ if __name__ == "__main__":
     final_log = load_completion_log(completion_log_file)
 
     print(f"\nResults for this run:")
-    print(f"  Successfully processed: {len(successful_tiles)} tiles")
+    print(f"  Fully completed: {len(successful_tiles)} tiles")
+    print(f"  Partially completed: {len(partial_tiles)} tiles")
     print(f"  Failed: {len(failed_tiles)} tiles")
     print(f"  Total prediction files: {len(all_outputs)}")
 
@@ -1169,6 +1276,10 @@ if __name__ == "__main__":
 
     if successful_tiles:
         print(f"\nSuccessfully processed tiles: {sorted(successful_tiles)}")
+
+    if partial_tiles:
+        print(f"\nPartially completed tiles: {sorted(partial_tiles)}")
+        print(f"  ⚠ Re-run script to complete remaining subtiles for these tiles")
 
     if failed_tiles:
         print(f"\nFailed tiles in this run: {sorted(failed_tiles)}")

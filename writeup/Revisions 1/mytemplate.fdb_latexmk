@@ -1,0 +1,17 @@
+# Fdb version 3
+["pdflatex"] 1762438054 "/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/Revisions 1/mytemplate.tex" "mytemplate.pdf" "mytemplate" 1762438054
+  "$documentclass$.cls" 0 -1 0 ""
+  "/etc/texmf/web2c/texmf.cnf" 1673971414 475 c0e671620eb5563b2130f56340a5fde8 ""
+  "/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/Revisions 1/mytemplate.tex" 1762438054 13755 704aa80937f2fa2c6e9c4c09b4a02162 ""
+  "/usr/share/texlive/texmf-dist/tex/latex/hyperref/hyperref.sty" 1623096352 230915 97a8817f13de4e61bbc3592cb2caa995 ""
+  "/usr/share/texlive/texmf-dist/tex/latex/url/url.sty" 1388531844 12796 8edb7d69a20b857904dd0ea757c14ec9 ""
+  "/usr/share/texlive/texmf-dist/tex/latex/xcolor/xcolor.sty" 1635798903 56029 3f7889dab51d620aa43177c391b7b190 ""
+  "/usr/share/texlive/texmf-dist/tex/xelatex/xecjk/xeCJK.sty" 1639348229 181053 eb8addfa85bbd37389125f93da936dc2 ""
+  "/usr/share/texlive/texmf-dist/web2c/texmf.cnf" 1644012257 39432 7155514e09a3d69036fac785183a21c2 ""
+  "/usr/share/texmf/web2c/texmf.cnf" 1644012257 39432 7155514e09a3d69036fac785183a21c2 ""
+  "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1710468069 2800118 a6c404ef0d30b41e3d1357dae179d3e0 ""
+  "mytemplate.aux" 1762438054 32 3985256e7290058c681f74d7a3565a19 ""
+  "mytemplate.tex" 1762438054 13755 704aa80937f2fa2c6e9c4c09b4a02162 ""
+  (generated)
+  "mytemplate.log"
+  "mytemplate.pdf"

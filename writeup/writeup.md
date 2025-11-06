@@ -37,7 +37,7 @@ header-includes:
     }
 
 abstract: |
-  This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85. The model often match or outperform broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
+  This study introduces a novel approach to traditional machine learning methodology for crop type classification in Tanzania, by integrating crowdsourced data with time-series features extracted from Sentinel-2 satellite imagery. Leveraging the YouthMappers network, we collected ground validation data on various crops, including challenging types such as cassava, millet, sunflower, sorghum, and cotton across a range of agricultural areas. Traditional machine learning algorithms, augmented with carefully engineered time-series features, were employed to map the different crop classes. Our approach achieved high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85. The model often matched or outperformed broadly used land cover models which simply classify 'agriculture' without specifying crop types. By interpreting feature importance using SHAP values, we identified key time-series features driving the model's performance, enhancing both interpretability and reliability. Our findings demonstrate that traditional machine learning techniques, combined with computationally efficient feature extraction methods, offer a practical and effective “lite learning” approach for mapping crop types in data-scarce environments. This methodology facilitates accurate crop type classification using a low-cost, resource-limited approach that contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts, such as sub-Saharan Africa.
 --- 
 
 <!-- \linenumbers  
@@ -46,16 +46,26 @@ abstract: |
 <!-- \newgeometry{margin=1in}  
 \captionsetup{justification=raggedright, singlelinecheck=false}
    -->
+
+
+
 <!-- compile working with:
 cd writeup
-pandoc writeup.md --template=mytemplate.tex -o output_IEEE.pdf --bibliography=refs.bib --pdf-engine=xelatex --citeproc 
+pandoc writeup.md --template=mytemplate.tex -o output_JSTARS-2025-00807.pdf --bibliography=refs.bib --pdf-engine=xelatex
 
+pandoc writeup.md --template=mytemplate.tex \
+  --from markdown+raw_tex \
+  --to latex \
+  --bibliography=refs.bib \
+  --citeproc \
+  -o output_JSTARS-2025-00807.tex
+ 
 ------------------------------------------------
 # manually create tex then run manually to get error
 # create LaTeX only (no PDF)
 pandoc writeup.md --template=mytemplate.tex \
   --from markdown+raw_tex --to latex \
-  --bibliography=refs.bib --citeproc -o output.tex
+  --bibliography=refs.bib -o output.tex
 
 xelatex -file-line-error -interaction=errorstopmode -halt-on-error output.tex
 
@@ -102,7 +112,7 @@ The strength of traditional machine learning approaches lies in their ability to
 
 Traditional machine learning algorithms require the extraction of variables (e.g. max EVI, mean blue band) that can help distinguish different plant or crop types [@begue2018remote]. The development of salient time-series features to capture phenological differences between locations from remotely sensed images remains a challenge. These features are typically derived from the spectral bands (e.g. red edge, NIR) of the satellite imagery or indexes, such as the enhanced vegetation index (EVI), and basic time series statistics (e.g. mean, max, minimum, slope) for the growing season [@morton2006cropland]. Meanwhile a broader set of time series statistics from bands or indexes may be more relevant for a number of applications. For instance the skewness of EVI might help distinguish crops that green-up earlier vs later in the season, measures of the numbers of peaks in EVI might help differentiate intercropping or multiple plantings in a season [@begue2018remote]. However, the selection and extraction of these features can be time-consuming and labor-intensive, requiring domain expertise and manual intervention.
 
-In contrast, deep learning methods have dominated the most recent literature [@agriculture13050965; @hohl2024recent]. These methods include both recurrent neural networks (RNN) and convolutional neural networks (CNN). Recurrent Neural Networks (RNNs) are a class of neural networks that are particularly powerful for modeling sequential data such as time series, speech, text, and audio. The fundamental feature of RNNs is their ability to maintain a 'memory' of previous inputs by using their internal state (hidden layers), which allows them to exhibit dynamic temporal behavior. RNNs and its variants allow the integration of time-series imagery, significantly improving crop type classification outcomes especially in data rich environments [@agriculture13050965; camps2021deep]. Deep learning approaches however typically require much larger sets of training data, may be more prone to overfitting especially with small sample sizes, have significant limitations to interpretability, and require expensive compute [@hohl2024recent; @rs13132591; @agriculture13050965; @LI2023103345; @MA2019166]. Although recent efforts have closed the gap e.g. [@tseng2021cropharvest], the lack of readily available and reliable ground truth data or benchmark datasets for training, as discussed earlier, may limit the applicability of deep learning for a variety of tasks including crop classification and make researchers more reliant of less reliable techniques like transfer learning or zero-shot or low shot methods [@owusu2024towards; @LI2023103345; @MA2019166]. Moreover, training data for extreme events, like crop losses, disease, and lodging are largely non-existant.  Interpretability is also a salient weakness as interpretation of models allows us to gain scientific insight and assess trustworthiness and fairness in so far as outputs affect policy decisions.  
+In contrast, deep learning methods have dominated the most recent literature [@agriculture13050965; @hohl2024recent]. These methods include both recurrent neural networks (RNN) and convolutional neural networks (CNN). Recurrent Neural Networks (RNNs) are a class of neural networks that are particularly powerful for modeling sequential data such as time series, speech, text, and audio. The fundamental feature of RNNs is their ability to maintain a 'memory' of previous inputs by using their internal state (hidden layers), which allows them to exhibit dynamic temporal behavior. RNNs and its variants allow the integration of time-series imagery, substantially improving crop type classification outcomes especially in data rich environments [@agriculture13050965; camps2021deep]. Deep learning approaches however typically require much larger sets of training data, may be more prone to overfitting especially with small sample sizes, have substantial limitations to interpretability, and require expensive compute [@hohl2024recent; @rs13132591; @agriculture13050965; @LI2023103345; @MA2019166]. Although recent efforts have closed the gap e.g. [@tseng2021cropharvest], the lack of readily available and reliable ground truth data or benchmark datasets for training, as discussed earlier, may limit the applicability of deep learning for a variety of tasks including crop classification and make researchers more reliant of less reliable techniques like transfer learning or zero-shot or low shot methods [@owusu2024towards; @LI2023103345; @MA2019166]. Moreover, training data for extreme events, like crop losses, disease, and lodging are largely non-existant.  Interpretability is also a salient weakness as interpretation of models allows us to gain scientific insight and assess trustworthiness and fairness in so far as outputs affect policy decisions.  
 
 An alternative approach turns back the clock on deep learning approaches. For instance CNN classifiers, through the exertion of tremendous effort of GPUs, can apply and learn from thousands of filters or convolutions that help detect distinct features like edges, textures or patterns. It is however possible to apply a more limited yet salient set of filters like Fourier Transforms, Differential Morphological Profiles [@pesaresi2001new], Line Support Regions or Structural Feature Sets [@huang2007classification] amongst others, to images and then use these as features in more traditional machine learning approaches [@graesser2012image, @owusu2024towards, @engstrom2022poverty; @chao2021evaluating; @urbansci7040116]. This approach may be particularly useful in data-scarce environments, requiring less training data and potentially offering more efficient results in low-information settings. The same approach has been taken for time series analysis, where instead of learning patterns through a RNNs memory, we can apply a more limited but potentially salient series of time series filters. Measures of trends, descriptions of distributions, or measures of change and complexity might adequately describe time series properties for regression and classification tasks [@christ2018time; @yang2021anomaly]. This time series filter approach, developed for this paper, can also be applied on a pixel-by-pixel basis to satellite image bands or index values[@xr_fresh_2021].
 
@@ -154,7 +164,7 @@ Crop type data collection was designed and executed by YouthMappers through a cr
    \label{fig:methodology_flowchart} %can refer to in text with \ref{fig:methodology_flowchart}
 \end{figure}
 
-Additional training data for non-agricultural sites was collected utilizing high resolution imagery from Google Earth. These data were used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  The final cleaned dataset includes 1,400 crop type observations of rice, maize, cassava, sunflower, sorghum, cotton, and millet; plus 386 other observations of land cover classes including water, tidal areas, forest, shrub and urban.  
+Additional training data for non-agricultural sites was collected utilizing high resolution imagery from Google Earth. These data were used to supplement the crowdsourced data and improve the model's ability to distinguish between crops and more common land cover types like forests, urban areas, and water.  The final cleaned dataset includes over 1,400 crop type observations of rice, maize, cassava, sunflower, sorghum, cotton, and millet; plus 386 other observations of land cover classes including water, tidal areas, forest, shrub and urban.  
 
 ## Satellite Imagery
 
@@ -173,7 +183,7 @@ To ensure the success of our project, we focused heavily on the design of our da
 
 ### Field Data
 
-Young crops exhibit significant differences compared to mature crops in terms of color, density, and phenological development. Variations in the crop cycle across different fields could lead to heteroscedasticity in the spectral reflectance measurements used for machine learning (ML) training, thereby affecting the precision and accuracy of the model. By targeting the period of April through May as we aimed to capture crops late in the growing season, and yet before harvest as seen in the crop calendar in Figure \ref{fig:crop_cal} below.
+Young crops exhibit substantial differences compared to mature crops in terms of color, density, and phenological development. Variations in the crop cycle across different fields could lead to heteroscedasticity in the spectral reflectance measurements used for machine learning (ML) training, thereby affecting the precision and accuracy of the model. By targeting the period of April through May as we aimed to capture crops late in the growing season, and yet before harvest as seen in the crop calendar in Figure \ref{fig:crop_cal} below.
 
 \begin{figure}[H]
    \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/plant_ghant.png}
@@ -193,27 +203,28 @@ The timing of data collection was primarily driven by crop phenology and field c
 
 The data collection was managed through KoboCollect, hosted on the KoboToolBox infrastructure, which provided an effective platform for gathering and organizing data. This approach enabled a collection of the desired volume of data points necessary for model training and evaluation, as summarized in Table \ref{tab:data_n}.
 
-\onecolumn 
+
 \begin{table}[h!]
 \centering
-\begin{tabular}{@{}lp{4cm}p{4cm}p{4cm}@{}}
+\small
+\begin{tabular}{@{}lcp{4.5cm}@{}}
 \toprule
-& \textbf{Arusha} & \textbf{Mwanza} & \textbf{Dodoma} \\ \midrule
-\textbf{Desired points:} & \textbf{300} & \textbf{1000} & \textbf{800} \\ 
-\midrule \\
-\textbf{Crops:} & Maize \newline Rice \newline Sorghum \& Millet 
-               & Maize \newline Cotton \newline Rice \newline Peanuts or Groundnut 
-               & Sorghum \newline Maize \newline Millet \newline Sunflower \newline Peanuts or Groundnut \newline Cotton Fields \\ 
+\textbf{Region} & \textbf{Points} & \textbf{Primary Crops} \\
+\midrule
+Arusha & 300 & Maize, Rice, Sorghum, Millet \\
+\midrule
+Mwanza & 1000 & Maize, Cotton, Rice, Groundnut \\
+\midrule
+Dodoma & 800 & Sorghum, Maize, Millet, Sunflower, Groundnut, Cotton \\
 \bottomrule
 \end{tabular}
 \caption{Collection Targets and Primary Crops by Region in Tanzania}
 \label{tab:data_n}
 \end{table}
-\twocolumn
 
 ### Field Data Cleaning
 
-The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several steps. First, duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset. Second, observations with missing or incomplete data were addressed; depending on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset. Third, each observation was visually inspected using in-situ photos taken by students at each site, which helped verify the accuracy of the recorded crop types and field conditions. Fourth, crop type labels were standardized to ensure consistency across the dataset by correcting typographical errors and unifying different naming conventions for the same crop. Finally, the geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded to an observable field from satellite imagery. After completing the cleaning process, the final dataset consisted of 1,400 crop type entries, providing a robust foundation for training and evaluating the machine learning models used in this study.
+The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several steps. First, duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset. Second, observations with missing or incomplete data were addressed; depending on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset. Third, each observation was visually inspected using in-situ photos taken by students at each site, which helped verify the accuracy of the recorded crop types and field conditions. Fourth, crop type labels were standardized to ensure consistency across the dataset by correcting typographical errors and unifying different naming conventions for the same crop. Finally, the geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded to an observable field from satellite imagery. After completing the cleaning process, the final dataset consisted of over 1,400 crop type entries, providing a robust foundation for training and evaluating the machine learning models used in this study.
 
 ## Analytical Methods
 
@@ -274,7 +285,7 @@ Feature selection then is the union of the top 30 time series features found wit
 
 ### Crowd Sourced Data
 
-To address the significant gap in available crop type datasets, particularly in developing regions, this study harnessed the power of crowdsourced data to enhance the robustness and applicability of our machine learning models. Crowdsourced data collection, an innovative approach in the agricultural domain, involves gathering data from a large number of volunteers or citizen scientists, who provide valuable ground truth information. This method has proven especially useful in areas where traditional data collection methods are challenging due to logistical, financial, or infrastructural constraints.
+To address the substantial gap in available crop type datasets, particularly in developing regions, this study harnessed the power of crowdsourced data to enhance the robustness and applicability of our machine learning models. Crowdsourced data collection, an innovative approach in the agricultural domain, involves gathering data from a large number of volunteers or citizen scientists, who provide valuable ground truth information. This method has proven especially useful in areas where traditional data collection methods are challenging due to logistical, financial, or infrastructural constraints.
 
 By leveraging  the YouthMappers student organization, with over 420 chapters in 80 countries, we were able to collect a large dataset of crop type observations in Tanzania. Participating YouthMappers chapters included: the Institute of Rural Development Planning - Dodoma, Institute of Rural Development Planning - Mwanza, University of Dodoma, the Nelson Mandela African Institution of Science and Technology, and the Institute of Accountancy Arusha. Moreover this exercise provided an important opportunity for students to gain practical experience in data collection, analysis, and interpretation, contributing to their professional development and capacity building in the geospatial domain.
 
@@ -334,7 +345,7 @@ The final selection of features for model training was carefully curated to incl
 
 ### Model Selection
 
-Optuna trials tuning results selected LightGBM [@ke2017lightgbm]is a gradient boosting algorithm that combines many simple decision trees to produce a stronger single model, improving the model at each step. LightGBM grows decision trees leaf-wise rather than adding different levels, thereby targeting branches that most need refining.  
+Optuna trials tuning results selected LightGBM [@ke2017lightgbm] is a gradient boosting algorithm that combines many simple decision trees to produce a stronger single model, improving the model at each step. LightGBM grows decision trees leaf-wise rather than adding different levels, thereby targeting branches that most need refining.  
 
 ### Model Performance
 
@@ -364,7 +375,6 @@ Recall (PA)   & 0.84    \\
 \end{tabular}
 \caption{Summary of Classification Metrics}
 \label{tab:metrics}
-\ref{tab:metrics}
 \end{table}
 
 The overall high out-of-sample performance in Table \ref{tab:metrics} across the majority of categories suggests that the model is effective for practical applications in land cover classification, though further refinement is recommended for categories showing lower accuracy and higher misclassification rates.
@@ -381,18 +391,47 @@ Source: [@kerner2024accurate]
 
 The integration of crowdsourced data with traditional machine learning and engineered time-series features yielded a robust model for crop classification in Tanzania. While the model performed exceptionally well for crops like maize and rice, some confusion persisted among similar crop types such as sorghum and cotton. This suggests that additional discriminative features or more extensive training data may be necessary to further enhance classification accuracy for these crops. The challenges encountered, such as variability in crop cycles and challenges of crop identification, highlight the complexities of agricultural monitoring in resource-limited settings. Addressing these issues in future research could improve model performance and generalizability. Overall, our findings demonstrate the practicality of using efficient, interpretable machine learning methods in conjunction with community-driven data collection to advance agricultural monitoring in developing regions.
 
+### Land Cover Product
+
+Using the trained model, we generated a land cover classification map for a sample area in Dodoma and Bukumbi Tanzania, respectively. The maps (Figure \ref{fig:site_00_visualization} \& \ref{fig:site_03_visualization}) illustrate the spatial distribution of various land cover types, including most crop types. The classification results highlight the model's ability to  delineate different crop types and land covers based on the spectral and temporal features extracted from Sentinel-2 imagery.
+
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/site_00_visualization.png}  
+    \caption{Land Cover Classification Visualization \newline Land cover classification results for a sample area in Dodoma, Tanzania}
+    \label{fig:site_00_visualization}  
+\end{figure}
+
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/site_03_visualization.png}  
+    \caption{Land Cover Classification Visualization \newline Land cover classification results for a sample area in Bukumbi, Tanzania}
+    \label{fig:site_03_visualization}  
+\end{figure}
+
+To illustrate how individual time-series features help delinate different crop types, we include a subset of them for each site including: 'B11_mean', 'hue_quantile_q_05" and "EVI_mean_change" in Figure \ref{fig:site_00_visualization} and 'EVI_standard_deviation', 'B11_abs_energy' and 'B11_standard_deviation' in Figure \ref{fig:site_03_visualization}. These features were selected based on their high SHAP values and their relevance to distinguishing between different crop types. It is also clear that more training data for non-crop land covers like urban, forest and shrub are needed to improve classification in these areas. Moreover some window filtering or smoothing could help reduce the speckling effect seen in some areas.
 
 ## Conclusion
 
-In this study, we introduced a novel methodology for crop type classification in Tanzania by leveraging crowdsourced data and time-series features extracted from Sentinel-2 satellite imagery. By combining advanced remote sensing techniques with local knowledge, we addressed significant gaps in agricultural monitoring within resource- and data-limited settings. Our approach gathered a new dataset and successfully applied it to a real-world task at very low cost, using traditional machine learning algorithms augmented with carefully engineered time-series features to precisely identify crop types.
+In this study, we introduced a novel "lite learning" methodology for crop type classification in Tanzania that demonstrates the continued viability of traditional machine learning approaches in data-scarce environments. By integrating crowdsourced data from the YouthMappers network with automated time-series feature extraction from Sentinel-2 satellite imagery, we addressed critical gaps in agricultural monitoring within resource-limited settings.
 
-Our results demonstrated the effectiveness of the proposed methodology, achieving a Cohen's Kappa score of 0.82 and an F1-micro score of 0.84 across a diverse and multi-class dataset. The model accurately classified challenging crops such as cassava, millet, sorghum, and cotton. The integration of crowdsourced data and time-series features provided valuable insights into the temporal dynamics of crop growth, enhancing the model's accuracy and reliability. Notably, our model—although trained specifically on Tanzanian data—outperforms broadly used land cover models that perform the simpler task of classifying 'agriculture' without specifying the crop type. This highlights the need for better and more frequent crop type classification data.
+The crowdsourced data collection methodology proved both effective and scalable, engaging dozens of students to gather over 1,400 crop observations over a two-week period. This approach not only generated essential training data but also built local capacity in geospatial data collection and analysis, contributing to sustainable knowledge transfer and professional development.
 
-By interpreting feature importance using SHAP values, we gained a deeper understanding of the model's behavior and the key predictors driving its predictions. Identifying the most influential features across different land cover types allowed us to refine the feature selection process, ensuring that the selected features were both consistently influential and impactful under specific conditions.
+Our approach achieved robust performance with a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85 across seven crop types and six land cover classes. Notably, while our model was trained specifically on Tanzanian data, it matched or exceeded the performance of broadly-used global land cover models that perform the simpler task of classifying undifferentiated 'agriculture'. This achievement is particularly important given that we classified specific crop types—including challenging crops such as cassava, millet, sorghum, sunflower, and cotton—rather than simply identifying agricultural land. Importantly, these are out of sample results using a rigorous group k-fold cross-validation scheme that prevents data leakage between training and testing plots.
 
-In conclusion, our study underscores the viability and effectiveness of traditional machine learning approaches augmented with carefully engineered time-series features for crop type classification in data-scarce environments. By "turning back the clock" on deep learning, we demonstrate that applying a limited yet salient set of filters—such as measures of trends, distribution descriptions, and complexity metrics—can capture essential temporal dynamics without the extensive data requirements of deep learning models. This methodology not only achieved high classification accuracy but also enhanced interpretability and computational efficiency.
+The strategic use of SHAP values for feature interpretation revealed the physical and phenological mechanisms driving model predictions. For instance, we found that mean SWIR reflectance (B11.mean) effectively distinguished dryland-adapted crops (sunflower, sorghum, millet) from water-demanding crops by capturing persistent differences in canopy water status throughout the growing season. Similarly, the sum of absolute changes in B12 discriminated between cotton's managed phenological transitions and the more stable spectral signatures of natural vegetation. These insights not only enhanced model interpretability but also provided agronomically meaningful explanations that can inform future data collection and feature engineering efforts.
 
-Our findings highlight that traditional machine learning techniques, combined with advanced yet computationally efficient feature extraction methods, offer a practical and effective alternative to deep learning, particularly in low-information settings prevalent in developing regions. This approach facilitates accurate crop type classification and contributes valuable insights for sustainable agricultural practices and informed policy-making, ultimately impacting food security and land management in resource-limited contexts.
+Our study has several important limitations that suggest directions for future research. Data collection constraints impacted our results: the 2023 drought affected crop health and planting schedules, resulting in fields at varying phenological stages and some early harvests. Our concentrated data collection window (April-May 2023) captured crops primarily in late growing season, potentially missing spectral signatures from earlier phenological stages that could improve discrimination. Additionally, crop type imbalance in our dataset—with underrepresentation of crops like peanuts, soybeans, and okra these crops were dropped from the study. Confusion between similar crops (e.g., cassava and maize) indicates that additional discriminative features or more extensive training data are needed for these challenging classification scenarios.
+
+Geographic generalizability remains an open question. Our model was trained exclusively on data from three districts in northern Tanzania (Arusha, Dodoma, and Mwanza), and its transferability to other regions with different agro-ecological conditions, farming practices, or crop varieties remains untested. The spectral and temporal signatures of crops can vary significantly with climate, soil conditions, and management practices, potentially limiting model performance in new geographic contexts.
+
+Finally, interpretability trade-offs persist despite our use of SHAP values: while providing valuable insights into feature importance, the large number of features (33 final features from hundreds of candidates) still presents challenges for intuitive interpretation. Future work should focus on expanding geographic coverage to assess model transferability, incorporating multi-temporal data collection throughout the growing season, developing methods to handle class imbalance, and exploring more parsimonious feature sets that balance accuracy with interpretability.
+
+By "turning back the clock" on deep learning, we demonstrate that carefully engineered time-series features—capturing trends, distributions, and temporal complexity—can achieve high classification accuracy without the extensive labeled datasets, computational resources, and training time required by deep learning architectures. This "lite learning" approach offers particular advantages for the resource-limited contexts that characterize much of sub-Saharan Africa and other developing regions, where both training data and computational infrastructure remain scarce.
+
+
 
 
 

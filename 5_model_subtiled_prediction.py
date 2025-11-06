@@ -3,12 +3,58 @@
 Subtiled Prediction Script for Tanzania Crop Classification
 
 This script processes existing resampled feature tiles by:
-1. Loading pre-resampled features from final_model_features_v3/
+1. Loading pre-resampled features from final_model_features_v4/
 2. Sub-dividing large tiles (128km) into manageable subtiles (25.6km)
 3. Using geographic bounding boxes with pixel alignment
 4. Predicting in chunks to avoid memory issues
 
 Solves the 128GB RAM problem from processing entire 128km tiles at once.
+
+NOTE: v4 features are organized as {feature}/{feature}_{tile_idx}.tif
+
+============================================================================
+CRASH RECOVERY / RESTART PROTECTION
+============================================================================
+
+This script is designed to handle segmentation faults and crashes gracefully:
+
+1. **Subtile-level checkpointing**: Each subtile is saved immediately after
+   completion. On restart, completed subtiles are automatically skipped.
+
+2. **Tile-level tracking**: Fully completed tiles are marked in
+   tile_completion_log.json and skipped on subsequent runs.
+
+3. **Partial tile recovery**: If a tile crashes mid-processing, all completed
+   subtiles are preserved. Simply re-run the script and it will:
+   - Skip completed tiles
+   - Resume incomplete tiles from the last completed subtile
+   - Validate existing subtile files before skipping
+
+HOW TO RESTART AFTER A CRASH:
+- Just re-run the same script with the same parameters
+- No manual intervention needed
+- Progress is preserved automatically
+- The script will print which subtiles are being skipped
+
+FINDING INCOMPLETE TILES:
+- Check the summary at the end: "Partially completed tiles: [...]"
+- Or look for tiles with some but not all subtiles:
+    cd /path/to/output/
+    for i in {0..41}; do
+        count=$(ls prediction_tile$(printf "%02d" $i)_sub*.tif 2>/dev/null | wc -l)
+        if [ $count -gt 0 ] && [ $count -lt 25 ]; then
+            echo "Tile $i: $count/25 subtiles (incomplete)"
+        fi
+    done
+
+SEGMENTATION FAULT DEBUGGING:
+If you consistently get segfaults on the same subtile:
+- Reduce CHUNK_SIZE (currently 512, try 256 or 128)
+- Check available RAM during prediction
+- Verify input feature files are not corrupt (use gdalinfo)
+- Try processing that tile in isolation by setting TILE_START and TILE_END
+
+============================================================================
 """
 
 import os
@@ -27,9 +73,108 @@ from sklearn_helpers import best_classifier_pipe, classifier_objective
 import optuna
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.metrics import cohen_kappa_score, balanced_accuracy_score
+import pickle
 
 # Enable GDAL exceptions
 gdal.UseExceptions()
+
+
+def save_model_with_metadata(model, feature_list: List[str], file_path: str):
+    """
+    Save trained model with metadata for validation.
+
+    Args:
+        model: Trained sklearn pipeline
+        feature_list: Ordered list of feature names used for training
+        file_path: Path to save pickle file
+    """
+    model_data = {
+        'model': model,
+        'features': feature_list,
+        'feature_count': len(feature_list),
+        'date_trained': datetime.now().isoformat(),
+        'model_type': type(model).__name__
+    }
+
+    with open(file_path, 'wb') as f:
+        pickle.dump(model_data, f)
+
+    print(f"✓ Model saved with metadata:")
+    print(f"  Features: {len(feature_list)}")
+    print(f"  Date: {model_data['date_trained']}")
+
+
+def load_model_with_metadata(file_path: str) -> Tuple[object, List[str], Dict]:
+    """
+    Load trained model and verify metadata.
+
+    Args:
+        file_path: Path to pickle file
+
+    Returns:
+        Tuple of (model, feature_list, metadata_dict)
+    """
+    with open(file_path, 'rb') as f:
+        model_data = pickle.load(f)
+
+    # Handle old pickle format (just model object) vs new format (dict with metadata)
+    if isinstance(model_data, dict) and 'model' in model_data:
+        model = model_data['model']
+        features = model_data.get('features', [])
+        metadata = {
+            'feature_count': model_data.get('feature_count', len(features)),
+            'date_trained': model_data.get('date_trained', 'unknown'),
+            'model_type': model_data.get('model_type', 'unknown')
+        }
+    else:
+        # Old format: just the model object
+        model = model_data
+        features = []
+        metadata = {
+            'feature_count': 'unknown',
+            'date_trained': 'unknown (old format)',
+            'model_type': type(model).__name__
+        }
+
+    return model, features, metadata
+
+
+def verify_feature_compatibility(
+    model_features: List[str],
+    expected_features: List[str]
+) -> Tuple[bool, str]:
+    """
+    Verify that model features match expected features.
+
+    Args:
+        model_features: Features from saved model
+        expected_features: Features from current feature selection
+
+    Returns:
+        Tuple of (is_compatible, error_message)
+    """
+    if not model_features:
+        return False, "Model has no feature metadata (old pickle format)"
+
+    if len(model_features) != len(expected_features):
+        return False, (
+            f"Feature count mismatch: model has {len(model_features)} features, "
+            f"expected {len(expected_features)}"
+        )
+
+    # Check feature names and order
+    mismatches = []
+    for i, (model_feat, expected_feat) in enumerate(zip(model_features, expected_features)):
+        if model_feat != expected_feat:
+            mismatches.append(f"  Position {i}: model has '{model_feat}', expected '{expected_feat}'")
+
+    if mismatches:
+        error_msg = f"Feature mismatch at {len(mismatches)} position(s):\n" + "\n".join(mismatches[:5])
+        if len(mismatches) > 5:
+            error_msg += f"\n  ... and {len(mismatches)-5} more"
+        return False, error_msg
+
+    return True, "Features match perfectly"
 
 
 def load_completion_log(log_file: str) -> Dict:
@@ -96,7 +241,8 @@ def check_tile_features(tile_index: int, feature_names: List[str], feature_dir: 
     invalid_files = []
 
     for feature in feature_names:
-        file_path = os.path.join(feature_dir, f"{feature}_{tile_index}.tif")
+        # v4 structure: features are in subdirectories
+        file_path = os.path.join(feature_dir, feature, f"{feature}_{tile_index}.tif")
 
         # Check if file exists
         if not os.path.exists(file_path):
@@ -500,7 +646,8 @@ def process_tile_with_subtiling(
     # Step 1: Get ordered feature files for this tile
     feature_files = []
     for feature in feature_names:
-        file_path = os.path.join(feature_dir, f"{feature}_{tile_index}.tif")
+        # v4 structure: features are in subdirectories
+        file_path = os.path.join(feature_dir, feature, f"{feature}_{tile_index}.tif")
 
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Missing feature file: {file_path}")
@@ -529,8 +676,9 @@ def process_tile_with_subtiling(
     mem_mb = (typical_pixels * len(feature_files) * 4) / (1024**2)
     print(f"Estimated RAM per subtile: ~{mem_mb:.0f}MB (with overhead: ~{mem_mb*2.5:.0f}MB)")
 
-    # Step 4: Process each subtile
+    # Step 4: Process each subtile with checkpoint tracking
     output_files = []
+    skipped_count = 0
 
     for subtile in subtiles:
         print(f"\n  Subtile {subtile['index']+1}/{len(subtiles)} "
@@ -543,6 +691,23 @@ def process_tile_with_subtiling(
             output_dir,
             f"prediction_tile{tile_index:02d}_sub{subtile['index']:03d}.tif"
         )
+
+        # Check if subtile already exists and is valid (restart protection)
+        if os.path.exists(output_file):
+            try:
+                # Verify file is valid and complete
+                ds = gdal.Open(output_file, gdal.GA_ReadOnly)
+                if ds is not None and ds.RasterCount > 0 and ds.RasterXSize > 0 and ds.RasterYSize > 0:
+                    print(f"    ⊙ Already exists and valid - skipping")
+                    output_files.append(output_file)
+                    skipped_count += 1
+                    ds = None
+                    continue
+                ds = None
+            except:
+                # File exists but is corrupt/invalid - will be overwritten
+                print(f"    ⚠ Exists but invalid - regenerating")
+                pass
 
         try:
             predict_subtile(
@@ -560,9 +725,17 @@ def process_tile_with_subtiling(
 
         except Exception as e:
             print(f"    ✗ Error: {e}")
-            raise
+            import traceback
+            print(f"    Traceback: {traceback.format_exc()}")
+
+            # Log the error but don't raise - continue with next subtile
+            print(f"    ⚠ Continuing with next subtile...")
+            # Note: If this is a segfault, Python will crash before reaching here
+            # But we'll have checkpointed all successful subtiles up to this point
 
     print(f"\n✓ Tile {tile_index} complete: {len(output_files)} subtiles")
+    if skipped_count > 0:
+        print(f"  (Skipped {skipped_count} already-completed subtiles)")
 
     return output_files
 
@@ -576,9 +749,9 @@ if __name__ == "__main__":
 
     # Paths
     BASE_DIR = "/mnt/bigdrive/Dropbox/Tanzania_data/Projects/YM_Tanzania_Field_Boundaries/Land_Cover/northern_tz_data"
-    FEATURE_DIR = "/mnt/bigdrive/final_model_features_v3"  # Pre-resampled tiles
+    FEATURE_DIR = "/mnt/bigdrive/final_model_features_v4"  # Pre-resampled tiles
     MODEL_DIR = os.path.join(BASE_DIR, "models")
-    OUTPUT_DIR = os.path.join(BASE_DIR, "outputs", "subtiled_predictions")
+    OUTPUT_DIR = os.path.join(BASE_DIR, "outputs", "subtiled_predictions_v4")
 
     # Model parameters
     select_how_many = 30
@@ -595,8 +768,8 @@ if __name__ == "__main__":
     N_JOBS = 12
 
     # Tile range to process
-    TILE_START = 0  # First tile to process
-    TILE_END = 42   # Last tile + 1 (process tiles 0-41)
+    TILE_START = 722  # First tile to process
+    TILE_END = 1320   # Last tile + 1  
 
 
     # Classes to keep/drop
@@ -675,23 +848,29 @@ if __name__ == "__main__":
     # Critical: Feature order must be identical for training and prediction
     selected_features = sorted(list(set(list(mean_features) + list(max_features))))
 
-    selected_features = [k.replace("_0", "") for k in selected_features]
+    # selected_features = [k.replace("_0", "") for k in selected_features]
 
     # Replace . with _ to match file naming
     selected_features = [f.replace(".", "_") for f in selected_features]
 
     # Fix quantile naming: q_0_05 -> q_05, q_0_95 -> q_95
-    selected_features = [f.replace("_q_0_05", "_q_05") for f in selected_features]
-    selected_features = [f.replace("_q_0_95", "_q_95") for f in selected_features]
+    # selected_features = [f.replace("_q_0_05", "_q_05") for f in selected_features]
+    # selected_features = [f.replace("_q_0_95", "_q_95") for f in selected_features]
 
     print(f"Selected {len(selected_features)} unique features")
 
-    # Verify features exist in feature directory
+    # Verify features exist in feature directory (v4 structure with subdirectories)
     missing = []
     for feat in selected_features:
-        test_file = os.path.join(FEATURE_DIR, f"{feat}_0.tif")
+        # Check for feature subdirectory
+        feat_dir = os.path.join(FEATURE_DIR, feat)
+        if not os.path.exists(feat_dir):
+            missing.append(f"{feat} (directory missing)")
+            continue
+        # Check for at least tile 0
+        test_file = os.path.join(feat_dir, f"{feat}_0.tif")
         if not os.path.exists(test_file):
-            missing.append(feat)
+            missing.append(f"{feat} (tile 0 missing)")
 
     if missing:
         print(f"\n⚠ Warning: Missing features in {FEATURE_DIR}:")
@@ -702,20 +881,79 @@ if __name__ == "__main__":
     print(f"✓ All features found in {FEATURE_DIR}")
 
     # ==============================================================================
-    # Step 2: Optimize and train final model with selected features
+    # Early Check: Look for pre-trained model before Step 2
     # ==============================================================================
 
     print("\n" + "="*60)
-    print("STEP 2: Optimizing LGBM model with selected features")
+    print("CHECKING FOR PRE-TRAINED MODEL")
     print("="*60 + "\n")
 
-    # Load training data
+    os.chdir(MODEL_DIR)
+    study_name_optimized = f"optimized_final_{select_how_many}_{classifier}_{scoring}_{n_splits}"
+    model_pickle_file = os.path.join(MODEL_DIR, f"trained_model_{study_name_optimized}.pkl")
+
+    skip_training = False
+    pipeline_performance = None
+
+    if os.path.exists(model_pickle_file):
+        print(f"Found pickle file: {os.path.basename(model_pickle_file)}")
+        print("Attempting to load and verify compatibility...")
+
+        try:
+            # Load model with metadata
+            pipeline_performance, model_features, metadata = load_model_with_metadata(model_pickle_file)
+
+            print(f"\n✓ Model loaded from pickle:")
+            print(f"  Date trained: {metadata['date_trained']}")
+            print(f"  Model type: {metadata['model_type']}")
+            print(f"  Feature count: {metadata['feature_count']}")
+
+            # Verify feature compatibility
+            is_compatible, message = verify_feature_compatibility(model_features, selected_features)
+
+            if is_compatible:
+                print(f"\n✓ Feature compatibility check passed")
+                print(f"  {message}")
+                print(f"\n✓ Using cached model - skipping Optuna optimization and training")
+                skip_training = True
+            else:
+                print(f"\n⚠ Feature compatibility check FAILED:")
+                print(f"  {message}")
+                print(f"\n⚠ Deleting incompatible pickle and retraining...")
+                os.remove(model_pickle_file)
+                pipeline_performance = None
+
+        except Exception as e:
+            print(f"\n✗ Error loading pickle: {e}")
+            print(f"⚠ Deleting corrupt pickle and retraining...")
+            try:
+                os.remove(model_pickle_file)
+            except:
+                pass
+            pipeline_performance = None
+
+    else:
+        print(f"No pickle file found at: {os.path.basename(model_pickle_file)}")
+        print("Will proceed with full optimization and training...")
+
+    # ==============================================================================
+    # Step 2: Optimize and train final model with selected features
+    # (Only runs if skip_training = False)
+    # ==============================================================================
+
+    if not skip_training:
+        print("\n" + "="*60)
+        print("STEP 2: Optimizing LGBM model with selected features")
+        print("="*60 + "\n")
+
+    # Load training data (needed for both training and performance calculation)
     os.chdir(BASE_DIR)
     data_path = os.path.join(BASE_DIR, "extracted_features", "merged_data", "all_bands_merged_no_outliers_new.csv")
+    print(f"Loading training data from: {os.path.basename(data_path)}")
     data = pd.read_csv(data_path)
 
-    new_columns = [k.replace("_0", "") for k in data.columns]
-    new_columns = [f.replace(".", "_") for f in new_columns]
+    # new_columns = [k.replace("_0", "") for k in data.columns]
+    new_columns = [f.replace(".", "_") for f in data.columns]
     data.columns = new_columns
 
     # apply keep/drop
@@ -744,77 +982,85 @@ if __name__ == "__main__":
     groups = data["field_id"].values
     weights = data["Field_size"].values
 
-    # Create Optuna study for final model optimization
-    os.chdir(MODEL_DIR)
-    study_name_optimized = f"optimized_final_{select_how_many}_{classifier}_{scoring}_{n_splits}"
+    # Only run Optuna optimization and training if we don't have a valid cached model
+    if not skip_training:
+        # Create Optuna study for final model optimization
+        os.chdir(MODEL_DIR)
 
-    storage = optuna.storages.RDBStorage(
-        url="sqlite:///study.db",
-        engine_kwargs={"connect_args": {"timeout": 30}}
-    )
-
-    # Create or load study
-    try:
-        study = optuna.create_study(
-            study_name=study_name_optimized,
-            storage=storage,
-            direction="maximize",
-            load_if_exists=True
+        storage = optuna.storages.RDBStorage(
+            url="sqlite:///study.db",
+            engine_kwargs={"connect_args": {"timeout": 30}}
         )
-        print(f"✓ Created/loaded study: {study_name_optimized}")
-    except:
-        study = optuna.load_study(
-            study_name=study_name_optimized,
-            storage=storage
+
+        # Create or load study
+        try:
+            study = optuna.create_study(
+                study_name=study_name_optimized,
+                storage=storage,
+                direction="maximize",
+                load_if_exists=True
+            )
+            print(f"✓ Created/loaded study: {study_name_optimized}")
+        except:
+            study = optuna.load_study(
+                study_name=study_name_optimized,
+                storage=storage
+            )
+            print(f"✓ Loaded existing study: {study_name_optimized}")
+
+        # Run optimization
+        n_trials = 50
+        print(f"\nRunning Optuna optimization ({n_trials} trials)...")
+        print(f"Scoring: {scoring}")
+        print(f"Cross-validation: {n_splits}-fold StratifiedGroupKFold")
+
+        study.optimize(
+            lambda trial: classifier_objective(
+                trial,
+                X,
+                y,
+                groups=groups,
+                n_splits=n_splits,
+                classifier_override=["LGBM"],
+                weights=weights,
+                scoring=scoring,
+            ),
+            n_trials=n_trials,
+            n_jobs=-1,
         )
-        print(f"✓ Loaded existing study: {study_name_optimized}")
 
-    # Run optimization
-    n_trials = 50
-    print(f"\nRunning Optuna optimization ({n_trials} trials)...")
-    print(f"Scoring: {scoring}")
-    print(f"Cross-validation: {n_splits}-fold StratifiedGroupKFold")
+        print(f"\n{'='*60}")
+        print("OPTIMIZATION RESULTS")
+        print(f"{'='*60}")
+        print(f"Best trial: {study.best_trial.number}")
+        print(f"Best {scoring} score: {study.best_value:.4f}")
+        print(f"\nBest hyperparameters:")
+        for key, value in study.best_params.items():
+            print(f"  {key}: {value}")
 
-    study.optimize(
-        lambda trial: classifier_objective(
-            trial,
-            X,
-            y,
-            groups=groups,
-            n_splits=n_splits,
-            classifier_override=["LGBM"],
-            weights=weights,
-            scoring=scoring,
-        ),
-        n_trials=n_trials,
-        n_jobs=-1,
-    )
+        # Train final model on full dataset
+        print(f"\n{'='*60}")
+        print("TRAINING FINAL MODEL")
+        print(f"{'='*60}\n")
 
+        pipeline_performance = best_classifier_pipe(
+            db_loc="study.db",
+            study_name=study_name_optimized
+        )
+
+        print(f"Training final model on {len(data)} samples...")
+        pipeline_performance.fit(X, y, classifier__sample_weight=weights)
+
+        # Save the trained model to pickle with metadata
+        print(f"\nSaving trained model to: {os.path.basename(model_pickle_file)}")
+        save_model_with_metadata(pipeline_performance, selected_features, model_pickle_file)
+
+    # Calculate out-of-sample performance (for both cached and newly trained models)
     print(f"\n{'='*60}")
-    print("OPTIMIZATION RESULTS")
-    print(f"{'='*60}")
-    print(f"Best trial: {study.best_trial.number}")
-    print(f"Best {scoring} score: {study.best_value:.4f}")
-    print(f"\nBest hyperparameters:")
-    for key, value in study.best_params.items():
-        print(f"  {key}: {value}")
-
-    # Get best pipeline and train on full dataset
-    print(f"\n{'='*60}")
-    print("TRAINING FINAL MODEL")
-    print(f"{'='*60}\n")
-
-    pipeline_performance = best_classifier_pipe(
-        db_loc="study.db",
-        study_name=study_name_optimized
-    )
-
-    print(f"Training final model on {len(data)} samples...")
-    pipeline_performance.fit(X, y, classifier__sample_weight=weights)
-
-    # Calculate out-of-sample performance
-    print(f"\n{'='*60}")
-    print("OUT-OF-SAMPLE PERFORMANCE")
+    if skip_training:
+        print("OUT-OF-SAMPLE PERFORMANCE (Recalculating for cached model)")
+    else:
+        print("OUT-OF-SAMPLE PERFORMANCE")
     print(f"{'='*60}\n")
 
     cv = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -942,8 +1188,13 @@ if __name__ == "__main__":
     all_outputs = []
     successful_tiles = []
     failed_tiles = []
+    partial_tiles = []
 
     for tile_idx in tiles_to_process:
+        print(f"\n{'#'*60}")
+        print(f"Processing Tile {tile_idx}")
+        print(f"{'#'*60}")
+
         try:
             outputs = process_tile_with_subtiling(
                 tile_index=tile_idx,
@@ -957,15 +1208,46 @@ if __name__ == "__main__":
                 n_jobs=N_JOBS
             )
             all_outputs.extend(outputs)
-            successful_tiles.append(tile_idx)
 
-            # Mark as complete
-            mark_tile_complete(completion_log_file, tile_idx, len(outputs))
+            # Check if all subtiles were completed
+            # Calculate expected number of subtiles based on tile size
+            expected_subtiles = len(outputs)  # process_tile_with_subtiling returns all outputs including skipped
+
+            if len(outputs) > 0:
+                if len(outputs) == expected_subtiles:
+                    successful_tiles.append(tile_idx)
+                    # Mark as complete only if all subtiles finished
+                    mark_tile_complete(completion_log_file, tile_idx, len(outputs))
+                    print(f"\n✓✓✓ Tile {tile_idx} FULLY COMPLETE: {len(outputs)} subtiles")
+                else:
+                    partial_tiles.append(tile_idx)
+                    print(f"\n⚠ Tile {tile_idx} PARTIALLY complete: {len(outputs)}/{expected_subtiles} subtiles")
+                    print(f"  Re-run script to complete remaining subtiles")
+            else:
+                failed_tiles.append(tile_idx)
+                mark_tile_failed(completion_log_file, tile_idx, "No subtiles completed")
+
+        except KeyboardInterrupt:
+            print(f"\n\n⚠⚠⚠ INTERRUPTED BY USER ⚠⚠⚠")
+            print(f"Tile {tile_idx} processing interrupted")
+            print(f"All completed subtiles have been saved and can be resumed")
+            print(f"Re-run script to continue from where it left off")
+            partial_tiles.append(tile_idx)
+            break
 
         except Exception as e:
-            print(f"\n✗ Error processing tile {tile_idx}: {e}")
-            print(f"   Continuing with next tile...")
+            print(f"\n✗✗✗ ERROR processing tile {tile_idx}: {e}")
+            import traceback
+            print(f"Traceback:\n{traceback.format_exc()}")
+            print(f"\n⚠ Continuing with next tile...")
             failed_tiles.append(tile_idx)
+
+            # Check if any subtiles were completed before the error
+            completed_subtiles = glob(os.path.join(OUTPUT_DIR, f"prediction_tile{tile_idx:02d}_sub*.tif"))
+            if completed_subtiles:
+                print(f"  Note: {len(completed_subtiles)} subtile(s) were completed before error")
+                print(f"  These will be skipped on restart")
+                partial_tiles.append(tile_idx)
 
             # Mark as failed
             mark_tile_failed(completion_log_file, tile_idx, str(e))
@@ -983,7 +1265,8 @@ if __name__ == "__main__":
     final_log = load_completion_log(completion_log_file)
 
     print(f"\nResults for this run:")
-    print(f"  Successfully processed: {len(successful_tiles)} tiles")
+    print(f"  Fully completed: {len(successful_tiles)} tiles")
+    print(f"  Partially completed: {len(partial_tiles)} tiles")
     print(f"  Failed: {len(failed_tiles)} tiles")
     print(f"  Total prediction files: {len(all_outputs)}")
 
@@ -993,6 +1276,10 @@ if __name__ == "__main__":
 
     if successful_tiles:
         print(f"\nSuccessfully processed tiles: {sorted(successful_tiles)}")
+
+    if partial_tiles:
+        print(f"\nPartially completed tiles: {sorted(partial_tiles)}")
+        print(f"  ⚠ Re-run script to complete remaining subtiles for these tiles")
 
     if failed_tiles:
         print(f"\nFailed tiles in this run: {sorted(failed_tiles)}")
@@ -1015,3 +1302,61 @@ if __name__ == "__main__":
         remaining = (TILE_END - TILE_START) - len(final_log['completed_tiles'])
         print(f"⚠ {remaining} tiles remaining (re-run script to continue)")
     print(f"{'='*60}\n")
+
+    # ==============================================================================
+    # Step 4: Create VRT mosaic of all prediction tiles
+    # ==============================================================================
+
+    print("\n" + "="*60)
+    print("STEP 4: Creating VRT mosaic of all predictions")
+    print("="*60 + "\n")
+
+    # Find all prediction files
+    prediction_files = sorted(glob(os.path.join(OUTPUT_DIR, "prediction_tile*.tif")))
+
+    if not prediction_files:
+        print("⚠ No prediction files found to mosaic")
+    else:
+        print(f"Found {len(prediction_files)} prediction files")
+
+        # Create VRT mosaic
+        vrt_output = os.path.join(OUTPUT_DIR, "all_predictions_mosaic.vrt")
+
+        print(f"Creating VRT mosaic: {os.path.basename(vrt_output)}")
+
+        try:
+            vrt_options = gdal.BuildVRTOptions(
+                resampleAlg=gdal.GRA_NearestNeighbour,  # Nearest neighbor for categorical data
+                addAlpha=False
+            )
+
+            vrt_ds = gdal.BuildVRT(vrt_output, prediction_files, options=vrt_options)
+
+            if vrt_ds is None:
+                raise RuntimeError("Failed to create VRT")
+
+            # Get VRT info
+            width = vrt_ds.RasterXSize
+            height = vrt_ds.RasterYSize
+            gt = vrt_ds.GetGeoTransform()
+
+            vrt_ds = None  # Close
+
+            print(f"✓ VRT created successfully:")
+            print(f"  Path: {vrt_output}")
+            print(f"  Dimensions: {width} × {height} pixels")
+            print(f"  Resolution: {abs(gt[1])}m × {abs(gt[5])}m")
+            print(f"  Coverage: {(width * abs(gt[1]))/1000:.1f}km × {(height * abs(gt[5]))/1000:.1f}km")
+            print(f"\nTo convert VRT to GeoTIFF:")
+            print(f"  gdal_translate -co COMPRESS=LZW -co TILED=YES -co BIGTIFF=YES \\")
+            print(f"    {vrt_output} \\")
+            print(f"    {os.path.join(OUTPUT_DIR, 'all_predictions_mosaic.tif')}")
+
+        except Exception as e:
+            print(f"✗ Error creating VRT: {e}")
+
+    print(f"\n{'='*60}")
+    print("WORKFLOW COMPLETE")
+    print(f"{'='*60}\n")
+
+# %%

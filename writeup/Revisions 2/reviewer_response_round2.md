@@ -119,5 +119,19 @@ where the first term captures one-time histogram binning across $n$ samples and 
 **Location:** Section III (Methods), subsection "Field Data Cleaning and Validation"
 
 ---
- 
+
+## Additional Revisions
+
+In addition to addressing the specific reviewer comments above, we made the following enhancements:
+
+1. **Added supporting citations for SHAP interpretation:** We included two new references to strengthen the scientific basis for our feature importance interpretations:
+   - @rs13173371 (Holzman et al. 2021) supporting SWIR sensitivity to plant water content and canopy moisture status
+   - @xun2021novel (Xun et al. 2021) supporting the interpretation of cotton's temporal variability due to management and flooding practices
+
+2. **Clarified resolution limitations:** Added explicit mention of "10m satellite imagery" when discussing intercropping challenges, and noted that "higher resolution imagery" may be needed to improve classification of confused crop pairs.
+
+3. **Minor text clarifications:** Grammar corrections and improved phrasing throughout the manuscript for clarity.
+
+---
+
 We thank both reviewers for their constructive feedback, which has improved the clarity and completeness of the manuscript.

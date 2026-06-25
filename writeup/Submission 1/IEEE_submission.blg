@@ -8,6 +8,10 @@ Reallocated singl_function (elt_size=4) to 100 items from 50.
 Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
 Reallocated singl_function (elt_size=4) to 100 items from 50.
 Database file #1: /home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/refs.bib
+Repeated entry---line 324 of file /home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/refs.bib
+ :  @article{agriculture13050965
+ :                              ,
+I'm skipping whatever remains of this entry
 -- IEEEtran.bst version 1.14 (2015/08/26) by Michael Shell.
 -- http://www.michaelshell.org/tex/ieeetran/bibtex/
 -- See the "IEEEtran_bst_HOWTO.pdf" manual for usage information.
@@ -16,37 +20,37 @@ Warning--empty journal in xr_fresh_2021
 Done.
 You've used 31 entries,
             4087 wiz_defined-function locations,
-            1014 strings with 16302 characters,
-and the built_in function-call counts, 24747 in all, are:
-= -- 1984
+            1014 strings with 16305 characters,
+and the built_in function-call counts, 24717 in all, are:
+= -- 1978
 > -- 821
 < -- 153
 + -- 427
 - -- 180
-* -- 1251
-:= -- 3744
+* -- 1249
+:= -- 3735
 add.period$ -- 63
 call.type$ -- 31
 change.case$ -- 33
 chr.to.int$ -- 291
 cite$ -- 32
-duplicate$ -- 1807
-empty$ -- 1830
+duplicate$ -- 1806
+empty$ -- 1829
 format.name$ -- 203
-if$ -- 5717
+if$ -- 5710
 int.to.chr$ -- 0
 int.to.str$ -- 31
 missing$ -- 364
 newline$ -- 138
 num.names$ -- 33
-pop$ -- 856
+pop$ -- 858
 preamble$ -- 1
 purify$ -- 0
 quote$ -- 2
-skip$ -- 1909
+skip$ -- 1906
 stack$ -- 0
 substring$ -- 803
-swap$ -- 1476
+swap$ -- 1474
 text.length$ -- 56
 text.prefix$ -- 0
 top$ -- 5
@@ -54,5 +58,5 @@ type$ -- 31
 warning$ -- 1
 while$ -- 83
 width$ -- 33
-write$ -- 358
-(There was 1 warning)
+write$ -- 357
+(There was 1 error message)

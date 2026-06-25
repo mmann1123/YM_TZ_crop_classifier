@@ -1,0 +1,38 @@
+# A novel cotton mapping index combining Sentinel-1 SAR and Sentinel-2 multispectral imagery
+
+**Citation:** Xun, L., Zhang, J., Cao, D., Yang, S., & Yao, F. (2021). A novel cotton mapping index combining Sentinel-1 SAR and Sentinel-2 multispectral imagery. *ISPRS Journal of Photogrammetry and Remote Sensing*, 181, 148–166. DOI: `10.1016/j.isprsjprs.2021.08.021` (verified via Crossref — title, authors, year, and journal all match).
+
+> **Bibliography warning (skill rule 10).** In `writeup/refs.bib` the entry keyed `xun2021novel` is the correct Xun et al. record but carries **no DOI field**, while the immediately preceding entry `agriculture13050965` (Teixeira et al., *Deep Learning Models for the Classification of Crops in Aerial Imagery: A Review*) holds DOI `10.3390/agriculture13050965`. That MDPI *Agriculture* DOI belongs to the Teixeira review, **not** to this cotton paper — do not attach it to `xun2021novel`. The correct DOI for this paper is `10.1016/j.isprsjprs.2021.08.021`, confirmed above. Any prior pass or `.bib` lead pointing `xun2021novel` at `10.3390/agriculture13050965` is wrong.
+
+## Objectives
+
+Develop an **unsupervised, training-sample-free** index (the Cotton Mapping Index, CMI) that maps cotton cultivated area within a cropland mask by fusing Sentinel-1 SAR and Sentinel-2 optical time series. Three goals: (1) build the CMI; (2) test its capability and robustness across multiple study sites; (3) compare its performance against supervised classifiers (KNN, SVM, RF) that *do* require training samples. The motivation is the cost and scarcity of field samples — the same data-scarcity problem our manuscript targets, but solved here by hand-crafted phenological physics rather than by learned models.
+
+## Methods
+
+- **Sensors and features.** Sentinel-2 MSI (9 bands + 18 vegetation indices, red-edge `RE1`/`RE2`/`RE3` emphasized) and Sentinel-1 C-band SAR (VV, VH, VH/VV, VV−VH). 15-day median composites, gap-filled by linear interpolation. SWIR bands resampled 20 m → 10 m.
+- **Index construction (the method).** Time series are reduced to features at the **peak-greenness time** (maximum NDVI) per pixel via an **adaptive temporal window**, so phenological timing differences across regions are absorbed automatically. Three assumptions select three features by M-index and Jeffries-Matusita separability: feature 1 = `RE1 × RE2` reflectance (max for cotton), feature 2 = spectral angle at red (min for cotton), feature 3 = summed VV backscatter over the peak-greenness window (min absolute value for cotton). CMI = larger-value features over smaller-value features; a CMI-S2 variant drops SAR for ablation. A single threshold (0.50, tuned only on site A) is then applied everywhere.
+- **Study sites.** Four US sites (Arkansas, Mississippi, Georgia, Texas) and four China sites (ten counties in Xinjiang grouped as E–H). Single-cropping systems only.
+- **Reference data.** USDA Cropland Data Layer (CDL, 30 m, confidence > 90%) for the US sites; county statistical cotton areas for Xinjiang. Cotton/non-cotton samples randomly selected from high-confidence CDL pixels.
+- **Evaluation protocol (load-bearing).** Mixed, and notably **stronger than our manuscript's bar on transfer**. The index and its threshold are *developed on site A* and then **applied unchanged to sites B–H** — a genuine cross-site (and partly cross-country, US→China) transfer test, with no per-site retraining. For US sites B–D, accuracy is assessed against the CDL map (OA, UA, PA, F1). For Xinjiang sites E–H there is **no pixel-level reference**; validation is area-level only — mean relative error (MRE) and R² between CMI-detected and county-statistical cotton areas. Because the index is rule-based and sample-free, classic train/test pixel leakage does not apply; the relevant question is threshold transfer across regions. The supervised comparators (KNN/SVM/RF on NDVI time series) were trained and validated with **20 groups of randomly drawn 1000-cotton/1000-non-cotton sample sets per site** — that comparison is pooled random sampling within a site, the weaker rung, and is not field-grouped.
+
+## Key Findings
+
+- **Site-A development OA / F1 = 93.25% / 93.27%.** Transferring the site-A threshold to B/C/D gave OA 89.75% / 81.20% / 86.95% — a real degradation under cross-site transfer (worst at Georgia, site C), which honestly exposes the cost of not retraining.
+- **Xinjiang (cross-country, area-level):** with threshold 0.50, R² = 0.74 but MRE = 43.44% (cotton area overestimated); fine-tuning the threshold to 0.56 with statistics improved MRE to 26.69% (R² 0.60). Transfer works but needs light recalibration.
+- **SAR + optical beats optical-only:** CMI consistently outperformed the optical-only CMI-S2 and the single-date CEI, confirming the value of Sentinel-1 VV fusion for cotton.
+- **vs supervised classifiers:** sample-free CMI matched or beat KNN/SVM/RF at sites A and B, but the trained classifiers won at sites C and D when ample samples were available — i.e., physics-based indexing trades peak accuracy for zero labeling cost.
+- **Early-season capability:** acceptable accuracy reached using data through DOY ~180–240, enabling pre-harvest cotton maps.
+- **Cotton phenology signal:** cotton's `RE1 × RE2` peak and its distinctive SAR/spectral-angle behavior at peak greenness — the same temporal volatility our manuscript invokes (via `B12.absolute.sum.of.changes`, citing this paper) to separate cotton from natural vegetation.
+
+## Relevance to Our Crop-Classification Study
+
+Directly relevant on two axes. **(1) Band/sensor design:** strong external evidence that red-edge (`RE1`/`RE2`) and SAR VV carry cotton-discriminating information — cotton is one of our hard minority crops, and our manuscript already cites this paper for cotton's phenological volatility. It supports the case that adding Sentinel-1 SAR could improve our weak cotton recall. **(2) The sample-free philosophy is a cousin of "lite learning":** both reduce dependence on scarce labels, but via opposite routes — CMI hand-codes phenological physics into a fixed index (zero training, one crop, binary), whereas we learn flexible tree models over many engineered features (multi-crop, but needs labels). CMI's clean cross-site threshold-transfer test is the kind of spatial-generalization evidence our manuscript does *not* provide and could aspire to.
+
+## Evaluation Caveats
+
+- **Binary, single-crop, cropland-masked.** CMI is cotton-vs-non-cotton *inside a pre-existing cropland mask* — it never confronts the multi-class confusion (cotton vs sorghum vs cassava) that dominates our problem. Its 93% is one-vs-rest within cropland, not comparable to our multi-class field-grouped Kappa.
+- **Reference labels are themselves model output.** US accuracy is measured against the CDL (an imperfect classified product, used at >90% confidence), and Xinjiang validation is area-aggregate statistics only — neither is independent field ground truth, so reported accuracies likely flatter the index.
+- **Single-cropping systems only.** Explicitly untested in double/multiple-cropping regimes (a stated limitation), and intercropping — central to our cassava/maize confusion — is out of scope.
+- **Threshold transfer is real but fragile.** The one-threshold-everywhere result degrades across sites and needs statistical recalibration in China, so the "no samples required" claim is better read as "few samples required for tuning."
+- **No class-imbalance metric beyond F1/OA per binary task; no Cohen's Kappa across a multi-class confusion matrix.** Relevant only to the easier binary framing.

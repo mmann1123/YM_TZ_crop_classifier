@@ -49,9 +49,9 @@ E.~S. Ibrahim, P.~Rufin, L.~Nill, B.~Kamali, C.~Nendel, and P.~Hostert,
 
 \bibitem{begue2018remote}
 A.~B{\'e}gu{\'e}, D.~Arvor, B.~Bellon, J.~Betbeder, D.~De~Abelleyra,
-  R.~PD~Ferraz, V.~Lebourgeois, C.~Lelong, M.~Sim{\~o}es, and S.~R.~Ver{\'o}n,
-  ``Remote sensing and cropping practices: A review,'' \emph{Remote Sensing},
-  vol.~10, no.~1, p.~99, 2018.
+  R.~P.~D.~Ferraz, V.~Lebourgeois, C.~Lelong, M.~Sim{\~o}es, and
+  S.~R.~Ver{\'o}n, ``Remote sensing and cropping practices: A review,''
+  \emph{Remote Sensing}, vol.~10, no.~1, p.~99, 2018.
 
 \bibitem{delince2017handbook}
 J.~Delince, G.~Lemoine, P.~Defourny, J.~Gallego, A.~Davidson, S.~Ray, O.~Rojas,
@@ -193,9 +193,8 @@ Z.~Yang, I.~A. Abbasi, E.~E. Mustafa, S.~Ali, and M.~Zhang, ``An anomaly
 
 \bibitem{cc_tanzania}
 \BIBentryALTinterwordspacing
-FAS, ``Tanzania production,''
-  https://ipad.fas.usda.gov/countrysummary/default.aspx?id=TZ. [Online].
-  Available: \url{https://ipad.fas.usda.gov/countrysummary/default.aspx?id=TZ}
+FAS, ``Tanzania production.'' [Online]. Available:
+  \url{https://ipad.fas.usda.gov/countrysummary/default.aspx?id=TZ}
 \BIBentrySTDinterwordspacing
 
 \bibitem{GoogleHSV}

@@ -236,11 +236,11 @@ including crop classification and make researchers more reliant of less
 reliable techniques like transfer learning or zero-shot or low shot
 methods (Owusu et al. 2024; Y. Li et al. 2023; Ma et al. 2019). Recent
 papers applying deep learning methods to agriculture in a developing
-world context have achieved strong results. For instance, Buttar et
-al. (2024) applied U\_Net (a fully convolutional
+world context have achieved strong results. For instance Ayushi et al.
+Buttar et al. (2024) applied U\_Net (a fully convolutional
 encode-decoder semantic segmentation architecture) to a crop type
-dataset in Kenya, achieving an F-1 score of 73.6\%. Liu et al. (2024)
-achieved an F1 score of 87.7\% utilizing a novel deep
+dataset in Kenya, achieving an F-1 score of 73.6\%. Liu et al. Liu et
+al. (2024) achieved an F1 score of 87.7\% utilizing a novel deep
 learning architecture that combines a three dimensional convolutional
 neural network (3D-CNN) with a variant of convolutional recurrent neural
 networks (ConvRNN) on Sentinel-1 synthetic aperature radar (SAR)
@@ -248,7 +248,7 @@ features and Sentinel-2 surface reflectance. In controlled agricultural
 settings, like Bradford Research Cetner in Missouri, combining SAR and
 optical data for similar models are able to achieve much higher overal
 accuracy levels of 94.1\% for 3D U-Net, 84.7 for 2D U-Net, and 64\% for
-SegNet (Adrian, Sagan, and Maimaitijiang 2021). Moreover, training
+SegNet (Adrian, Sagan, and Maimaitijiang 2021). In Moreover, training
 data for extreme events, like crop losses, disease, and lodging are
 largely non-existant. Interpretability is also a salient weakness as
 interpretation of models allows us to gain scientific insight and assess
@@ -423,7 +423,7 @@ the reliability of the dataset for environmental analysis.
 Monthly composites were collected for January through August of 2023 for
 the the bands B2 Blue (458-523nm), B6 Vegetation Red Edge (733-738nm),
 B8 Near Infrared (785-899nm), B11 Short-Wave Infrared
-(SWIR)(1565-1655nm), and B12 Short Wave Infrared (2100-2280nm). We
+(SWIR)(1565-1655nm), and B12 Short Wave Infrared (2100-2280nm). Sw. We
 also calculate the Enhanced Vegetation Index (EVI) and hue, the color
 spectrum value (Google 2025). This computed hue value provides the basic
 color as perceived in the color wheel, from red, through green, blue,
@@ -458,10 +458,10 @@ Young crops exhibit substantial differences compared to mature crops in
 terms of color, density, and phenological development. Variations in the
 crop cycle across different fields could lead to heteroscedasticity in
 the spectral reflectance measurements used for machine learning (ML)
-training, thereby affecting the precision and accuracy of the model. We
-targeted the period of April through May to capture crops late in the
-growing season but before harvest, as seen in the crop calendar in
-Figure \ref{fig:crop_cal} below.
+training, thereby affecting the precision and accuracy of the model. By
+targeting the period of April through May as we aimed to capture crops
+late in the growing season, and yet before harvest as seen in the crop
+calendar in Figure \ref{fig:crop_cal} below.
 
 \begin{figure}[H]
    \centering   \includegraphics[width=0.8\linewidth]{/home/mmann1123/Documents/github/YM_TZ_crop_classifier/writeup/figures/plant_ghant.png}
@@ -827,10 +827,10 @@ while the stratified group k-fold cross-validation ensures robust
 parameter selection across different data partitions (fields).
 
 \hypertarget{results-discussion}{%
-\section{Results \& Discussion}\label{results-discussion}}
+\subsection{Results \& Discussion}\label{results-discussion}}
 
 \hypertarget{crowd-sourced-data}{%
-\subsection{Crowd Sourced Data}\label{crowd-sourced-data}}
+\subsubsection{Crowd Sourced Data}\label{crowd-sourced-data}}
 
 To address the substantial gap in available crop type datasets,
 particularly in developing regions, this study harnessed the power of
@@ -854,7 +854,7 @@ collection, analysis, and interpretation, contributing to their
 professional development and capacity building in the geospatial domain.
 
 \hypertarget{challenges-and-lessons-learned}{%
-\subsubsection{Challenges and Lessons
+\paragraph{Challenges and Lessons
 Learned}\label{challenges-and-lessons-learned}}
 
 There were a number of challenges involved with planning, and
@@ -889,7 +889,7 @@ efforts should allow for more flexibility in the timing in data
 collection and ensure coverage that reflects local crop cycles.
 
 \hypertarget{land-cover-and-crop-type}{%
-\subsection{Land Cover and Crop
+\subsubsection{Land Cover and Crop
 Type}\label{land-cover-and-crop-type}}
 
 The distribution of primary land cover types within the training dataset
@@ -919,7 +919,7 @@ robust modeling techniques to accurately capture this diversity.
 \end{figure}
 
 \hypertarget{feature-importance}{%
-\subsection{Feature Importance}\label{feature-importance}}
+\subsubsection{Feature Importance}\label{feature-importance}}
 
 The interpretation of model behavior using SHAP values has allowed for a
 deeper understanding of how different spectral features impact the
@@ -941,7 +941,7 @@ for ``maize'' may not be as impactful for ``rice'' or ``sorghum'',
 reflecting the unique spectral signatures of these crops.
 
 \hypertarget{mean-shap-values}{%
-\subsubsection{Mean SHAP Values}\label{mean-shap-values}}
+\paragraph{Mean SHAP Values}\label{mean-shap-values}}
 
 In Figure \ref{fig:mean_shaps}, the mean SHAP values provide insights
 into the average impact of each feature across all predictions. This
@@ -950,7 +950,10 @@ output across various scenarios. For example, the mean value of B11
 (B11.mean) and the 5th percentile of hue (hue.quantile.q.0.05) features
 were found to have substantial average impacts on model outputs,
 suggesting their strong relevance in distinguishing between different
-crop types.
+crop types. Reflecting on the colors of the bars we can see that
+`B11.mean' is important in distinguishing sunflower, sorghum, and millet
+to a roughly equal degree, and has some small impact on distinguishing
+other classes.
 
 Reflecting on the colors of the bars we can see that `B11.mean' is
 important in distinguishing sunflower, sorghum, and millet to a roughly
@@ -1014,7 +1017,7 @@ and structure that B12 captures.
 \end{figure}
 
 \hypertarget{maximum-shap-values}{%
-\subsubsection{Maximum SHAP Values}\label{maximum-shap-values}}
+\paragraph{Maximum SHAP Values}\label{maximum-shap-values}}
 
 Figure \ref{fig:max_shaps}, maximum SHAP values uncover features that,
 while perhaps not consistently influential, have high impacts under
@@ -1054,16 +1057,16 @@ understanding of the spectral characteristics most relevant for
 distinguishing among the diverse agricultural landscapes of the region.
 
 \hypertarget{model-selection-1}{%
-\subsection{Model Selection}\label{model-selection-1}}
+\subsubsection{Model Selection}\label{model-selection-1}}
 
-Optuna tuning selected LightGBM (Ke et al. 2017). LightGBM is a
-gradient-boosting algorithm that combines many simple decision trees to
+Optuna trials tuning results selected LightGBM (Ke et al. 2017) is a
+gradient boosting algorithm that combines many simple decision trees to
 produce a stronger single model, improving the model at each step.
 LightGBM grows decision trees leaf-wise rather than adding different
 levels, thereby targeting branches that most need refining.
 
 \hypertarget{model-performance}{%
-\subsection{Model Performance}\label{model-performance}}
+\subsubsection{Model Performance}\label{model-performance}}
 
 The classification model demonstrated robust performance across multiple
 land cover classes, as evidenced by the out-of-sample mean confusion
@@ -1163,7 +1166,7 @@ with community-driven data collection to advance agricultural monitoring
 in developing regions.
 
 \hypertarget{land-cover-product}{%
-\subsection{Land Cover Product}\label{land-cover-product}}
+\subsubsection{Land Cover Product}\label{land-cover-product}}
 
 Using the trained model, we generated a land cover classification map
 for a sample area in Dodoma and Bukumbi Tanzania, respectively. The maps
@@ -1202,7 +1205,7 @@ Moreover some window filtering or smoothing could help reduce the
 speckling effect seen in some areas.
 
 \hypertarget{conclusion}{%
-\section{Conclusion}\label{conclusion}}
+\subsection{Conclusion}\label{conclusion}}
 
 In this study, we introduced a novel ``lite learning'' methodology for
 crop type classification in Tanzania that demonstrates the continued
@@ -1307,10 +1310,10 @@ infrastructure remain scarce.
 \newpage
 
 \hypertarget{appendix}{%
-\section{Appendix}\label{appendix}}
+\subsection{Appendix}\label{appendix}}
 
 \hypertarget{acknowledgments}{%
-\subsection{Acknowledgments}\label{acknowledgments}}
+\subsubsection{Acknowledgments}\label{acknowledgments}}
 
 The United States Agency for International Development generously
 supports this program through a grant from the USAID GeoCenter under
@@ -1318,7 +1321,7 @@ Award \# AID-OAA-G-15-00007 and Cooperative Agreement Number:
 7200AA18CA00015
 
 \hypertarget{time-series-features-description}{%
-\subsection{Time Series Features
+\subsubsection{Time Series Features
 Description}\label{time-series-features-description}}
 
 The following table provides a comprehensive list of the time series

@@ -6,8 +6,9 @@ pandoc supplement.md --template=mytemplate.tex \
   --from markdown+raw_tex \
   --to latex \
   --bibliography=refs.bib \
-  --citeproc \
-  -o supplement.tex
+  --natbib -V biblio-style=IEEEtran -V 'natbiboptions=numbers,sort&compress' \
+  -o final_submission/supplement.tex
+# then: xelatex supplement && bibtex supplement && xelatex supplement && xelatex supplement
 -->
 ---
 title: "Supplementary Material: Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing"

@@ -44,9 +44,16 @@ abstract: |
 
 
 cd writeup
-pandoc writeup.md    --template=mytemplate.tex --from markdown+raw_tex --to latex --bibliography=refs.bib --citeproc -o final_submission/output_JSTARS-2025-00807.tex
+IEEE JSTARS submission build (numbered IEEE citations via natbib + IEEEtran.bst).
+Use --natbib (NOT --citeproc) so in-text cites become \citep/\citet and the
+reference list is built by BibTeX in IEEE style. Then run xelatex+bibtex.
 
-pandoc supplement.md --template=mytemplate.tex --from markdown+raw_tex --to latex --bibliography=refs.bib --citeproc -o final_submission/supplement.tex
+pandoc writeup.md    --template=mytemplate.tex --from markdown+raw_tex --to latex --bibliography=refs.bib --natbib -V biblio-style=IEEEtran -V 'natbiboptions=numbers,sort&compress' -o final_submission/output_JSTARS-2025-00807.tex
+
+pandoc supplement.md --template=mytemplate.tex --from markdown+raw_tex --to latex --bibliography=refs.bib --natbib -V biblio-style=IEEEtran -V 'natbiboptions=numbers,sort&compress' -o final_submission/supplement.tex
+
+# then, inside final_submission/ (needs IEEEtran.cls, IEEEtran.bst, refs.bib, figures/):
+#   xelatex output_JSTARS-2025-00807 && bibtex output_JSTARS-2025-00807 && xelatex output_JSTARS-2025-00807 && xelatex output_JSTARS-2025-00807
 
 
  

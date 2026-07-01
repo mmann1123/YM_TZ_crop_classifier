@@ -105,24 +105,6 @@ G.~Camps-Valls, D.~Tuia, X.~X. Zhu, and M.~Reichstein, \emph{Deep learning for
   science and geosciences}.\hskip 1em plus 0.5em minus 0.4em\relax John Wiley
   \& Sons, 2021.
 
-\bibitem{pankajakshan2025}
-P.~Pankajakshan, A.~Padmasanan, and S.~Sundar, ``Deep architectures fail to
-  generalize: A lightweight alternative for agricultural domain transfer in
-  hyperspectral images,'' \emph{Sensors}, vol.~26, no.~1, p. 174, 2025.
-
-\bibitem{rustowicz2019}
-R.~M. Rustowicz, R.~Cheong, L.~Wang, S.~Ermon, M.~Burke, and D.~Lobell,
-  ``Semantic segmentation of crop type in africa: A novel dataset and analysis
-  of deep learning methods,'' in \emph{Proceedings of the IEEE/CVF Conference
-  on Computer Vision and Pattern Recognition (CVPR) Workshops}, 2019, pp.
-  75--82.
-
-\bibitem{mai2025}
-J.~Mai, Q.~Feng, S.~Fu, R.~Wang, S.~Zhang, R.~Zhang, and T.~Liang, ``Enhancing
-  crop type mapping in data-scarce regions through transfer learning: A case
-  study of the hexi corridor,'' \emph{Remote Sensing}, vol.~17, no.~9, p. 1494,
-  2025.
-
 \bibitem{tseng2021cropharvest}
 \BIBentryALTinterwordspacing
 G.~Tseng, I.~Zvonkov, C.~L. Nakalembe, and H.~Kerner, ``Cropharvest: A global
@@ -223,13 +205,6 @@ M.~L. Mann, ``{xr\_fresh}: {Python} package for feature extraction from raster
   \url{https://doi.org/10.5281/zenodo.12701466}
 \BIBentrySTDinterwordspacing
 
-\bibitem{mann2025tanzania}
-\BIBentryALTinterwordspacing
-------, ``Tanzania land cover classes and {Sentinel-2a} time series features,''
-  Zenodo, 2025. [Online]. Available:
-  \url{https://doi.org/10.5281/zenodo.14976383}
-\BIBentrySTDinterwordspacing
-
 \bibitem{GoogleHSV}
 \BIBentryALTinterwordspacing
 Google, ``Ee.image.rgbtohsv google earth engine,'' \emph{Google Earth Engine},
@@ -283,12 +258,6 @@ L.~Xun, J.~Zhang, D.~Cao, S.~Yang, and F.~Yao, ``A novel cotton mapping index
 G.~Ke, Q.~Meng, T.~Finley, T.~Wang, W.~Chen, W.~Ma, Q.~Ye, and T.-Y. Liu,
   ``Lightgbm: A highly efficient gradient boosting decision tree,''
   \emph{Advances in neural information processing systems}, vol.~30, 2017.
-
-\bibitem{jin2019}
-Z.~Jin, G.~Azzari, C.~You, S.~Di~Tommaso, S.~Aston, M.~Burke, and D.~B. Lobell,
-  ``Smallholder maize area and yield mapping at national scales with google
-  earth engine,'' \emph{Remote Sensing of Environment}, vol. 228, pp. 115--128,
-  2019.
 
 \bibitem{kerner2024accurate}
 H.~Kerner, C.~Nakalembe, A.~Yang, I.~Zvonkov, R.~McWeeny, G.~Tseng, and

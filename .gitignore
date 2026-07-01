@@ -165,3 +165,10 @@ output.png.aux.xml
 EPSG:32736
 5_image_validation (copy).py
 writeup/literature/.~lock.Crop Classification Report.docx#
+5_model_subtiled_prediction.py
+BAND_MISMATCH_FIX.md
+find_invalid_features.sh
+TILE_TRACKING_GUIDE.md
+EXTENT_MISMATCH_DIAGNOSIS.md
+FINAL_FIX_SUMMARY.md
+RESAMPLING_STATUS.md

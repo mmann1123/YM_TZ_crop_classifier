@@ -161,70 +161,551 @@ plt.show()
 # )
 
 
-# %% ghant chart of months Dont use... google charts is better
+# %% use plant_ghant.py  
 
-import pandas as pd
-import seaborn as sns
+# import pandas as pd
+# import seaborn as sns
+# import matplotlib.pyplot as plt
+
+
+# # Create a DataFrame with the start and end months of each growing season
+# data = {
+#     "Season": ["Masika", "Vuli", "Msimu"],
+#     "Start_Month": ["March", "September", "November"],
+#     "End_Month": ["August", "February", "June"],
+# }
+# seasons_df = pd.DataFrame(data)
+
+# # Convert month names to numerical values for sorting
+# month_order = [
+#     "January",
+#     "February",
+#     "March",
+#     "April",
+#     "May",
+#     "June",
+#     "July",
+#     "August",
+#     "September",
+#     "October",
+#     "November",
+#     "December",
+# ]
+# seasons_df["Start_Month"] = pd.Categorical(
+#     seasons_df["Start_Month"], categories=month_order, ordered=True
+# )
+# seasons_df["End_Month"] = pd.Categorical(
+#     seasons_df["End_Month"], categories=month_order, ordered=True
+# )
+
+# # Sort the DataFrame by start month
+# seasons_df = seasons_df.sort_values(by="Start_Month")
+
+# # Define the colors for each growing season
+# season_colors = {"Masika": "blue", "Vuli": "green", "Msimu": "orange"}
+
+# # Create the Gantt chart using hlines with customizations
+# plt.figure(figsize=(10, 3))
+# for index, row in seasons_df.iterrows():
+#     plt.hlines(
+#         y=row["Season"],
+#         xmin=row["Start_Month"],
+#         xmax=row["End_Month"],
+#         color=season_colors[row["Season"]],
+#         lw=3,  # Thicker lines
+#     )
+
+# # Customize the plot
+# plt.xlabel("Month")
+# plt.ylabel("Growing Season")
+# plt.title("Monthly Timing of Growing Seasons in Tanzania")
+# plt.yticks(ticks=seasons_df.index, labels=seasons_df["Season"])
+# plt.xticks(
+#     ticks=range(len(month_order)), labels=[month[:3] for month in month_order]
+# )  # Abbreviate month names
+# plt.tight_layout()
+# plt.subplots_adjust(hspace=0.1)  # Reduce space between y-axis ticks
+# plt.show()
+
+# %%
+# %%
 import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.dates as mdates
+from matplotlib.patches import Patch
+from datetime import datetime
+import calendar
 
-
-# Create a DataFrame with the start and end months of each growing season
+# Data from the crop calendar in the image
 data = {
-    "Season": ["Masika", "Vuli", "Msimu"],
-    "Start_Month": ["March", "September", "November"],
-    "End_Month": ["August", "February", "June"],
+    "Crop": [
+        "Corn (Msimu)",
+        "Corn (Masika)",
+        "Corn (Vuli)",
+        "Cotton",
+        "Millet (Long, Masika)",
+        "Millet (Short, Vuli)",
+        "Millet (Unimodal, Msimu)",
+        "Peanut",
+        "Rice",
+        "Sorghum (Long, Masika)",
+        "Sorghum (Unimodal, Msimu)",
+    ],
+    "Plant": [
+        ("Nov", "Dec"),  # corn msimu
+        ("Mar", "Apr"),  # corn masika
+        ("Sep", "Nov"),  # corn vuli
+        [("Nov", "Dec"), ("Jan", "Feb")],  # cotton
+        ("Mar", "Apr"),  # millet long masika
+        ("Oct", "Nov"),  # millet short vuli
+        [("Nov", "Dec"), ("Jan", "Jan")],  # millet unimodal msimu
+        ("Dec", "Dec"),  # peanut
+        [("Dec", "Dec"), ("Jan", "Jan")],  # rice
+        ("Mar", "Mar"),  # sorghum long masika
+        ("Nov", "Dec"),  # sorghum unimodal msimu
+    ],
+    "Mid-Season": [
+        ("Jan", "Jun"),  # corn msimu
+        ("Apr", "Jul"),  # corn masika
+        ("Nov", "Dec"),  # corn vuli
+        ("Feb", "Jul"),  # cotton
+        ("Apr", "Jul"),  # millet long masika
+        ("Dec", "Dec"),  # millet short vuli
+        ("Feb", "May"),  # millet unimodal msimu
+        ("Jan", "Feb"),  # peanut
+        ("Feb", "Apr"),  # rice
+        ("Apr", "Jun"),  # sorghum long masika
+        ("Jan", "Apr"),  # sorghum unimodal msimu
+    ],
+    "Harvest": [
+        ("May", "Jun"),  # corn msimu
+        ("Jul", "Aug"),  # corn masika
+        ("Jan", "Feb"),  # corn vuli
+        ("Jul", "Aug"),  # cotton
+        ("Jul", "Aug"),  # millet long masika
+        ("Jan", "Mar"),  # millet short vuli
+        ("May", "Jul"),  # millet unimodal msimu
+        ("Mar", "May"),  # peanut
+        ("May", "Jul"),  # rice
+        ("Jul", "Aug"),  # sorghum long masika
+        ("May", "Jun"),  # sorghum unimodal msimu
+    ],
 }
-seasons_df = pd.DataFrame(data)
 
-# Convert month names to numerical values for sorting
-month_order = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-]
-seasons_df["Start_Month"] = pd.Categorical(
-    seasons_df["Start_Month"], categories=month_order, ordered=True
-)
-seasons_df["End_Month"] = pd.Categorical(
-    seasons_df["End_Month"], categories=month_order, ordered=True
-)
+# Convert months to datetime objects for plotting
+months = {
+    "Jan": 1,
+    "Feb": 2,
+    "Mar": 3,
+    "Apr": 4,
+    "May": 5,
+    "Jun": 6,
+    "Jul": 7,
+    "Aug": 8,
+    "Sep": 9,
+    "Oct": 10,
+    "Nov": 11,
+    "Dec": 12,
+}
 
-# Sort the DataFrame by start month
-seasons_df = seasons_df.sort_values(by="Start_Month")
 
-# Define the colors for each growing season
-season_colors = {"Masika": "blue", "Vuli": "green", "Msimu": "orange"}
+def to_date(month):
+    return datetime(2022, months[month], 1)
 
-# Create the Gantt chart using hlines with customizations
-plt.figure(figsize=(10, 3))
-for index, row in seasons_df.iterrows():
-    plt.hlines(
-        y=row["Season"],
-        xmin=row["Start_Month"],
-        xmax=row["End_Month"],
-        color=season_colors[row["Season"]],
-        lw=3,  # Thicker lines
+
+def to_end_date(month):
+    year = 2022
+    month_num = months[month]
+    last_day = calendar.monthrange(year, month_num)[1]
+    return datetime(year, month_num, last_day)
+
+
+# Prepare figure and axes
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Plot each phase as horizontal bars
+for i, crop in enumerate(data["Crop"]):
+    ax.tick_params(axis="y", labelsize=16)
+    # Plotting Plant phase
+    if type(data["Plant"][i]) == list:
+        for start, end in data["Plant"][i]:
+            ax.barh(
+                crop,
+                (to_end_date(end) - to_date(start)).days,
+                left=to_date(start),
+                color="green",
+                edgecolor="black",
+                height=0.4,
+            )
+    else:
+        start, end = data["Plant"][i]
+        ax.barh(
+            crop,
+            (to_end_date(end) - to_date(start)).days,
+            left=to_date(start),
+            color="green",
+            edgecolor="black",
+            height=0.4,
+        )
+
+    # Plotting Mid-Season phase
+    start, end = data["Mid-Season"][i]
+    ax.barh(
+        crop,
+        (to_end_date(end) - to_date(start)).days,
+        left=to_date(start),
+        color="grey",
+        edgecolor="black",
+        height=0.4,
     )
 
-# Customize the plot
-plt.xlabel("Month")
-plt.ylabel("Growing Season")
-plt.title("Monthly Timing of Growing Seasons in Tanzania")
-plt.yticks(ticks=seasons_df.index, labels=seasons_df["Season"])
-plt.xticks(
-    ticks=range(len(month_order)), labels=[month[:3] for month in month_order]
-)  # Abbreviate month names
+    # Plotting Harvest phase
+    start, end = data["Harvest"][i]
+    ax.barh(
+        crop,
+        (to_end_date(end) - to_date(start)).days,
+        left=to_date(start),
+        color="orange",
+        edgecolor="black",
+        height=0.4,
+    )
+
+# Set date formatting on x-axis
+ax.xaxis.set_major_locator(mdates.MonthLocator())
+ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
+
+# Remove the last tick label
+ticks = ax.get_xticks()
+tick_labels = [mdates.num2date(tick).strftime("%b") for tick in ticks]
+ax.set_xticks(ticks[:-1])
+ax.set_xticklabels(tick_labels[:-1], rotation=45, ha="right", fontsize=16)
+
+
+# Add labels and legend
+# ax.set_xlabel("Months")
+
+ax.set_title("Tanzania Crop Calendar", fontsize=16)
+legend_elements = [
+    Patch(facecolor="green", edgecolor="black", label="Plant"),
+    Patch(facecolor="grey", edgecolor="black", label="Mid-Season"),
+    Patch(facecolor="orange", edgecolor="black", label="Harvest"),
+]
+ax.legend(
+    handles=legend_elements, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3,fontsize=16
+)
 plt.tight_layout()
-plt.subplots_adjust(hspace=0.1)  # Reduce space between y-axis ticks
+plt.savefig("./writeup/figures/plant_ghant.png")
+
 plt.show()
+
+
+# %%
+# Flow diagram for the 3-step methodology
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
+def create_methodology_flowchart():
+    """
+    Creates a flow diagram showing the 3-step data collection methodology
+    """
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.axis('off')
+
+    title_text = 28
+    top_text = 22
+    bottom_text = 18
+
+    box_height = 1.5
+    box_width = 7
+    x_center = 5
+    spacing = 2.0  # Match the analytical flowchart spacing
+
+    # Define colors
+    color_step1 = '#e8f4f8'
+    color_step2 = '#d4e6f1'
+    color_step3 = '#aed6f1'
+    color_arrow = '#2c3e50'
+
+    # Calculate positions
+    y1 = 7.5
+    y2 = y1 - spacing
+    y3 = y2 - spacing
+
+    # Step 1: Development and Training
+    step1_box = FancyBboxPatch(
+        (1.5, y1), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=color_step1,
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(step1_box)
+    ax.text(x_center, y1 + 0.95, 'Step 1: Development and Training',
+            ha='center', va='center', fontsize=top_text, weight='bold')
+    ax.text(x_center, y1 + 0.5, 'Training student participants',
+            ha='center', va='center', fontsize=bottom_text)
+
+    # Arrow 1 -> 2
+    arrow1 = FancyArrowPatch(
+        (x_center, y1), (x_center, y1 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=color_arrow,
+        linewidth=2.5
+    )
+    ax.add_patch(arrow1)
+
+    # Step 2: Data Collection (main box)
+    step2_box = FancyBboxPatch(
+        (1.5, y2), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=color_step2,
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(step2_box)
+    ax.text(x_center, y2 + 0.95, 'Step 2: Data Collection',
+            ha='center', va='center', fontsize=top_text, weight='bold')
+    ax.text(x_center, y2 + 0.5, 'KoboToolbox (14 days)',
+            ha='center', va='center', fontsize=bottom_text)
+
+    # Arrow 2 -> 3
+    arrow2 = FancyArrowPatch(
+        (x_center, y2), (x_center, y2 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=color_arrow,
+        linewidth=2.5
+    )
+    ax.add_patch(arrow2)
+
+    # Step 3: Data Review and Cleaning
+    step3_box = FancyBboxPatch(
+        (1.5, y3), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=color_step3,
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(step3_box)
+    ax.text(x_center, y3 + 0.95, 'Step 3: Data Review and Cleaning',
+            ha='center', va='center', fontsize=top_text, weight='bold')
+    ax.text(x_center, y3 + 0.5, 'Generate training sample for model development',
+            ha='center', va='center', fontsize=bottom_text)
+
+    # Title
+    ax.text(x_center, 9.6, 'Data Collection Methodology',
+            ha='center', va='center', fontsize=title_text, weight='bold')
+
+    plt.tight_layout()
+
+    # Save the figure
+    output_path = './writeup/figures/methodology_flowchart.png'
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"Flowchart saved to: {output_path}")
+
+    plt.show()
+
+# Create the flowchart
+create_methodology_flowchart()
+
+# %%
+# Analytical Methods Flow Diagram (excluding data collection)
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+
+def create_analytical_methods_flowchart():
+    """
+    Creates a simplified flow diagram for the analytical methodology steps
+    """
+    fig, ax = plt.subplots(figsize=(10, 11))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(2, 16)
+    ax.axis('off')
+
+    title_text = 28
+    top_text = 22
+    bottom_text = 18
+
+    # Define colors - cleaner palette
+    colors = {
+        'box': "#386496",
+        'arrow': '#2c3e50',
+        'alt_box': '#4A90E2'
+    }
+
+    y_start = 13.5
+    box_height = 1.5
+    box_width = 7
+    x_center = 5
+    spacing = 2.0
+
+    # Title
+    ax.text(x_center, 15.7, 'Analytical Methods Workflow',
+            ha='center', va='center', fontsize=title_text, weight='bold')
+
+    # Step 1: Field Data Cleaning
+    y1 = y_start
+    box1 = FancyBboxPatch(
+        (1.5, y1), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box1)
+    ax.text(x_center, y1 + 0.95, 'Field Data Cleaning',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    # ax.text(x_center, y1 + 0.5, '1,720 → 1,400 observations',
+    #         ha='center', va='center', fontsize=13, color='white')
+
+    # Arrow 1 -> 2
+    arrow1 = FancyArrowPatch(
+        (x_center, y1), (x_center, y1 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow1)
+
+    # Step 2: Time Series Feature Extraction
+    y2 = y1 - spacing
+    box2 = FancyBboxPatch(
+        (1.5, y2), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box2)
+    ax.text(x_center, y2 + 0.95, 'Time Series Feature Extraction',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y2 + 0.5, 'xr_fresh (6 spectral bands)',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 2 -> 3
+    arrow2 = FancyArrowPatch(
+        (x_center, y2), (x_center, y2 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow2)
+
+    # Step 3: Spatial Data Extraction
+    y3 = y2 - spacing
+    box3 = FancyBboxPatch(
+        (1.5, y3), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box3)
+    ax.text(x_center, y3 + 0.95, 'Spatial Data Extraction',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y3 + 0.5, 'Field size-based buffering',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 3 -> 4
+    arrow3 = FancyArrowPatch(
+        (x_center, y3), (x_center, y3 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow3)
+
+    # Step 4: Model Selection & Training
+    y4 = y3 - spacing
+    box4 = FancyBboxPatch(
+        (1.5, y4), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['alt_box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box4)
+    ax.text(x_center, y4 + 0.95, 'Model Selection & Training',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y4 + 0.5, 'Optuna hyperparameter optimization',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 4 -> 5
+    arrow4 = FancyArrowPatch(
+        (x_center, y4), (x_center, y4 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow4)
+
+    # Step 5: Performance Evaluation
+    y5 = y4 - spacing
+    box5 = FancyBboxPatch(
+        (1.5, y5), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['alt_box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box5)
+    ax.text(x_center, y5 + 0.95, 'Feature Selection via SHAP',
+            ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y5 + 0.5, '33 final features',
+            ha='center', va='center', fontsize=bottom_text, color='white')
+
+    # Arrow 5 -> 6
+    arrow5 = FancyArrowPatch(
+        (x_center, y5), (x_center, y5 - spacing + box_height),
+        arrowstyle='->,head_width=0.4,head_length=0.4',
+        color=colors['arrow'],
+        linewidth=2.5
+    )
+    ax.add_patch(arrow5)
+
+    # Step 6: Feature Selection via SHAP
+    y6 = y5 - spacing
+    box6 = FancyBboxPatch(
+        (1.5, y6), box_width, box_height,
+        boxstyle="round,pad=0.1",
+        facecolor=colors['alt_box'],
+        edgecolor='black',
+        linewidth=2
+    )
+    ax.add_patch(box6)
+
+    ax.text(x_center, y6 + 0.95, 'Performance Evaluation',
+        ha='center', va='center', fontsize=top_text, weight='bold', color='white')
+    ax.text(x_center, y6 + 0.5, 'Stratified Group K-Fold CV',
+        ha='center', va='center', fontsize=bottom_text, color='white')
+
+
+    # Feedback arrow from Step 6 back to Step 4 (bidirectional)
+    feedback_arrow = FancyArrowPatch(
+        (8.7, y6 + 0.75), (8.7, y4 + 0.75),
+        arrowstyle='<->,head_width=0.3,head_length=0.3',
+        color='black',
+        linewidth=2,
+        linestyle='--'
+    )
+    ax.add_patch(feedback_arrow)
+    ax.text(9, (y6 + y4) / 2 + 0.75, 'Retrain',
+            ha='left', va='center', fontsize=top_text, color='black', weight='bold',
+            rotation=90)
+
+    plt.tight_layout()
+
+    # Save the figure
+    output_path = './writeup/figures/analytical_methods_flowchart.png'
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"Analytical methods flowchart saved to: {output_path}")
+
+    plt.show()
+
+# Create the analytical flowchart
+create_analytical_methods_flowchart()
 
 # %%

@@ -127,6 +127,8 @@ axes = axes.flatten()
 
 for i, metric in enumerate(metrics):
     ax = axes[i]
+    ax.tick_params(axis="y", labelsize=16)
+
     data_metric = df[df["Metric"] == metric]
 
     # Ensure consistent model order
@@ -158,13 +160,13 @@ for i, metric in enumerate(metrics):
         )
 
     ax.set_xticks(model_indices)
-    ax.set_xticklabels(models, rotation=45, ha="right")
-    ax.set_title(metric, fontsize=14)
-    ax.set_ylabel("Estimate", fontsize=12)
+    ax.set_xticklabels(models, rotation=45, ha="right", fontsize=16)
+    ax.set_title(metric, fontsize=16)
+    ax.set_ylabel("Estimate", fontsize=16)
 
     # Only add x-axis labels to the bottom plots
     if i in [2, 3]:
-        ax.set_xlabel("Model", fontsize=12)
+        ax.set_xlabel("Model", fontsize=16)
     else:
         ax.set_xlabel("")
         ax.tick_params(labelbottom=False)
@@ -179,7 +181,7 @@ plt.subplots_adjust(hspace=0.3)
 # Add a legend for the models
 # fig.legend(models, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.05), fontsize=10)
 
-plt.savefig("./writeup/figures/model_performance.png", dpi=300, bbox_inches="tight")
+plt.savefig("./writeup/figures/model_performance.png", dpi=500, bbox_inches="tight")
 plt.show()
 
 

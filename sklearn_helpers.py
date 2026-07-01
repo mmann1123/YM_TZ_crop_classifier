@@ -483,6 +483,71 @@ def find_selected_ranked_images(
     return original
 
 
+def find_feature_tiles_for_vrt(
+    feature_names: List[str],
+    feature_base_dir: str,
+    band_dirs: List[str] = ["EVI", "B2", "B6", "B11", "B12", "hue"]
+) -> Dict[str, List[str]]:
+    """
+    Find all tile files for a list of feature names to prepare for VRT creation.
+
+    This function scans the feature directory structure and locates all fragmented
+    tiles for each selected feature. It handles complex naming patterns including:
+    - Coordinate suffixes (e.g., 0000000000-0000046592)
+    - Part suffixes (e.g., part1, part2)
+    - Simple tiles (e.g., feature_name.tif)
+
+    Args:
+        feature_names: List of feature names (e.g., ["EVI_mean_change", "B11_maximum"])
+        feature_base_dir: Base directory containing band subdirectories
+        band_dirs: List of band directory names to search
+
+    Returns:
+        Dictionary mapping each feature name to a list of tile file paths
+
+    Example:
+        >>> tiles = find_feature_tiles_for_vrt(
+        ...     ["EVI_mean", "B11_maximum"],
+        ...     "/path/to/features/"
+        ... )
+        >>> print(tiles["EVI_mean"])
+        ['/path/to/features/EVI/EVI_mean_0000000000-0000000000.tif',
+         '/path/to/features/EVI/EVI_mean_0000000000-0000046592.tif',
+         '/path/to/features/EVI/EVI_mean_0000046592-0000000000.tif']
+    """
+    from glob import glob
+    import os
+
+    feature_tiles = {}
+
+    for feature_name in feature_names:
+        # Determine which band directory contains this feature
+        band_name = None
+        for band in band_dirs:
+            if feature_name.startswith(band):
+                band_name = band
+                break
+
+        if band_name is None:
+            print(f"Warning: Cannot determine band for feature '{feature_name}'. Skipping.")
+            continue
+
+        # Build search pattern
+        band_dir = os.path.join(feature_base_dir, band_name)
+        pattern = os.path.join(band_dir, f"{feature_name}*.tif")
+
+        # Find all matching tiles
+        tiles = sorted(glob(pattern))
+
+        if not tiles:
+            print(f"Warning: No tiles found for feature '{feature_name}' in {band_dir}")
+            continue
+
+        feature_tiles[feature_name] = tiles
+
+    return feature_tiles
+
+
 def feature_selection_study(
     studyname, storage_name, X, y, groups, n_splits, scoring, n_trials=100
 ):

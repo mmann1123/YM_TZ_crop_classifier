@@ -1,0 +1,155 @@
+ 
+
+
+# Editorial Decision
+
+Your manuscript JSTARS-2025-00807 *Lite Learning: Efficient Crop Classification in Tanzania Using Feature Extraction with Machine Learning & Crowd Sourcing* has been reviewed by the J-STARS Editorial Review Board and recommended for publication subject to satisfactory response to major revisions suggested. It is recommended that you resubmit your manuscript as revised in accordance with the Editorial Review Board comments given below.
+
+## Submission Requirements
+
+Along with the revised manuscript, please provide an item-by-item response to reviewers' comments, including:
+
+- Which suggested changes were accepted and made
+- Which were ignored (these should be indicated and justified)
+- Where the changes were made in the manuscript (this should include all changes with detailed information)
+
+## Editor-in-Chief Comments
+
+For revision, two files should be submitted:
+
+1. A revised manuscript, in which the revised part should be highlighted in different color, submitted as the main file
+2. A point-to-point response letter to the comments submitted as supporting file
+
+**Note:** A "Discussion Section" is suggested for publications in JSTARS. Please improve the manuscript from this aspect, which will make the manuscript more likely to get accepted.
+
+## Associate Editor Comments
+
+Your paper reviewed by experts has been considered suitable for publication on JSTARS after major revision. Please proceed in reviewing the paper by closely following the reviewers' suggestions.
+
+
+\newpage
+
+# Reviewer Comments and Responses
+
+## Reviewer 1
+
+### Summary
+
+This paper addresses several important challenges in developing efficient crop-type classification models using the traditional machine-learning approach in data-scarce environments, including the scarcity of training datasets collected from crop fields, especially in developing countries. Combining the dataset collected from crop fields with the imagery datasets extracted using filter-based methods is crucial for achieving high classification accuracy. Crowdsourced data collected by volunteers can serve as a potential alternative, but these data are typically lack proper validation. To address this issue, the author proposes a novel methodology leveraging KoboToolbox, YouthMappers participants, and Sentinel-2 satellite imagery, among others, to extract and validate crowdsourced data and time-series imagery features. The authors also propose a traditional machine learning-based classification model that utilizes the integrated dataset of time-series features with crowdsourced, field-validated crop-type labels to validate their approach. The proposed methods show promise by achieving high classification accuracy, evidenced by a Cohen's Kappa score of 0.82 and an F1-micro score of 0.85.
+
+### Strengths
+
+- The paper is well-structured and follows a clear and logical progression
+- The authors provide a significant introduction and background, giving insight into the challenges that limit the implementation of an efficient crop-type classification
+- The authors contribute to proposing novel methods for extracting and validating crowdsourced data
+
+### Minor Corrections
+
+1. Ensure that reference 25 fits within the column width
+2. The sentence refers to "as seen in the crop calendar in Figure 2 below" Fig 2; However, the figure is displayed above the sentence, not below
+
+### Response to Reviewer 1
+
+- Reference 25 has been updated
+- Updated figure 2 reference
+
+
+
+Reviewer: 2
+
+Comments to the Author
+This study introduces a novel approach to traditional machine learning methodology for crop type 
+classification in Tanzania, by integrating crowdsourced data with time-series features extracted 
+from Sentinel-2 satellite imagery. Overall, the content of the paper is presented too succinctly and 
+requires further refinement in expression, particularly in the description of data and methodology, 
+the presentation of results and figures, as well as the discussion section, which is currently lacking.
+
+It is recommended to divide Section II (DATA & METHODS) into two separate sections. A schematic diagram 
+should be provided to illustrate the data, especially the crowdsourced data. In the methodology section, 
+a flowchart should be added, along with an accuracy evaluation component.
+
+The conclusion section is also overly concise. For instance, in Part B (Land Cover and Crop Type), a 
+more detailed description of Figure 3 is suggested.
+
+It is advisable to present the Discussion as an independent section and enrich its content.
+
+Whether to use a colon after figure titles (e.g., “Fig. 6:”) should strictly follow the journal’s formatting guidelines.
+
+The font size in the figures is too small and lacks clarity, as seen in Figure 7.
+
+It is recommended to include comparative experiments with other methods.
+
+It is suggested to add visualizations and descriptions of the classification results.
+
+
+Revision Comments Reviewer 2:
+
+- We have seperated out the data and methods sections
+- Althought constrained by the 2 column format, we have increased the font sizes on all our figures. 
+- We have tried to better detail our data and methods.
+
+    For instance:
+        1) we clarify that google imagery was only used for non-agricultural landcover types. 
+        "Additional training data for non-agricultural sites was collected utilizing high resolution imagery from Google Earth."
+        2) We heavily revised the description of the training objectives and replaced a paragraph with:
+        """
+        Data collection took place between late April and May 2023 (Figure \ref{fig:crop_cal}) to align with the mid-season growth stage for most target crops. YouthMappers were trained to focus on crops known to be present in each region and at appropriate phenological stages for spectral discrimination. Prior to fieldwork, extensive training sessions covered the key criteria for selecting suitable field sites to ensure high-quality training data for the machine learning models.
+
+        Field size represented a critical consideration, as features below the spatial resolution of Sentinel-2 imagery would not be adequately captured. YouthMappers were therefore instructed to identify only fields measuring 30 meters or greater across, ensuring that each field would encompass multiple pixels in the satellite imagery. Beyond size, field composition played an equally important role in data quality. Agriculture in the study region often includes heterogeneous land cover with tree cover, power lines, buildings, and other obstructions that can contaminate the spectral signature of crops. To minimize this spectral mixing, YouthMappers were trained to prioritize clear, open fields planted with a single crop type, using photographic examples to illustrate ideal versus problematic field characteristics.
+
+        Spatial distribution of sample sites was carefully considered to balance logistical constraints with statistical independence. A minimum separation distance of one kilometer between sampling locations was established as a compromise between the time and cost of travel and the need to reduce spatial autocorrelation in the training data. While YouthMappers were permitted to sample adjacent fields when different crop types were present, they were otherwise encouraged to maintain this spacing by traveling to more distant locations.
+
+        The timing of data collection was primarily driven by crop phenology and field condition. Mid to late reproductive stages offer maximum canopy cover and the most distinctive spectral signatures for crop type discrimination. Although most sampled fields exhibited the desired phenological characteristics, drought conditions in 2023 affected crop health across the region, with some fields showing signs of stress or early harvest. To ensure robust model training, YouthMappers were instructed to prioritize mature, healthy fields with lush green canopies whenever possible. Through this comprehensive training process, field teams developed the expertise needed to consistently identify sites well-suited for generating high-quality in-situ training data for satellite-based crop classification.
+        """
+
+        3) We add the following section on data cleaning:
+        
+        """
+        ## Field Data Cleaning
+        The initial dataset comprised 1,720 observations collected by YouthMappers across the three districts. A thorough data cleaning process was undertaken to ensure the quality and reliability of the dataset for model training and evaluation. This process involved several steps. First, duplicate entries were identified and removed to prevent redundancy and potential bias in the dataset. Second, observations with missing or incomplete data were addressed; depending on the extent of missing information, these entries were either corrected using auxiliary data sources or excluded from the dataset. Third, each observation was visually inspected using in-situ photos taken by students at each site, which helped verify the accuracy of the recorded crop types and field conditions. Fourth, crop type labels were standardized to ensure consistency across the dataset by correcting typographical errors and unifying different naming conventions for the same crop. Finally, the geographic coordinates of each observation were validated to ensure they fell within the expected study area and corresponded to an observable field from satellite imagery. After completing the cleaning process, the final dataset consisted of 1,400 crop type entries, providing a robust foundation for training and evaluating the machine learning models used in this study.
+        """     
+
+        4) We try to more clearly state out model performance metrics in the renamed Model Selection & Performance section
+
+        """
+        ## Model Selection
+
+        We employed `Optuna`, an optimization framework, to conduct systematic model selection and hyperparameter tuning [@optuna_2019]. Our methodology involved defining a study where each trial proposed a set of model parameters aimed at optimizing classification performance. We evaluated multiple classifiers, including LightGBM, Support Vector Classification (SVC), and RandomForest, testing various configurations to identify the optimal approach for crop classification.
+
+        Prior to model training, we preprocessed the extracted time-series features from satellite imagery using standard scaling (centering and scaling) from the `scikit-learn` library to normalize the data [@scikit-learn]. We then applied a variance threshold method to reduce dimensionality by excluding features with low variance, thereby improving computational efficiency and model interpretability.
+        The final model selection was based on maximizing the kappa statistic across all cross-validation folds, ensuring that the chosen model and its parameters provided the best possible performance for classifying crop types in our dataset.
+
+        ## Performance Evaluation
+
+        To assess model performance, we implemented stratified group k-fold cross-validation with three splits. This approach ensured that samples from the same field remained together within either the training or validation set, preventing data leakage that could occur if observations from the same field were split across folds. We utilized the kappa statistic as our primary evaluation metric due to its suitability for assessing classifier performance on imbalanced datasets. This metric accounts for agreement occurring by chance, providing a more robust measure of classification accuracy than simple overall accuracy when class distributions are unequal.
+        """
+
+        5) We add two flow charts, one for data collection and cleaning and another for analytical methods.
+
+        6) We added the following to our discussions of Figure 3 as suggested:
+
+        "Peanuts, soybeans and okra are among the least represented land cover types in the dataset, highlighting the challenges associated with collecting sufficient training data for these categories. This figure also includes land cover types such as water, forest, shrub, and tidal areas, which are essential for providing context to the landscape but were not the focus of this study. The varied distribution of land cover types underscores the complexity of the classification task and the need for robust modeling techniques to accurately capture this diversity."
+
+- Although we appreciate the suggestion of seperating the results and methods, to help improve legibility to non-technical readers we are going to keep them combined. However, we agree the results/discussion section could be better developed.  We are adding the following: 
+
+    1) We expanded the discussion of SHAPs values in a number of places for instance:
+
+    """
+    Reflecting on the colors of the bars we can see that 'B11.mean' is important in distinguishing sunflower, sorghum, and millet to a roughly equal degree, and has some small impact on distinguishing other classes. This pattern likely reflects fundamental differences in canopy structure and water content between these dryland crops and the more common maize and rice in the dataset. The SWIR bands are particularly sensitive to plant water content and canopy moisture status, as water strongly absorbs radiation at these wavelengths. Sunflower, sorghum, and millet are typically grown in drier conditions and exhibit distinct water use strategies compared to maize. Sunflower, with its deep taproot system and larger leaf area, maintains different canopy moisture levels throughout the growing season. Sorghum and millet, as drought-tolerant cereals with waxy leaf coatings and more efficient water use, exhibit characteristically different SWIR reflectance patterns than the more water-demanding maize crop. The mean SWIR reflectance over the growing season therefore captures these persistent biophysical differences in canopy water status, allowing the model to effectively separate these dryland-adapted crops from others in the training dataset.  The equal importance of B11.mean across these three crops suggests that while this feature helps separate them from the broader "cereal" or "broadleaf" categories, additional features are needed to distinguish among sunflower, sorghum, and millet themselves.
+    """
+
+    """
+    Looking at 'B12.absolute.sum.of.changes' we can see it best differentiates shrubs, cotton, and forest. The sum of absolute changes measures the total magnitude of variation in a time series by summing the absolute differences between consecutive time steps, effectively quantifying how much a variable fluctuates over the observation period regardless of direction. When applied to the B12 band (SWIR 2100-2280nm), this metric captures the cumulative volatility in canopy water content and structural properties throughout the growing season. B12's effectiveness at distinguishing shrub, cotton, and forests using sum of absolute changes likely reflects fundamental differences in their temporal stability and management regimes. Cotton, as an intensively managed annual crop, exhibits pronounced temporal variability in the SWIR signal driven by distinct phenological transitions and management interventions. Cotton fields progress through rapid establishment after planting, vigorous vegetative growth, flowering and boll development, and then defoliation before harvest—each transition creating sharp changes in canopy water content and structure that B12 captures.  
+    """
+
+- As suggested, we have added two visualizations of the crop classification results that also include an RGB input image, as well as 3 selected time series features that helped generate that classification. We hope that this will provide some visual evidence of its efficacy and some insight into how a variety of time-series features can identify critical signals for classification. These are included in the new 'Land Cover Product' section.
+
+- We largely revised the conclusion to better summerize our objectives, and finding but also added a large section outlining limitations of the study:
+
+    """
+    Our study has several important limitations that suggest directions for future research. Data collection constraints significantly impacted our results: the 2023 drought affected crop health and planting schedules, resulting in fields at varying phenological stages and some early harvests. Our concentrated data collection window (April-May 2023) captured crops primarily in late growing season, potentially missing spectral signatures from earlier phenological stages that could improve discrimination. Additionally, crop type imbalance in our dataset—with underrepresentation of crops like peanuts, soybeans, and okra these crops were dropped from the study. Confusion between similar crops (e.g., cassava and maize) indicates that additional discriminative features or more extensive training data are needed for these challenging classification scenarios.
+
+    Geographic generalizability remains an open question. Our model was trained exclusively on data from three districts in northern Tanzania (Arusha, Dodoma, and Mwanza), and its transferability to other regions with different agro-ecological conditions, farming practices, or crop varieties remains untested. The spectral and temporal signatures of crops can vary significantly with climate, soil conditions, and management practices, potentially limiting model performance in new geographic contexts.
+
+    Finally, interpretability trade-offs persist despite our use of SHAP values: while providing valuable insights into feature importance, the large number of features (33 final features from hundreds of candidates) still presents challenges for intuitive interpretation. Future work should focus on expanding geographic coverage to assess model transferability, incorporating multi-temporal data collection throughout the growing season, developing methods to handle class imbalance, and exploring more parsimonious feature sets that balance accuracy with interpretability.
+    """
